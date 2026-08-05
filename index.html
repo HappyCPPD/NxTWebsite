@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NXT_CTFS - Capture The Flag Team</title>
+<meta name="description" content="NXT_CTFS is a competitive Capture The Flag team. Web exploitation, binary exploitation, reverse engineering, cryptography, forensics, and OSINT." />
+<link rel="icon" href="images/Logo-nobg.png" type="image/png" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
+
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <a href="#top" class="brand">
+      <img src="images/Logo-nobg.png" alt="NXT_CTFS logo" />
+      <span class="brand-name">NXT_CTFS</span>
+    </a>
+
+    <div class="nav-links">
+      <a href="#about">About</a>
+      <a href="#focus">Focus areas</a>
+      <a href="#team">Team</a>
+      <a href="#join">Join</a>
+    </div>
+
+    <div class="nav-cta">
+      <a href="#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="#about">About</a>
+    <a href="#focus">Focus areas</a>
+    <a href="#team">Team</a>
+    <a href="#join">Join us</a>
+  </div>
+</nav>
+
+<main id="top">
+
+  <section class="hero container">
+    <div class="hero-grid">
+      <div>
+        <h1>Break things.<br>Capture <span>flags.</span></h1>
+        <p>NXT_CTFS is a competitive cybersecurity team tackling web, binary, and cryptography challenges together.</p>
+        <div class="hero-actions">
+          <a href="#join" class="btn btn-primary">Join the team</a>
+          <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">View writeups</a>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <img src="images/Logo-nobg.png" alt="NXT_CTFS hexagon emblem" />
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-narrow container reveal" id="about">
+    <div class="section-head">
+      <h2>Who we are</h2>
+    </div>
+    <p>We are a team of security researchers, students, and hobbyists who compete in Capture The Flag competitions year-round. We study real-world vulnerabilities, break intentionally vulnerable systems, and share what we learn with each other.</p>
+    <p>Whether you have solved one challenge or a thousand, there is a place here to sharpen your skills alongside people who enjoy the same puzzles.</p>
+  </section>
+
+  <section class="section container reveal" id="focus">
+    <div class="section-head">
+      <h2>What we work on</h2>
+      <p>Six core disciplines, one team. Pick a lane or work across all of them.</p>
+    </div>
+    <div class="grid-focus">
+      <div class="focus-card is-accent">
+        <div class="focus-icon"><i class="ph ph-globe"></i></div>
+        <h3>Web exploitation</h3>
+        <p>Injection flaws, auth bypasses, and logic bugs in modern web apps.</p>
+      </div>
+      <div class="focus-card">
+        <div class="focus-icon"><i class="ph ph-bug"></i></div>
+        <h3>Binary exploitation</h3>
+        <p>Memory corruption, stack and heap attacks, exploit development.</p>
+      </div>
+      <div class="focus-card">
+        <div class="focus-icon"><i class="ph ph-cpu"></i></div>
+        <h3>Reverse engineering</h3>
+        <p>Disassembling binaries to understand and manipulate behavior.</p>
+      </div>
+      <div class="focus-card">
+        <div class="focus-icon"><i class="ph ph-lock-key"></i></div>
+        <h3>Cryptography</h3>
+        <p>Breaking weak ciphers, protocol flaws, and implementation bugs.</p>
+      </div>
+      <div class="focus-card">
+        <div class="focus-icon"><i class="ph ph-magnifying-glass"></i></div>
+        <h3>Digital forensics</h3>
+        <p>Recovering evidence from disk images, memory dumps, and packet captures.</p>
+      </div>
+      <div class="focus-card is-accent">
+        <div class="focus-icon"><i class="ph ph-binoculars"></i></div>
+        <h3>OSINT</h3>
+        <p>Tracking down information from public sources and open data.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section container reveal" id="team">
+    <div class="section-head">
+      <h2>Team</h2>
+      <p>Two members, six disciplines covered between them.</p>
+    </div>
+    <div class="grid-team grid-team-two">
+      <div class="team-card">
+        <div class="team-photo"><img src="images/TxN.jpg" alt="TxN" /></div>
+        <div class="team-body">
+          <h3>TxN</h3>
+          <div class="team-tags">
+            <span class="tag">Web</span>
+            <span class="tag">Pwn</span>
+            <span class="tag">Reverse</span>
+            <span class="tag">Team lead</span>
+          </div>
+        </div>
+      </div>
+      <div class="team-card">
+        <div class="team-photo"><img src="images/NxT-nobg.png" alt="NxT" /></div>
+        <div class="team-body">
+          <h3>NxT</h3>
+          <div class="team-tags">
+            <span class="tag">Forensics</span>
+            <span class="tag">OSINT</span>
+            <span class="tag">Crypto</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section container reveal" id="join">
+    <div class="join">
+      <div class="join-copy">
+        <h2>Want in?</h2>
+        <p>We take new members on a rolling basis. Tell us a bit about yourself and what you like to break.</p>
+      </div>
+      <form id="joinForm" action="https://formspree.io/f/mjybbnrk" method="POST" novalidate>
+        <div class="field">
+          <label for="name">Name</label>
+          <input id="name" name="name" type="text" placeholder="Your name" required />
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" placeholder="you@example.com" required />
+        </div>
+        <div class="field">
+          <label for="discord">Discord handle</label>
+          <input id="discord" name="discord" type="text" placeholder="username" />
+        </div>
+        <div class="field">
+          <label for="message">What interests you?</label>
+          <textarea id="message" name="message" placeholder="Web, pwn, crypto, forensics..."></textarea>
+        </div>
+
+        <!-- Honeypot: hidden from real users, catches bots. Formspree drops submissions where this is filled. -->
+        <div class="hp-field" aria-hidden="true">
+          <label for="_gotcha">Leave this field empty</label>
+          <input id="_gotcha" name="_gotcha" type="text" tabindex="-1" autocomplete="off" />
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">Send application</button>
+        <p class="form-status" id="formStatus" aria-live="polite"></p>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="#top" class="footer-brand">
+        <img src="images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="#about">About</a>
+      <a href="#focus">Focus areas</a>
+      <a href="#team">Team</a>
+      <a href="#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 NXT_CTFS. All rights reserved.</span>
+    <span>Built for the next flag.</span>
+  </div>
+</footer>
+
+<script src="js/script.js"></script>
+</body>
+</html>
