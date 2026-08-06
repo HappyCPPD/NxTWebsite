@@ -9,12 +9,17 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
 
 <link rel="stylesheet" href="css/styles.css" />
+<script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
+
+<!-- Reading the source already? Good instinct. There is a flag on this page. -->
+
+<div class="backdrop" aria-hidden="true"></div>
 
 <nav class="nav" id="nav">
   <div class="container nav-inner">
@@ -24,10 +29,10 @@
     </a>
 
     <div class="nav-links">
-      <a href="#about">About</a>
-      <a href="#focus">Focus areas</a>
-      <a href="#team">Team</a>
-      <a href="#join">Join</a>
+      <a href="#about">about</a>
+      <a href="#focus">categories</a>
+      <a href="#team">team</a>
+      <a href="#join">join</a>
     </div>
 
     <div class="nav-cta">
@@ -43,10 +48,10 @@
   </div>
 
   <div class="mobile-panel" id="mobilePanel">
-    <a href="#about">About</a>
-    <a href="#focus">Focus areas</a>
-    <a href="#team">Team</a>
-    <a href="#join">Join us</a>
+    <a href="#about">about</a>
+    <a href="#focus">categories</a>
+    <a href="#team">team</a>
+    <a href="#join">join</a>
   </div>
 </nav>
 
@@ -54,22 +59,40 @@
 
   <section class="hero container">
     <div class="hero-grid">
-      <div>
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="dot"></span>Recruiting — rolling applications</p>
         <h1>Break things.<br>Capture <span>flags.</span></h1>
-        <p>NXT_CTFS is a competitive cybersecurity team tackling web, binary, and cryptography challenges together.</p>
+        <p class="hero-lede">NXT_CTFS is a competitive cybersecurity team tackling web, binary, and cryptography challenges together.</p>
         <div class="hero-actions">
           <a href="#join" class="btn btn-primary">Join the team</a>
-          <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">View writeups</a>
+          <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">View writeups <i class="ph ph-arrow-up-right"></i></a>
         </div>
       </div>
+
       <div class="hero-visual">
-        <img src="images/Logo-nobg.png" alt="NXT_CTFS hexagon emblem" />
+        <div class="term" id="term" data-x="bnh0e3YxM3dfNTB1cmMzXzE1XzRfNWsxbGx9">
+          <div class="term-bar">
+            <img src="images/Logo-nobg.png" alt="" />
+            <span class="term-title">nxt@ctf: ~</span>
+            <span class="term-dots"><i></i><i></i><i></i></span>
+          </div>
+          <div class="term-body">
+            <p class="term-line"><span class="prompt">$</span><span class="cmd">whoami</span></p>
+            <p class="term-line term-out">nxt_ctfs — competitive capture the flag</p>
+            <p class="term-line"><span class="prompt">$</span><span class="cmd">ls ./categories</span></p>
+            <p class="term-line term-out">web  pwn  rev  crypto  forensics  osint</p>
+            <p class="term-line"><span class="prompt">$</span><span class="cmd">./recruit --status</span></p>
+            <p class="term-line term-out"><span class="ok">open</span> — no minimum solve count</p>
+            <p class="term-line term-tail"><span class="prompt">$</span><span class="caret"></span></p>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
   <section class="section section-narrow container reveal" id="about">
     <div class="section-head">
+      <p class="eyebrow eyebrow-shell"><span>nxt@ctf:~$</span> whoami</p>
       <h2>Who we are</h2>
     </div>
     <p>We are a team of security researchers, students, and hobbyists who compete in Capture The Flag competitions year-round. We study real-world vulnerabilities, break intentionally vulnerable systems, and share what we learn with each other.</p>
@@ -78,6 +101,7 @@
 
   <section class="section container reveal" id="focus">
     <div class="section-head">
+      <p class="eyebrow eyebrow-shell"><span>nxt@ctf:~$</span> ls ./categories</p>
       <h2>What we work on</h2>
       <p>Six core disciplines, one team. Pick a lane or work across all of them.</p>
     </div>
@@ -86,41 +110,48 @@
         <div class="focus-icon"><i class="ph ph-globe"></i></div>
         <h3>Web exploitation</h3>
         <p>Injection flaws, auth bypasses, and logic bugs in modern web apps.</p>
+        <p class="focus-tools">burp · sqlmap · ffuf</p>
       </div>
       <div class="focus-card">
         <div class="focus-icon"><i class="ph ph-bug"></i></div>
         <h3>Binary exploitation</h3>
         <p>Memory corruption, stack and heap attacks, exploit development.</p>
+        <p class="focus-tools">pwntools · gdb · ROP</p>
       </div>
       <div class="focus-card">
         <div class="focus-icon"><i class="ph ph-cpu"></i></div>
         <h3>Reverse engineering</h3>
         <p>Disassembling binaries to understand and manipulate behavior.</p>
+        <p class="focus-tools">ghidra · ida · angr</p>
       </div>
       <div class="focus-card">
         <div class="focus-icon"><i class="ph ph-lock-key"></i></div>
         <h3>Cryptography</h3>
         <p>Breaking weak ciphers, protocol flaws, and implementation bugs.</p>
+        <p class="focus-tools">sage · z3 · rsactftool</p>
       </div>
       <div class="focus-card">
         <div class="focus-icon"><i class="ph ph-magnifying-glass"></i></div>
         <h3>Digital forensics</h3>
         <p>Recovering evidence from disk images, memory dumps, and packet captures.</p>
+        <p class="focus-tools">volatility · wireshark · binwalk</p>
       </div>
       <div class="focus-card is-accent">
         <div class="focus-icon"><i class="ph ph-binoculars"></i></div>
         <h3>OSINT</h3>
         <p>Tracking down information from public sources and open data.</p>
+        <p class="focus-tools">maltego · exiftool · sherlock</p>
       </div>
     </div>
   </section>
 
   <section class="section container reveal" id="team">
     <div class="section-head">
+      <p class="eyebrow eyebrow-shell"><span>nxt@ctf:~$</span> who -a</p>
       <h2>Team</h2>
-      <p>Two members, six disciplines covered between them.</p>
+      <p>The people behind the handles.</p>
     </div>
-    <div class="grid-team grid-team-two">
+    <div class="grid-team">
       <div class="team-card">
         <div class="team-photo"><img src="images/TxN.jpg" alt="TxN" /></div>
         <div class="team-body">
@@ -144,14 +175,32 @@
           </div>
         </div>
       </div>
+      <div class="team-card">
+        <!-- No photo yet: falls back to the team emblem. -->
+        <div class="team-photo is-empty">
+          <img src="images/Logo-nobg.png" alt="" class="photo-fallback" />
+        </div>
+        <div class="team-body">
+          <h3>DxT</h3>
+          <div class="team-tags">
+            <span class="tag tag-ghost">Newest member</span>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
   <section class="section container reveal" id="join">
     <div class="join">
       <div class="join-copy">
+        <p class="eyebrow eyebrow-shell"><span>nxt@ctf:~$</span> ./apply.sh</p>
         <h2>Want in?</h2>
         <p>We take new members on a rolling basis. Tell us a bit about yourself and what you like to break.</p>
+        <ul class="join-notes">
+          <li>No minimum solve count — curiosity counts more.</li>
+          <li>We compete year-round and write up what we learn.</li>
+          <li>Reply usually lands in your inbox within a week.</li>
+        </ul>
       </div>
       <form id="joinForm" action="https://formspree.io/f/mjybbnrk" method="POST" novalidate>
         <div class="field">
@@ -197,7 +246,7 @@
     <div class="footer-col">
       <h4>Navigate</h4>
       <a href="#about">About</a>
-      <a href="#focus">Focus areas</a>
+      <a href="#focus">Categories</a>
       <a href="#team">Team</a>
       <a href="#join">Join</a>
     </div>
@@ -210,7 +259,7 @@
   </div>
   <div class="footer-bottom">
     <span>© 2026 NXT_CTFS. All rights reserved.</span>
-    <span>Built for the next flag.</span>
+    <span class="footer-hint">There is one flag hidden on this page.</span>
   </div>
 </footer>
 
