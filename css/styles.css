@@ -246,8 +246,8 @@ h1, h2, h3, h4 {
   transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.25s ease;
 }
 
-.btn i { font-size: 15px; transition: transform 0.25s var(--ease); }
-.btn:hover i { transform: translate(2px, -2px); }
+.btn .icon { width: 15px; height: 15px; flex: none; transition: transform 0.25s var(--ease); }
+.btn:hover .icon { transform: translate(2px, -2px); }
 .btn:active { transform: translateY(1px); }
 
 .btn-primary {
@@ -459,9 +459,10 @@ h1, h2, h3, h4 {
   background: var(--panel-2);
   color: var(--sig);
   margin-bottom: 20px;
-  font-size: 19px;
   transition: transform 0.35s var(--ease), border-color 0.3s ease;
 }
+
+.focus-icon .icon { width: 20px; height: 20px; }
 
 .focus-card:hover .focus-icon { transform: translateY(-2px) scale(1.05); border-color: var(--sig-line); }
 .focus-card.is-accent .focus-icon { background: rgba(0, 0, 0, 0.28); }
