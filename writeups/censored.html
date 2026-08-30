@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Censored · Kaspersky CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Each Schnorr signature ships a &quot;diagnostic&quot; blob whose XOR masks are computable from public data. Unmask it for ~16 bits of nonce per signature, then solve the Hidden Number Problem by lattice reduction." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=16" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>censored</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-crypto">crypto</span>
+      <span class="wu-pts">50 pts</span>
+      <span class="wu-when">solved Aug 29, 22:01</span>
+    </div>
+    <h1>Censored <span>HNP / lattice</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">kaspersky{N0w_4ll_tH3_4nsW3rs_4r3_1n_y0ur_h4nds!!!!}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>The challenge implements a Schnorr-like digital signature scheme (Schnorr over a
+finite-field DSA group). Each signature operation returns not just <code>(R, s)</code> but
+also a <strong>diagnostic blob</strong> containing masked partial information about the
+signing nonce. With 36 signatures available, an attacker can unmask these
+diagnostics, narrow each nonce to a ~2^240 range (leaking ~16 bits per nonce),
+and then solve the <strong>Hidden Number Problem (HNP)</strong> via lattice reduction to
+recover the long-term secret key.</p>
+<p>Once the secret key is recovered, forging a signature for the target message
+<code>give_me_gift</code> and submitting it yields the flag.</p>
+<hr>
+<h2 id="protocol"><a class="wu-anchor" href="#protocol" aria-hidden="true">#</a>Protocol</h2>
+<pre><code>Censored diagnostics, probably fine
+Try: PUB | SIGN &lt;hex&gt; | SUBMIT &lt;hex&gt; &lt;R&gt; &lt;s&gt;
+</code></pre>
+<ul>
+<li><strong>PUB</strong> - returns the DSA group parameters <code>(p, q, g, y)</code>, the remaining
+signature quota (36 total), and a randomly generated <code>calibration</code> object.</li>
+<li><strong>SIGN</strong> <code>&lt;hex&gt;</code> - signs an arbitrary message (except <code>give_me_gift</code>) using a
+fresh random nonce. Returns <code>(R, s)</code> plus a diagnostic blob.</li>
+<li><strong>SUBMIT</strong> <code>&lt;hex&gt; &lt;R&gt; &lt;s&gt;</code> - verifies the signature. If the message is
+<code>give_me_gift</code> and the signature is valid, returns the flag.</li>
+</ul>
+<hr>
+<h2 id="signature-scheme"><a class="wu-anchor" href="#signature-scheme" aria-hidden="true">#</a>Signature Scheme</h2>
+<p>Standard Schnorr-style identification converted to a signature:</p>
+<ul>
+<li><strong>Key generation:</strong><ul>
+<li>Private key: <code>sk ∈ [1, Q-1]</code></li>
+<li>Public key: <code>y = G^sk mod P</code></li>
+</ul>
+</li>
+<li><strong>Signing:</strong><ul>
+<li>Pick random nonce <code>nonce ∈ [1, Q-1]</code></li>
+<li>Compute commitment: <code>R = G^nonce mod P</code></li>
+<li>Compute challenge: <code>c = SHA256(&quot;challenge&quot; || len(msg) || msg || R) mod Q</code></li>
+<li>Compute response: <code>s = (nonce + c · sk) mod Q</code></li>
+</ul>
+</li>
+<li><strong>Verification:</strong><ul>
+<li>Recompute <code>c = SHA256(&quot;challenge&quot; || len(msg) || msg || R)</code></li>
+<li>Check: <code>G^s ≡ R · y^c (mod P)</code></li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="the-diagnostic-leak"><a class="wu-anchor" href="#the-diagnostic-leak" aria-hidden="true">#</a>The Diagnostic Leak</h2>
+<p>Each SIGN response includes a <code>diag</code> field:</p>
+<pre><code class="language-json">{
+  &quot;patch&quot;:   &lt;12-bit integer&gt;,   // XOR-masked with telemetry_mask
+  &quot;resid&quot;:   &lt;6-bit integer&gt;,    // XOR-masked with telemetry_mask
+  &quot;curv&quot;:    &lt;8-bit integer&gt;,
+  &quot;basin&quot;:   &lt;3-bit integer&gt;,
+  &quot;iters&quot;:   &lt;integer&gt;,
+  &quot;health&quot;:  &quot;&lt;hex string&gt;&quot;
+}
+</code></pre>
+<p>The <code>patch</code> + <code>resid</code> fields combine to form an 18-bit <code>profile_value</code>:</p>
+<pre><code>profile_value = floor(sigma · 2^18)
+</code></pre>
+<p>where <code>sigma ∈ [0, 1)</code> is the normalized arc-length along a calibration curve
+at the point corresponding to the nonce.</p>
+<p>The XOR masks depend on <code>SHA256(&quot;telemetry&quot; || calibration_id || commitment || label)</code>,
+all values known to the attacker after receiving the PUB data and the signature.
+So we can fully unmask <code>profile_value</code>.</p>
+<hr>
+<h2 id="calibration-curve-geometry"><a class="wu-anchor" href="#calibration-curve-geometry" aria-hidden="true">#</a>Calibration Curve Geometry</h2>
+<p>The calibration defines a parametric curve derived from a polar radius function:</p>
+<pre><code>r(θ) = (1 + 0.25·sin(3θ + π))^1.4 + 2·exp(-((θ - π/2)/0.3)^2)
+</code></pre>
+<p>Points on the curve: <code>(x, y) = (r(θ)·cos(θ), r(θ)·sin(θ))</code></p>
+<p>An affine transformation (random 2×2 matrix + translation) maps these to
+<code>(u, v)</code> coordinates. The nonce maps to an angle <code>θ = 2π · nonce / Q</code>, and
+then:</p>
+<ul>
+<li><code>parameter = _path_parameter(nonce)</code>, maps nonce → angle on the
+transformed curve (incorporating the calibration&#39;s <code>phase</code> and <code>direction</code>)</li>
+<li><code>sigma = profile.at(parameter)</code>, cumulative arc length at that angle,
+normalized to [0, 1]</li>
+</ul>
+<p>A precomputed lookup table (LUT) with 2^15 = 32768 entries maps LUT index →
+nonce via piecewise linear interpolation of the inverse function.</p>
+<hr>
+<h2 id="from-profile-value-to-nonce-range"><a class="wu-anchor" href="#from-profile-value-to-nonce-range" aria-hidden="true">#</a>From profile_value to Nonce Range</h2>
+<p>Given <code>profile_value = pv</code>:</p>
+<pre><code>sigma_low  = pv / 2^18
+sigma_high = (pv + 1) / 2^18
+</code></pre>
+<p>We find all LUT segments whose sigma range overlaps <code>[sigma_low, sigma_high)</code>.
+For each matching segment, the fractional overlap gives corresponding nonce
+sub-intervals. Merging adjacent intervals yields the nonce range.</p>
+<p>On average, each <code>profile_value</code> maps to a nonce range of width ~2^240
+(about 16 bits narrower than the full 256-bit nonce space). Using 30
+signatures, this provides ~480 bits of constraint - more than enough for HNP.</p>
+<hr>
+<h2 id="hidden-number-problem-hnp-attack"><a class="wu-anchor" href="#hidden-number-problem-hnp-attack" aria-hidden="true">#</a>Hidden Number Problem (HNP) Attack</h2>
+<p>For each signature <code>i</code> with known nonce range <code>[lo_i, hi_i)</code>:</p>
+<pre><code>s_i = nonce_i + c_i · sk  (mod Q)
+nonce_i ∈ [lo_i, hi_i)
+</code></pre>
+<p>Let <code>mid_i = (lo_i + hi_i) / 2</code> and <code>X = max(hi_i - lo_i) / 2</code>. Then:</p>
+<pre><code>s_i - mid_i = x_i + c_i · sk  (mod Q)   where |x_i| ≤ X
+</code></pre>
+<p>Define <code>a_i = (s_i - mid_i) mod Q</code>. We have:</p>
+<pre><code>a_i ≡ x_i + c_i · sk  (mod Q)    with |x_i| ≤ X
+</code></pre>
+<p>This is the Hidden Number Problem: given many pairs <code>(c_i, a_i)</code>, find <code>sk</code>
+such that each <code>a_i - c_i · sk ≡ x_i (mod Q)</code> with small <code>|x_i|</code>.</p>
+<h3 id="lattice-construction"><a class="wu-anchor" href="#lattice-construction" aria-hidden="true">#</a>Lattice Construction</h3>
+<p>We build a Q-scaled centered HNP lattice of dimension <code>(n+2) × (n+2)</code>:</p>
+<pre><code>     |  Q^2       0      ...      0      |   0     0  |
+     |   0       Q^2     ...      0      |   0     0  |
+     |  ...                             |          |
+B =  |   0        0      ...    Q^2     |   0     0  |
+     | c_0·Q   c_1·Q    ...  c_{n-1}·Q |   X     0  |
+     | a&#39;_0·Q  a&#39;_1·Q   ... a&#39;_{n-1}·Q |   0    X·Q |
+</code></pre>
+<p>where <code>a&#39;_i = (a_i - X) mod Q</code> (centering the observation around 0 so the
+error is bounded by ±X rather than [0, 2X]).</p>
+<p>The target short vector is:</p>
+<pre><code>v = (x_0·Q, x_1·Q, ..., x_{n-1}·Q, -sk·X, X·Q)
+</code></pre>
+<p>Of length: <code>sqrt(n · (X·Q)² + (sk·X)² + (X·Q)²) ≈ sqrt(n+2) · X · Q</code>.</p>
+<p>LLL finds a short vector in the lattice. Scanning rows where the last column
+equals <code>X·Q</code> yields the secret key at column <code>n</code> (divided by <code>X</code>).</p>
+<hr>
+<h2 id="forging-the-signature"><a class="wu-anchor" href="#forging-the-signature" aria-hidden="true">#</a>Forging the Signature</h2>
+<p>With the recovered secret key <code>sk</code>:</p>
+<ol>
+<li>Pick a random nonce <code>k</code></li>
+<li>Compute <code>R = G^k mod P</code></li>
+<li>Compute <code>c = SHA256(&quot;challenge&quot; || len(&quot;give_me_gift&quot;) || &quot;give_me_gift&quot; || R)</code></li>
+<li>Compute <code>s = (k + c · sk) mod Q</code></li>
+<li>Submit: <code>SUBMIT 676976655f6d655f67696674 &lt;R&gt; &lt;s&gt;</code></li>
+</ol>
+<hr>
+<h2 id="implementation"><a class="wu-anchor" href="#implementation" aria-hidden="true">#</a>Implementation</h2>
+<ul>
+<li><code>supercoolcryptolib.py</code>, challenge library (reused for calibration geometry)</li>
+<li><code>solve_remote.py</code>, connects to the real server, collects signatures,
+computes nonce ranges, builds and reduces the lattice with fpylll, recovers
+the secret key, forges a signature, and submits it</li>
+</ul>
+<p>Key dependencies: <code>fpylll</code> for LLL lattice reduction.</p>
+<hr>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<pre><code>kaspersky{N0w_4ll_tH3_4nsW3rs_4r3_1n_y0ur_h4nds!!!!}
+</code></pre>
+<hr>
+<h2 id="notes"><a class="wu-anchor" href="#notes" aria-hidden="true">#</a>Notes</h2>
+<ul>
+<li>The challenge name &quot;Censored&quot; refers to the diagnostic blob - the &quot;censored&quot;
+(masked) nonce data that isn&#39;t actually censored since the masks are
+computable from public data.</li>
+<li>In retrospect, the additional diagnostic fields (<code>curv</code>, <code>basin</code>, <code>iters</code>)
+provide even more bits (up to ~30 bits per signature), but the 18 bits from
+<code>profile_value</code> alone were sufficient with 30 signatures.</li>
+<li>The lattice construction requires careful scaling. The key insight is
+centering observation rows around 0 so entries are bounded by X rather than Q.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#protocol">Protocol</a></li><li><a href="#signature-scheme">Signature Scheme</a></li><li><a href="#the-diagnostic-leak">The Diagnostic Leak</a></li><li><a href="#calibration-curve-geometry">Calibration Curve Geometry</a></li><li><a href="#from-profile-value-to-nonce-range">From profile_value to Nonce Range</a></li><li><a href="#hidden-number-problem-hnp-attack">Hidden Number Problem (HNP) Attack</a></li><li><a href="#forging-the-signature">Forging the Signature</a></li><li><a href="#implementation">Implementation</a></li><li><a href="#flag">Flag</a></li><li><a href="#notes">Notes</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="biblocker.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">biblocker</span></a>
+    <a class="wu-pager-link wu-pager-next wu-pager-index" href="../writeups.html"><span class="wu-pager-dir">Index</span><span class="wu-pager-name">All writeups</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=16"></script>
+</body>
+</html>

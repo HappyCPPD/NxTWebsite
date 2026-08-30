@@ -9,7 +9,7 @@
 
 
 <link rel="stylesheet" href="css/fonts.css?v=2" />
-<link rel="stylesheet" href="css/styles.css?v=13" />
+<link rel="stylesheet" href="css/styles.css?v=16" />
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -32,6 +32,8 @@
     <div class="nav-links">
       <a href="#about">about</a>
       <a href="#focus">categories</a>
+      <a href="#results">results</a>
+      <a href="writeups.html">writeups</a>
       <a href="#team">team</a>
       <a href="#shell">challenge</a>
       <a href="#join">join</a>
@@ -53,6 +55,8 @@
   <div class="mobile-panel" id="mobilePanel">
     <a href="#about">about</a>
     <a href="#focus">categories</a>
+    <a href="#results">results</a>
+    <a href="writeups.html">writeups</a>
     <a href="#team">team</a>
     <a href="#shell">challenge</a>
     <a href="#join">join</a>
@@ -64,12 +68,12 @@
   <section class="hero container">
     <div class="hero-grid">
       <div class="hero-copy">
-        <p class="eyebrow"><span class="dot"></span>Recruiting — rolling applications</p>
+        <p class="eyebrow"><span class="dot"></span>Recruiting · rolling applications</p>
         <h1>Break things.<br>Capture <span>flags.</span></h1>
         <p class="hero-lede">NXT_CTFS is a competitive cybersecurity team tackling web, binary, and cryptography challenges together.</p>
         <div class="hero-actions">
           <a href="#join" class="btn btn-primary">Join the team</a>
-          <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">View writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" focusable="false"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a>
+          <a href="writeups.html" class="btn btn-secondary">View writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" focusable="false"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a>
         </div>
       </div>
 
@@ -82,11 +86,11 @@
           </div>
           <div class="term-body">
             <p class="term-line"><span class="prompt">$</span><span class="cmd">whoami</span></p>
-            <p class="term-line term-out">nxt_ctfs — competitive capture the flag</p>
+            <p class="term-line term-out">nxt_ctfs · competitive capture the flag</p>
             <p class="term-line"><span class="prompt">$</span><span class="cmd">ls ./categories</span></p>
             <p class="term-line term-out">web  pwn  rev  crypto  forensics  osint</p>
             <p class="term-line"><span class="prompt">$</span><span class="cmd">./recruit --status</span></p>
-            <p class="term-line term-out"><span class="ok">open</span> — no minimum solve count</p>
+            <p class="term-line term-out"><span class="ok">open</span> · no minimum solve count</p>
             <p class="term-line term-tail"><span class="prompt">$</span><span class="caret"></span></p>
           </div>
         </div>
@@ -155,6 +159,97 @@
     </div>
   </section>
 
+  <section class="section container" id="results">
+    <div class="results-head">
+      <div class="results-head-copy">
+        <p class="eyebrow">Results</p>
+        <h2>Kaspersky CTF 2026</h2>
+        <p>Nine challenges down across pwn, reverse, crypto, misc, and AI. Full writeups are on the <a href="writeups.html">writeups page</a>, root cause first and then the exploit.</p>
+        <div class="results-scoreline">
+          <span class="is-place"><b>69th</b> Asia regional league</span>
+          <span><b>736</b> points</span>
+          <span><b>9</b> challenges solved</span>
+          <span><b>NxT</b> · ITE College West</span>
+        </div>
+      </div>
+
+      <figure class="cert">
+        <img src="images/kaspersky-cert.jpg" width="1600" height="1131" alt="Kaspersky{CTF} certificate of participation for NxT, ITE College West, dated 30 August 2026" loading="lazy" />
+        <figcaption>Kaspersky{CTF} 2026 · certificate of participation</figcaption>
+      </figure>
+    </div>
+
+    <div class="table-scroll">
+      <table class="solve-table">
+        <caption class="sr-only">Challenges solved at Kaspersky CTF 2026</caption>
+        <thead>
+          <tr>
+            <th scope="col">Challenge</th>
+            <th scope="col">Category</th>
+            <th scope="col" style="text-align:right">Points</th>
+            <th scope="col">Solved</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row" class="solve-chal"><a href="writeups/slopgate.html">SlopGate</a></th>
+            <td class="solve-cat"><span class="wu-cat wu-cat-pwn">pwn</span></td>
+            <td class="solve-pts">182</td>
+            <td class="solve-when">Aug 30, 06:14</td>
+          </tr>
+          <tr>
+            <th scope="row" class="solve-chal"><a href="writeups/lumberjack.html">Lumberjack</a></th>
+            <td class="solve-cat"><span class="wu-cat wu-cat-ai">AI</span></td>
+            <td class="solve-pts">89</td>
+            <td class="solve-when">Aug 30, 19:35</td>
+          </tr>
+          <tr>
+            <th scope="row" class="solve-chal"><a href="writeups/chroot-bronze.html">chroot-bronze</a></th>
+            <td class="solve-cat"><span class="wu-cat wu-cat-misc">misc</span></td>
+            <td class="solve-pts">77</td>
+            <td class="solve-when">Aug 29, 20:45</td>
+          </tr>
+          <tr>
+            <th scope="row" class="solve-chal"><a href="writeups/awasmsafe.html">awasmsafe</a></th>
+            <td class="solve-cat"><span class="wu-cat wu-cat-rev">rev</span></td>
+            <td class="solve-pts">74</td>
+            <td class="solve-when">Aug 30, 04:28</td>
+          </tr>
+          <tr>
+            <th scope="row" class="solve-chal"><a href="writeups/chroot-silver.html">chroot-silver</a></th>
+            <td class="solve-cat"><span class="wu-cat wu-cat-misc">misc</span></td>
+            <td class="solve-pts">64</td>
+            <td class="solve-when">Aug 30, 03:14</td>
+          </tr>
+          <tr>
+            <th scope="row" class="solve-chal"><a href="writeups/sudokrypt.html">Sudokrypt</a></th>
+            <td class="solve-cat"><span class="wu-cat wu-cat-crypto">crypto</span></td>
+            <td class="solve-pts">50</td>
+            <td class="solve-when">Aug 30, 03:49</td>
+          </tr>
+          <tr>
+            <th scope="row" class="solve-chal"><a href="writeups/shiny-sweetie-curve.html">Shiny Sweetie Curve</a></th>
+            <td class="solve-cat"><span class="wu-cat wu-cat-crypto">crypto</span></td>
+            <td class="solve-pts">50</td>
+            <td class="solve-when">Aug 30, 03:15</td>
+          </tr>
+          <tr>
+            <th scope="row" class="solve-chal"><a href="writeups/biblocker.html">biblocker</a></th>
+            <td class="solve-cat"><span class="wu-cat wu-cat-rev">rev</span></td>
+            <td class="solve-pts">50</td>
+            <td class="solve-when">Aug 30, 01:57</td>
+          </tr>
+          <tr>
+            <th scope="row" class="solve-chal"><a href="writeups/censored.html">Censored</a></th>
+            <td class="solve-cat"><span class="wu-cat wu-cat-crypto">crypto</span></td>
+            <td class="solve-pts">50</td>
+            <td class="solve-when">Aug 29, 22:01</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="section container" id="team">
     <div class="section-head">
       <p class="eyebrow">Team</p>
@@ -215,7 +310,7 @@
         <h2>Want in?</h2>
         <p>We take new members on a rolling basis. Tell us a bit about yourself and what you like to break.</p>
         <ul class="join-notes">
-          <li>No minimum solve count — curiosity counts more.</li>
+          <li>No minimum solve count; curiosity counts more.</li>
           <li>We compete year-round and write up what we learn.</li>
           <li>Reply usually lands in your inbox within a week.</li>
         </ul>
@@ -302,6 +397,8 @@
       <h4>Navigate</h4>
       <a href="#about">About</a>
       <a href="#focus">Categories</a>
+      <a href="#results">Results</a>
+      <a href="writeups.html">Writeups</a>
       <a href="#team">Team</a>
       <a href="#shell">Challenge</a>
       <a href="#join">Join</a>
@@ -319,6 +416,6 @@
   </div>
 </footer>
 
-<script src="js/script.js?v=13"></script>
+<script src="js/script.js?v=16"></script>
 </body>
 </html>

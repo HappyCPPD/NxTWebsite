@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sudokrypt · Kaspersky CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The Feistel and sudoku layers are keyless and publicly invertible. Two design leaks recover both secret permutations, and a shared block counter exposes the spectral keystream as a degree-56 linear recurrence." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=16" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>sudokrypt</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-crypto">crypto</span>
+      <span class="wu-pts">50 pts</span>
+      <span class="wu-when">solved Aug 30, 03:49</span>
+    </div>
+    <h1>Sudokrypt <span>custom cipher</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">kaspersky{D4mn_1m_s0_c00l!!_1_c4n_d0_sud0ku_n0w_st4cy_t0t4lly_g01ng_t0_pr0m_w1th_m3}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>The challenge is a custom 128-bit block cipher (&quot;SudoKrypt&quot;) built on top of a
+16×16 Hexadoku (sudoku) grid, plus a homebrew &quot;spectral&quot; keystream generator.
+The server exposes a menu:</p>
+<pre><code>1) encrypt one block
+2) peek at Stacy&#39;s homework (once)
+3) how many queries are left
+4) get me out
+</code></pre>
+<p>Option 1 is a chosen-plaintext encryption oracle (default 96 queries per
+connection). Option 2 encrypts the flag exactly once and immediately closes
+the oracle. The cipher looks intimidating - Feistel wrapping, bit diffusion,
+a sudoku board, a 56-term modular exponential keystream - but almost none of
+it is actually load-bearing. Two design leaks let you fully break it well
+within the 96-query budget.</p>
+<hr>
+<h2 id="cipher-structure-sudokrypt-corepy"><a class="wu-anchor" href="#cipher-structure-sudokrypt-corepy" aria-hidden="true">#</a>Cipher structure (<code>sudokrypt_core.py</code>)</h2>
+<p>Per 16-byte block:</p>
+<ol>
+<li>Each plaintext byte <code>i</code> is combined with a keystream value
+<code>values[i]</code> (12 bits, from the spectral generator) via <code>inner_word()</code>,
+producing a 16-bit &quot;word&quot;. This mixes in two session-secret 16-entry
+permutations, <code>q_perm</code> and <code>symbol_perm</code>.</li>
+<li>The 16 words are cyclically <strong>rotated</strong> by an amount derived from the
+keystream (<code>block_rotation</code>).</li>
+<li>Each rotated word is passed through <code>public_wrapper()</code> (a 4-round
+Feistel network), then through <code>diffuse_words()</code>, a fixed bit-rotation
+mixing step.</li>
+</ol>
+<p>Critically, <strong>step 3 uses no secret key material at all.</strong> The Feistel
+round keys are <code>0x53 + rank*0x29 + rnd*0x47</code>, pure public constants
+indexed only by position. <code>diffuse_words</code> is likewise a fixed, keyless
+bit-mixing permutation. Both are exactly invertible by anyone
+(<code>public_wrapper_inv</code>, <code>undiffuse_words</code>), for free, with no oracle queries
+at all. So the entire outer two layers contribute zero security; the real
+secrets are just:</p>
+<ul>
+<li><code>q_perm</code> and <code>symbol_perm</code> - two 16-entry permutations, fixed per session</li>
+<li>the <strong>spectral generator</strong>: <code>values(lane, t) = Σ c[lane][j] · nodes[j]^t (mod 4093)</code> for 56 secret field elements <code>nodes[j]</code> and 16×56 secret coefficients - this drives both the keystream and the block rotation</li>
+</ul>
+<hr>
+<h2 id="leak-1-q-perm-in-a-single-query"><a class="wu-anchor" href="#leak-1-q-perm-in-a-single-query" aria-hidden="true">#</a>Leak #1 - <code>q_perm</code> in a single query</h2>
+<p>Inside <code>inner_word()</code>, the top nibble of the output word is exactly
+<code>q_perm[q]</code>, where <code>q</code> is the top nibble of the plaintext byte - no
+keystream or other secret mixed in at all. Send a plaintext whose 16
+<code>q</code>-nibbles are <code>[0, 0, 1, 2, ..., 14]</code> (deliberately repeating <code>0</code> once).
+After publicly un-wrapping the ciphertext, the resulting 16 top-nibbles are
+just this sequence <em>cyclically rotated</em> by the block&#39;s secret rotation
+amount. Since <code>q_perm</code> is a bijection, exactly one adjacent pair in that
+16-cycle is equal (the deliberate duplicate) and every other value is
+unique - so that pair&#39;s position pins the rotation exactly, and the
+duplicate/elimination trick then hands you all 16 entries of <code>q_perm</code> in
+one query. As a bonus, once <code>q_perm</code> is known, every future block&#39;s
+rotation is also free: brute-force the 16 possible rotations and check
+which one makes the top nibbles equal <code>q_perm[q_i]</code> position-for-position.</p>
+<h2 id="leak-2-symbol-perm-via-a-free-checksum"><a class="wu-anchor" href="#leak-2-symbol-perm-via-a-free-checksum" aria-hidden="true">#</a>Leak #2 - <code>symbol_perm</code> via a free checksum</h2>
+<p><code>symbol_perm</code> is entangled with per-position keystream nibbles
+(<code>row_code</code>, <code>mask</code>) in a way that looks perfectly masked: for any
+candidate value of <code>symbol_inv[k]</code>, the two observable fields
+(<code>row_field</code>, <code>col_field</code>) always have a unique, self-consistent solution
+for <code>row_code</code>/<code>mask</code>, a single query leaks nothing.</p>
+<p>The escape hatch is <code>block_rotation</code>:</p>
+<pre><code>rotation = (sum(values) + 3*values[0] + block_number) &amp; 15
+</code></pre>
+<p>Since <code>256 mod 16 == 0</code>, this checksum only depends on the <strong>low byte</strong> of
+each lane&#39;s keystream value - exactly the byte that falls out of the
+<code>row_code</code>/<code>mask</code> formula once you guess <code>symbol_inv[k]</code>. So: fix a
+candidate symbol at all 16 byte lanes in one query (rotation already known
+for free from leak #1), brute-force the 16 possible values of
+<code>symbol_inv[k]</code>, and keep only the guess whose implied checksum matches the
+real rotation. On average a handful of wrong guesses survive one query;
+2-3 repeats per symbol collapse the candidate set to exactly one. Doing
+this for <code>k = 0..15</code> fully recovers <code>symbol_perm</code> in roughly 30-40 queries.</p>
+<p>Each calibration query is also a bonus: once <code>symbol_inv[k]</code> is confirmed,
+the last unknown nibble (the &quot;check&quot; field, an XOR with an S-box of
+otherwise-known inputs) is now fully determined too - so every calibration
+query hands over the <strong>exact 12-bit keystream value for all 16 lanes</strong>,
+for free.</p>
+<hr>
+<h2 id="leak-3-the-spectral-keystream-generator"><a class="wu-anchor" href="#leak-3-the-spectral-keystream-generator" aria-hidden="true">#</a>Leak #3 - the spectral keystream generator</h2>
+<p><code>values(lane, t) = Σ_{j=0}^{55} c[lane][j] · nodes[j]^t (mod 4093)</code> is, by
+construction, a degree-56 linear recurring sequence shared across all 16
+lanes (same 56 <code>nodes</code>, different coefficients per lane). With ~90
+consecutive exact samples per lane (collected as a side effect of leak #2,
+since every encrypt query - regardless of symbol - advances the same
+block counter by exactly 1), this is heavily overdetermined:</p>
+<ol>
+<li>Stack <code>value(t) = Σ rec[j]·value(t-1-j)</code> equations across all 16 lanes
+and solve the resulting linear system (mod 4093) for the 56 recurrence
+coefficients.</li>
+<li>Factor the corresponding degree-56 characteristic polynomial over
+<code>GF(4093)</code>, its 56 roots are exactly the secret <code>nodes[j]</code>.</li>
+<li>With <code>nodes</code> known, solve a 56×56 Vandermonde system per lane (using
+the first 56 samples) to recover each lane&#39;s 56 coefficients exactly.</li>
+</ol>
+<p>The one-time &quot;fold&quot; applied to the generator&#39;s state right before the flag
+is encrypted (<code>fold_for_flag</code>) is a fixed public formula in terms of these
+same <code>(nodes, coefficients)</code>, so it can be replayed exactly offline, even
+though the real oracle is closed by the time you need it. That gives the
+exact keystream for however many blocks the (padded) flag occupies.</p>
+<hr>
+<h2 id="putting-it-together"><a class="wu-anchor" href="#putting-it-together" aria-hidden="true">#</a>Putting it together</h2>
+<p>With <code>q_perm</code>, <code>symbol_perm</code>, and the full keystream generator recovered:</p>
+<ol>
+<li>Request the encrypted flag (closes the oracle, triggers the fold).</li>
+<li>Replay the fold offline to predict the keystream for each flag block.</li>
+<li>Compute each block&#39;s rotation from the predicted keystream.</li>
+<li>Publicly un-wrap the ciphertext, undo the rotation, and invert
+<code>inner_word</code> (now trivial with <code>q_perm</code>/<code>symbol_perm</code> known) to recover
+each plaintext byte.</li>
+<li>Strip PKCS7 padding.</li>
+</ol>
+<p>No brute force is needed at the decryption step - everything is solved
+in closed form once the three leaks are exploited.</p>
+<hr>
+<h2 id="implementation"><a class="wu-anchor" href="#implementation" aria-hidden="true">#</a>Implementation</h2>
+<p><code>solve.py</code>, a self-contained script (only needs <code>sympy</code> for polynomial
+factoring over <code>GF(4093)</code>):</p>
+<ul>
+<li><code>RemoteOracle</code>, speaks the real <code>server.py</code> line protocol over a raw
+socket</li>
+<li><code>Solver.bootstrap_qperm()</code>, leak #1</li>
+<li><code>Solver.resolve_symbol()</code> / <code>recover_symbol_perm()</code>, leak #2</li>
+<li><code>Solver.recover_lfsr()</code>, leak #3 (linear system → poly factoring →
+Vandermonde)</li>
+<li><code>Solver.decrypt_flag()</code>, replays the fold and decodes the flag</li>
+</ul>
+<p>Total query budget used: ~95 of the 96 available (1 for <code>q_perm</code>, ~30-45
+calibrating <code>symbol_perm</code>, the rest padding out to enough consecutive
+keystream samples for the linear-algebra step).</p>
+<p>Validated end-to-end against a local copy of the challenge&#39;s own
+<code>server.py</code> before running against the real server (5/5 successful runs).</p>
+<hr>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<pre><code>kaspersky{D4mn_1m_s0_c00l!!_1_c4n_d0_sud0ku_n0w_st4cy_t0t4lly_g01ng_t0_pr0m_w1th_m3}
+</code></pre>
+<hr>
+<h2 id="notes"><a class="wu-anchor" href="#notes" aria-hidden="true">#</a>Notes</h2>
+<ul>
+<li>The &quot;Hexadoku&quot; board itself (the actual sudoku grid, <code>row_for_shift</code>,
+<code>col_for_base</code>) is a red herring for the attacker - it&#39;s only used
+server-side as a self-consistency check during encryption and is never
+needed to decrypt.</li>
+<li>The core design mistake is reusing one global block counter (and thus
+one continuous keystream) across both the attacker-controlled oracle and
+the flag encryption, combined with a rotation checksum that leaks
+keystream information mod 16 for free. Either one alone would likely
+have been fine; together they fully break the scheme.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#cipher-structure-sudokrypt-corepy">Cipher structure (sudokrypt_core.py)</a></li><li><a href="#leak-1-q-perm-in-a-single-query">Leak #1 - q_perm in a single query</a></li><li><a href="#leak-2-symbol-perm-via-a-free-checksum">Leak #2 - symbol_perm via a free checksum</a></li><li><a href="#leak-3-the-spectral-keystream-generator">Leak #3 - the spectral keystream generator</a></li><li><a href="#putting-it-together">Putting it together</a></li><li><a href="#implementation">Implementation</a></li><li><a href="#flag">Flag</a></li><li><a href="#notes">Notes</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="chroot-silver.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">chroot-silver</span></a>
+    <a class="wu-pager-link wu-pager-next" href="shiny-sweetie-curve.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Shiny Sweetie Curve</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=16"></script>
+</body>
+</html>

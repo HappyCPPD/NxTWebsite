@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>awasmsafe · Kaspersky CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The password check is a WASM RC4 whose key is derived from the page's own source and CSP hash, gated behind ~56 anti-Node fingerprint checks. Run the real Electron renderer, then solve the RC4 algebraically." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=16" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>awasmsafe</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-rev">rev</span>
+      <span class="wu-pts">74 pts</span>
+      <span class="wu-when">solved Aug 30, 04:28</span>
+    </div>
+    <h1>awasmsafe <span>WASM + Electron</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">kaspersky{w4sm_3lectrif1ed_7d19ae15}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<blockquote>
+<p>&quot;We&#39;re ordered a new secret-keeping machine! The whole safe-machine, believe
+it! A massive terminal just to keep confidential info secure. They say it
+has highest-grade protection made just for us! Amazing!&quot;</p>
+</blockquote>
+<p>The challenge ships two files: <code>awasmsafe_&lt;hash&gt;.exe</code> and
+<code>awasmsafe_&lt;hash&gt;.AppImage</code>. Both are just platform builds of the same
+Electron app - a fake CRT-terminal &quot;safe&quot; that asks for a password before
+letting you <code>read</code>/<code>store</code> a secret.</p>
+<h2 id="1-getting-the-source-out"><a class="wu-anchor" href="#1-getting-the-source-out" aria-hidden="true">#</a>1. Getting the source out</h2>
+<p>Electron apps package their JS/HTML/assets into an <code>app.asar</code> archive next
+to the native binary. Extracting the Linux build:</p>
+<pre><code class="language-bash">./awasmsafe_*.AppImage --appimage-extract
+npx asar extract squashfs-root/resources/app.asar app_extracted
+</code></pre>
+<p>That yields three files: <code>package.json</code>, <code>index.js</code> (the Electron main
+process - just boilerplate that creates a <code>BrowserWindow</code> with
+<code>nodeIntegration:false, contextIsolation:true, sandbox:true</code> and loads
+<code>safe.html</code>), and <code>safe.html</code>, the entire app.</p>
+<p><code>safe.html</code> is a single page: a CSS-heavy fake CRT terminal, and two
+<code>&lt;script&gt;</code> blocks.</p>
+<ul>
+<li><strong>Script 1</strong> sets <code>window.codeBuffer = new Uint8Array([...])</code>, a large
+byte array.</li>
+<li><strong>Script 2</strong> is the terminal emulator: handles typing/printing, and an
+<code>init()</code> that gzip-decompresses <code>codeBuffer</code>, <code>WebAssembly.instantiate</code>s
+it, and exposes the result as <code>window.checkFlag</code>:</li>
+</ul>
+<pre><code class="language-js">window.checkFlag = (flag) =&gt;
+  instance.exports.check_flag(window.return((new TextEncoder()).encode(flag)));
+</code></pre>
+<p>So the actual password check is not in JavaScript at all - it&#39;s compiled to
+WebAssembly. The only import the module needs is a single generic callback:</p>
+<pre><code class="language-js">const { instance } = await WebAssembly.instantiate(await decompress(codeBuffer), {
+  env: { e: (c =&gt; eval(wgs(c))), memory }
+});
+</code></pre>
+<p><code>env.e</code> reads a null-terminated string out of WASM linear memory and
+<code>eval()</code>s it in the page. That&#39;s the module&#39;s entire escape hatch back into
+JS - and it turns out to matter a lot.</p>
+<h2 id="2-pulling-the-wasm-apart"><a class="wu-anchor" href="#2-pulling-the-wasm-apart" aria-hidden="true">#</a>2. Pulling the WASM apart</h2>
+<pre><code class="language-python">import re, gzip
+m = re.search(r&#39;window\.codeBuffer = new Uint8Array\(\[([\d,]+)\]\)&#39;, html)
+wasm = gzip.decompress(bytes(int(x) for x in m.group(1).split(&#39;,&#39;)))
+</code></pre>
+<p>12,995 bytes, exporting only <code>check_flag</code>, <code>malloc</code>, <code>free</code>. Disassembling
+with <code>wabt</code> (<code>wasm2wat</code>) gives ~5,200 lines of <code>.wat</code>, clearly compiled C,
+not hand-written, complete with an optimized SWAR <code>strlen</code>, a <code>memcmp</code>, and
+a from-scratch RC4 and a small LCG PRNG. <code>check_flag</code> itself is a thin
+wrapper: <code>local.get 0; call 9; call 23</code>, all the real work is in <code>func 9</code>.</p>
+<p>Reading <code>func 9</code> end to end:</p>
+<ol>
+<li>Requires the input to be <strong>exactly 36 bytes</strong> (<code>strlen(input) == 36</code>,
+otherwise bail out immediately).</li>
+<li><code>env.e(67504)</code> evaluates a string that turns out to be
+<code>&quot;(typeof global).length&quot;</code>, and stores the numeric result as the seed
+of the LCG at address <code>67580</code>.</li>
+<li>Copies a static 36-byte ciphertext blob (address <code>67536</code>) into a scratch
+buffer, then XORs it byte-by-byte against the LCG&#39;s output stream. Call
+this <code>decrypted_target</code>.</li>
+<li><code>env.e(&lt;dynamic buffer&gt;)</code> evaluates a <em>second</em>, much longer string
+(187 bytes, itself decrypted in-place by a helper cipher before use).
+The numeric result of this eval is stored as a 32-byte &quot;key&quot; pointer,
+<code>r</code>.</li>
+<li>Calls a function matching the exact signature <code>(data, datalen, key, keylen, out)</code> with <code>(input, 36, r, 32, scratch)</code> - this is <code>func 2</code>,
+which on inspection is textbook <strong>RC4</strong>: standard KSA over 256 bytes
+using <code>r</code> as the key, then PRGA XOR-ing <code>input</code> into <code>scratch</code>.</li>
+<li><code>memcmp(scratch, decrypted_target, 36) == 0</code> → return true.</li>
+</ol>
+<p>So: <code>RC4(key = r, data = password) == decrypted_target</code>. Two unknowns: the
+seed for step 2, and the string evaluated in step 4.</p>
+<h2 id="3-what-actually-gets-eval39d"><a class="wu-anchor" href="#3-what-actually-gets-eval39d" aria-hidden="true">#</a>3. What actually gets <code>eval</code>&#39;d</h2>
+<p>Dumping WASM linear memory at address <code>67504</code> after instantiation shows the
+plaintext string directly:</p>
+<pre><code>(typeof global).length
+</code></pre>
+<p>This is a deliberate anti-Node-analysis trick. In a real browser or
+Electron <em>renderer</em> (which is what actually runs this page -
+<code>nodeIntegration:false</code> means there is no Node <code>global</code>), <code>typeof global</code>
+evaluates to <code>&quot;undefined&quot;</code> (<code>typeof</code> never throws on an unresolved
+identifier) - length <strong>9</strong>. Under Node.js, where <code>global</code> genuinely exists
+as an object, it&#39;s <code>&quot;object&quot;</code>, length <strong>6</strong>. Whoever dumps this WASM and
+just runs it in <code>node</code> gets silently fed the wrong PRNG seed and will never
+recover the right value, with no error to tip them off.</p>
+<p>There&#39;s a second, more direct anti-Node measure elsewhere in the module&#39;s
+startup code (traced separately): one of the <code>eval</code>&#39;d strings is literally</p>
+<pre><code class="language-js">try { process.exit(1) } catch (e) {  }
+</code></pre>
+<p>In Node, <code>process</code> exists, so this instantly kills the analysis process. In
+a real browser, <code>process</code> doesn&#39;t exist, the <code>ReferenceError</code> is caught,
+and it&#39;s a no-op. (Direct <code>eval</code> inherits the caller&#39;s lexical scope, so
+this can be defeated by locally shadowing <code>process</code>, but it&#39;s a strong
+signal the challenge wants you in a real renderer, not Node.)</p>
+<p>The big 187-byte string (step 4 above), once decrypted by the WASM&#39;s own
+helper cipher, turns out to be:</p>
+<pre><code class="language-js">window.return(h(
+  document.querySelectorAll(&#39;script&#39;)[1].textContent,
+  document.querySelectorAll(&#39;*&#39;)[5].content?.split(&#39; &#39;)[1]?.slice(8,-1)
+  || &#39;Gn8FyC3e2b2zK/pAXa0HXHOZaEa7Z1h2DbAzZO25YXk=&#39;
+))
+</code></pre>
+<p>with <code>window.h</code> defined back in <code>safe.html</code> as:</p>
+<pre><code class="language-js">window.h = (d, s) =&gt; {
+  var r = Uint8Array.fromBase64(s);
+  for (var i = 0; i &lt; d.length; i++) r[i % r.length] += d.charCodeAt(i);
+  return r;
+};
+</code></pre>
+<p>This is a <strong>self-referential key</strong>: it&#39;s derived from the app&#39;s own shipped
+source text, at runtime, from inside the running page.</p>
+<ul>
+<li><code>document.querySelectorAll(&#39;script&#39;)[1].textContent</code> is the literal
+source of Script 2 - the terminal-emulator code itself.</li>
+<li><code>document.querySelectorAll(&#39;*&#39;)[5]</code> is the 6th element in the document in
+document order. Counting <code>&lt;html&gt; &lt;head&gt; &lt;meta charset&gt; &lt;title&gt; &lt;meta viewport&gt; &lt;meta CSP&gt;</code>, index 5 is the page&#39;s own
+<code>&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;script-src &#39;sha256-XXXX...&#39; &#39;sha256-YYYY...&#39; &#39;unsafe-eval&#39;;&quot;&gt;</code> tag.
+<code>.content.split(&#39; &#39;)[1].slice(8,-1)</code> strips <code>&#39;sha256-</code> and the trailing
+<code>&#39;</code>, yielding the first base64 SHA-256 hash verbatim.</li>
+<li><code>h(d, s)</code>: base64-decode the CSP hash into 32 bytes, then add (mod 256,
+via <code>Uint8Array</code> wraparound) every character code of the entire second
+<code>&lt;script&gt;</code> block&#39;s source into it, cyclically. <code>window.return(...)</code>
+mallocs a WASM buffer, copies those 32 bytes in, and returns the pointer,
+which is exactly the <code>r</code> that <code>func 9</code> uses as the RC4 key.</li>
+</ul>
+<p>Neat: the &quot;key&quot; is baked directly into the page&#39;s own markup and its own
+JS source, but <em>deriving</em> it correctly requires actually being a browser
+DOM evaluating that page, not a static blob sitting on disk.</p>
+<h2 id="4-the-part-that-actually-breaks-naive-reversing"><a class="wu-anchor" href="#4-the-part-that-actually-breaks-naive-reversing" aria-hidden="true">#</a>4. The part that actually breaks naive reversing</h2>
+<p>There&#39;s a third piece, easy to miss if you only trace <code>check_flag</code>
+directly: earlier in the module&#39;s startup (<code>func 5</code>, run automatically as
+the WASM <code>start</code> function, before <code>check_flag</code> is ever called), there&#39;s a
+loop that evaluates <strong>~55 more strings</strong>, one per iteration, all of the
+form:</p>
+<pre><code>window.toString().replaceAll(/\n| /g,&#39;&#39;).length
+document.toString().replaceAll(/\n| /g,&#39;&#39;).length
+navigator.toString().replaceAll(/\n| /g,&#39;&#39;).length
+HTMLElement.toString().replaceAll(/\n| /g,&#39;&#39;).length
+WebGLRenderingContext.toString().replaceAll(/\n| /g,&#39;&#39;).length
+RTCPeerConnection.toString().replaceAll(/\n| /g,&#39;&#39;).length
+... (localStorage, MediaRecorder, ServiceWorker, Notification, Clipboard, ...)
+</code></pre>
+<p>This is a battery of &quot;does this look like a real Electron/Chromium
+renderer&quot; checks, stripped of whitespace so exact formatting doesn&#39;t
+matter. Each numeric result gets folded, one at a time, into a small
+rolling 8-byte buffer via addition and XOR. That buffer is then XORed
+directly over the <strong>36-byte ciphertext</strong> the rest of <code>check_flag</code> reads
+from (address <code>67536</code>) - permanently, once, at startup.</p>
+<p>In other words: the ciphertext that <code>decrypted_target</code> is derived from is
+<em>itself</em> scrambled by real-environment fingerprint data before <code>check_flag</code>
+ever runs. Running the WASM under Node with these globals simply undefined
+doesn&#39;t crash anything (the challenge doesn&#39;t want a crash - it wants a
+silent wrong answer) - it just folds in the wrong numbers, and no password,
+however cleverly derived, will ever satisfy the final <code>memcmp</code>. Every path
+through this challenge that isn&#39;t &quot;be a real Chromium renderer&quot; produces
+plausible-looking garbage with no indication anything went wrong.</p>
+<h2 id="5-getting-a-real-renderer-to-answer-honestly"><a class="wu-anchor" href="#5-getting-a-real-renderer-to-answer-honestly" aria-hidden="true">#</a>5. Getting a real renderer to answer honestly</h2>
+<p>Given all that, the only reliable way to recover the true values is to let
+an actual Electron/Chromium instance run the actual page. The sandbox this
+was solved in had no browser and no root:</p>
+<ul>
+<li><code>npx playwright install chromium</code>, blocked by the sandbox&#39;s network
+allowlist.</li>
+<li>Running the bundled AppImage directly - failed with <code>libgtk-3.so.0</code> and
+<code>libXdamage.so.1</code> missing, and no <code>apt</code>/root to install them.</li>
+</ul>
+<p>Fix: apt can be pointed entirely at user-writable directories
+(<code>-o Dir::State::Lists=... -o Dir::Cache=...</code>), which lets it update package
+lists and <code>--download-only</code> fetch <code>.deb</code>s without root. <code>dpkg-deb -x</code> then
+extracts a <code>.deb</code>&#39;s contents anywhere, no privileges needed:</p>
+<pre><code class="language-bash">apt-get -o Dir::State::Lists=~/apt/lists -o Dir::Cache=~/apt/cache \
+  -o Dir::Etc::SourceList=/etc/apt/sources.list update
+apt-get -o ... install --download-only -y libgtk-3-0 libxdamage1
+for deb in ~/apt/cache/archives/*.deb; do dpkg-deb -x &quot;$deb&quot; ~/localroot; done
+LD_LIBRARY_PATH=~/localroot/usr/lib/x86_64-linux-gnu ./awasmsafe ...
+</code></pre>
+<p>That&#39;s enough to get the real, packaged app running headless under <code>Xvfb</code>.</p>
+<p>Two more traps on the way to a clean answer:</p>
+<ul>
+<li><strong>Don&#39;t touch the DOM structure.</strong> An instrumented test page needs its
+own extra <code>&lt;script&gt;</code> to drive the analysis, but adding one <em>before</em> the
+original scripts shifts every <code>querySelectorAll</code> index the self-referential
+key derivation depends on. Fix: keep the original two <code>&lt;script&gt;</code> tags and
+the original <code>&lt;head&gt;</code> byte-for-byte (the second script re-inserted as
+inert <code>type=&quot;text/plain&quot;</code> so it doesn&#39;t also try to wire up a terminal UI
+that isn&#39;t there), and append the analysis code as a third script after.
+The page&#39;s CSP (<code>script-src &#39;sha256-...&#39;</code>) will then block that third,
+unlisted script from running at all - so <code>http-equiv=&quot;Content-Security-Policy&quot;</code>
+gets renamed to a non-enforcing attribute name, <em>without touching its
+<code>content</code> value</em>, since that value is exactly the string the key
+derivation reads.</li>
+<li><strong>Don&#39;t use <code>webContents.executeJavaScript</code> to pull results out.</strong>
+Electron implements it over the Chrome DevTools Protocol&#39;s
+<code>Runtime.evaluate</code>, and simply having a CDP session active is enough to
+make the challenge&#39;s own <code>debugger;</code> anti-debug statements (evaluated
+thousands of times during startup) actually pause execution - with
+nothing ever attached to resume them, the app hangs forever. Swapping to
+a <code>preload.js</code> + <code>contextBridge</code> + <code>ipcRenderer.send(...)</code> /
+<code>ipcMain.on(...)</code> channel avoids CDP entirely and returns results to the
+Node main process (and hence to stdout) cleanly.</li>
+</ul>
+<p>With that in place, the real renderer reports, honestly:</p>
+<pre><code>seed  = 9                                    (typeof global).length, real renderer
+r     = d850442ebf57f96a47fe4cda47e4eb735ec96f3c2578d1736be77eb15247a1af
+cipher36 (post-fingerprint-XOR) = 089ffbf7c29848177a6b81747622bac0979404b534d9d38af396675fc1b30f80536dc1fb
+target = LCG-decrypt(seed, cipher36)
+       = e91a30db53d5df5996dafceb8cfc3e35a4fc9f119122e7378c5c31c7e223f8de973802fb
+keystream = RC4-PRGA(r, 36 bytes)
+       = 827b43ab36a7ac32efa18bdfff916106c899fc65e34b8106e9386ef08612c1bff2093786
+</code></pre>
+<h2 id="6-solving-instead-of-guessing"><a class="wu-anchor" href="#6-solving-instead-of-guessing" aria-hidden="true">#</a>6. Solving instead of guessing</h2>
+<p>RC4 encryption is <code>out = data XOR keystream(key)</code>, and the keystream itself
+never depends on the data - only the key and requested length. So instead
+of brute-forcing a 36-byte password, just invert the XOR:</p>
+<pre><code>password = target XOR keystream(r)
+</code></pre>
+<pre><code class="language-python">password = bytes(a ^ b for a, b in zip(target, keystream))
+# b&#39;kaspersky{w4sm_3lectrif1ed_7d19ae15}&#39;
+</code></pre>
+<p>36 bytes, clean ASCII, right format for the CTF. Feeding it back into the
+live <code>window.checkFlag()</code> in the same real-renderer run confirms it:
+<code>check_flag(password) == 1</code>.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<pre><code>kaspersky{w4sm_3lectrif1ed_7d19ae15}
+</code></pre>
+<h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
+<ul>
+<li><code>SOLUTION.md</code>, condensed version of this writeup.</li>
+<li><code>solve_harness.html</code>, an earlier, Node.js-oriented exploration attempt,
+kept for reference; it&#39;s what first surfaced the <code>process.exit</code>/<code>typeof global</code> killswitch and the missing-DOM-globals problem that motivated the
+Electron-based approach above.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-getting-the-source-out">1. Getting the source out</a></li><li><a href="#2-pulling-the-wasm-apart">2. Pulling the WASM apart</a></li><li><a href="#3-what-actually-gets-eval39d">3. What actually gets eval&amp;#39;d</a></li><li><a href="#4-the-part-that-actually-breaks-naive-reversing">4. The part that actually breaks naive reversing</a></li><li><a href="#5-getting-a-real-renderer-to-answer-honestly">5. Getting a real renderer to answer honestly</a></li><li><a href="#6-solving-instead-of-guessing">6. Solving instead of guessing</a></li><li><a href="#flag">Flag</a></li><li><a href="#files">Files</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="chroot-bronze.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">chroot-bronze</span></a>
+    <a class="wu-pager-link wu-pager-next" href="chroot-silver.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">chroot-silver</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=16"></script>
+</body>
+</html>

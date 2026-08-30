@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shiny Sweetie Curve · Kaspersky CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A fresh random curve every round, only x-coordinates leaked. X-only addition identities plus a resultant-and-GCD trick recover the secret prime, then `a`, `b`, and the step point." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=16" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>shiny-sweetie-curve</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-crypto">crypto</span>
+      <span class="wu-pts">50 pts</span>
+      <span class="wu-when">solved Aug 30, 03:15</span>
+    </div>
+    <h1>Shiny Sweetie Curve <span>elliptic curve</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">kaspersky{g4mbl1ng_1s_b4d_t4k3_c4r3_0f_y0urs3lf}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="the-service"><a class="wu-anchor" href="#the-service" aria-hidden="true">#</a>The service</h2>
+<p><code>GET /api/deal</code> returns:</p>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;&lt;token&gt;&quot;,
+  &quot;samples&quot;: [&quot;&lt;77-digit int&gt;&quot;, ... x14],
+  &quot;target&quot;: 4294968905,
+  &quot;ttl&quot;: 300
+}
+</code></pre>
+<p><code>POST /api/submit</code> takes <code>{id, slot, value}</code> (<code>slot</code> is <code>0</code> for the LEFT card, <code>1</code>
+for RIGHT) and checks <code>value</code> against a server-side secret with
+<code>hmac.compare_digest</code>. Getting it right returns the flag.</p>
+<p>The attached <code>server.py</code> shows what&#39;s actually happening:</p>
+<pre><code class="language-python">BITS = 255
+LANE_SAMPLES = 7
+TARGET_INDEX = (1 &lt;&lt; 32) + 1609
+
+def generate_instance():
+    p = random_prime(BITS)                 # fresh 255-bit prime every round
+    a, b = rnd.randrange(p), rnd.randrange(p)
+    curve = Curve(p, a, b)                  # y^2 = x^3 + a x + b  (mod p)
+    step = random_point(curve)
+    jump = curve.mul(TARGET_INDEX, step)    # TARGET_INDEX * step
+
+    u, v = random_point(curve), random_point(curve)
+    xs0, _ = orbit(curve, u, step, 7)       # u, u+step, ..., u+6*step
+    xs1, _ = orbit(curve, v, step, 7)       # v, v+step, ..., v+6*step
+
+    mask = shuffle([0]*7 + [1]*7)           # interleave the two lanes
+    samples = interleave(xs0, xs1, mask)    # only x-coordinates, shuffled order
+
+    target0 = curve.add(u, jump)
+    target1 = curve.add(v, jump)
+    hand_values = (targets[mask[0]], targets[1 - mask[0]])   # LEFT, RIGHT
+</code></pre>
+<p>So: every round is a <strong>brand-new random elliptic curve</strong> (<code>p, a, b</code> all secret,
+<code>p</code> is a fresh 255-bit prime). Two &quot;lanes&quot; walk the curve in fixed steps of a
+secret point <code>D</code> from two secret starting points <code>u</code> and <code>v</code>. The 14 visible
+numbers are just the x-coordinates of these 14 points, shuffled together but
+with each lane&#39;s internal order preserved (a stable interleave). <code>LEFT</code> is
+&quot;the target for whichever lane produced the very first shown card&quot;; <code>RIGHT</code> is
+the other lane&#39;s target.</p>
+<p>Nothing about <code>p, a, b, u, v, step</code> is ever sent to the client - only 14 raw
+x-coordinates on an unknown curve mod an unknown prime.</p>
+<h2 id="the-math-recovering-the-curve-from-x-coordinates-only"><a class="wu-anchor" href="#the-math-recovering-the-curve-from-x-coordinates-only" aria-hidden="true">#</a>The math: recovering the curve from x-coordinates only</h2>
+<p>For a Weierstrass curve <code>y² = x³ + a x + b</code> and two points <code>A, B</code>, the
+standard chord/tangent addition law gives <code>x(A+B)</code> and <code>x(A−B)</code> in terms of
+<code>x_A, y_A, x_B, y_B</code>. Adding and multiplying those two expressions kills the
+cross terms in <code>y_A y_B</code>, and <code>y_A², y_B²</code> get replaced with <code>x_A³+a x_A+b</code>
+and <code>x_B³+a x_B+b</code>. The result is two identities that use <strong>only
+x-coordinates and the curve constants</strong> - no <code>y</code> needed:</p>
+<pre><code>x(A+B) + x(A−B) = 2(x_A³+x_B³ + a(x_A+x_B) + 2b)/(x_A−x_B)² − 2(x_A+x_B)
+x(A+B) · x(A−B) = (x_A²+x_A x_B+x_B²+a)²/(x_A−x_B)² − (x_A+x_B)·[the sum term] + (x_A+x_B)²
+</code></pre>
+<p>Apply this with <code>A = P_i</code> (the i-th point in a lane, known x) and <code>B = step</code>
+(unknown x, call it <code>s</code>). Then <code>A+B = P_{i+1}</code> and <code>A−B = P_{i-1}</code>, both
+known. Clearing denominators gives, for every interior index <code>i</code> of a lane:</p>
+<ul>
+<li><code>EqSum_i(a, b, s)</code>, linear in <code>a, b</code>, quadratic in <code>s</code></li>
+<li><code>EqProd_i(a, b, s)</code>, quadratic in <code>a</code>, linear in <code>b</code>, quartic in <code>s</code></li>
+</ul>
+<p>(Verified numerically against a hand-rolled toy curve before trusting it on
+the real data - both identities hold exactly mod <code>p</code>.)</p>
+<p>With 3+ consecutive points in a lane we get enough of these to eliminate
+<code>a, b</code> linearly (two <code>EqSum</code> equations solve <code>a(s), b(s)</code> as low-degree
+polynomials in <code>s</code> over a constant denominator), substitute into two more
+equations to get two univariate polynomials <code>F1(s), F2(s)</code>, and take their
+<strong>resultant</strong>. That resultant is a pure integer built only from known
+x-coordinates - and it is <strong>guaranteed to be a multiple of <code>p</code></strong>, because
+mod <code>p</code> the true <code>(a, b, s)</code> is an actual common root of <code>F1</code> and <code>F2</code>.</p>
+<p>Do this twice with two different windows of points (5-6 points total) to get
+two independent multiples of <code>p</code>, then:</p>
+<pre><code>p = gcd(R_A, R_B)
+</code></pre>
+<p>For a <em>wrong</em> grouping of points (not really from the same lane), <code>R_A</code> and
+<code>R_B</code> are just unrelated large integers with no reason to share a 255-bit
+factor - <code>gcd</code> is small. For the <em>correct</em> grouping, <code>gcd</code> lands exactly on
+the secret prime. This turns &quot;is this the right lane?&quot; into a cheap,
+mechanical check.</p>
+<h2 id="putting-it-together"><a class="wu-anchor" href="#putting-it-together" aria-hidden="true">#</a>Putting it together</h2>
+<ol>
+<li><p><strong>Find the partition.</strong> The board shows 14 x-coordinates; 7 belong to
+<code>sample[0]</code>&#39;s lane (interleaved order preserved). Brute-force which 6 of
+the other 13 join <code>sample[0]</code> (<code>C(13,6) = 1716</code> candidates), computing
+<code>R_A, R_B</code> and <code>gcd</code> for each - this is fast (~0.6 ms/candidate after
+hand-rolling the polynomial algebra instead of calling generic
+<code>sympy.solve</code>/<code>resultant</code> on symbols) so the whole search is ~1-2 seconds.
+A <code>gcd</code> with ~255 bits (and prime) is the hit.</p>
+</li>
+<li><p><strong>Recover <code>p, a, b, s</code>.</strong> <code>p</code> from the gcd; <code>s</code> from the common root of
+<code>F1, F2</code> mod <code>p</code> (their <code>gcd</code> over <code>GF(p)[s]</code> is linear); <code>a, b</code> from the
+linear system, now fully numeric mod <code>p</code>.</p>
+</li>
+<li><p><strong>Resolve the sign ambiguity.</strong> X-only relations can&#39;t tell <code>y</code> from <code>−y</code>.
+Compute both square roots of <code>x_u³+a x_u+b</code> and <code>s³+a s+b</code> (<code>p ≡ 3 mod 4</code>,
+so <code>y = v^{(p+1)/4} mod p</code> works directly - the server uses the same
+trick), try the sign combinations, and replay the addition chain
+<code>u, u+step, u+2·step, ...</code> to see which branch reproduces the known
+x-coordinates exactly.</p>
+</li>
+<li><p><strong>Extrapolate.</strong> With real points <code>u</code> and <code>step</code> on a fully known curve,
+compute <code>u + TARGET_INDEX · step</code> with ordinary EC scalar multiplication
+and take its x-coordinate.</p>
+</li>
+<li><p><strong>Submit</strong> <code>{id, slot: 0, value: &lt;that x-coordinate&gt;}</code>, <code>slot 0</code> because
+we anchored the search on <code>sample[0]</code>, whose lane is always the LEFT card
+by construction (<code>hand_values[0] = targets[mask[0]]</code>).</p>
+</li>
+</ol>
+<p>Result: <code>{&quot;ok&quot;: true, &quot;message&quot;: &quot;kaspersky{g4mbl1ng_1s_b4d_t4k3_c4r3_0f_y0urs3lf}&quot;}</code>.</p>
+<h2 id="dead-ends-worth-noting"><a class="wu-anchor" href="#dead-ends-worth-noting" aria-hidden="true">#</a>Dead ends worth noting</h2>
+<ul>
+<li>The obvious first guess - treat the 14 samples as <code>(x=1..14, y=sample)</code> and
+Lagrange-interpolate a degree-13 polynomial to evaluate at <code>target</code>, is a
+red herring. It <em>does</em> produce an exact integer (guaranteed by finite
+differences on consecutive integer nodes, not evidence of anything), but
+it&#39;s 197 digits and the server hard-caps input at 80 digits
+(<code>&quot;the dealer cannot read that&quot;</code>), and finite-difference GCD tests confirm
+there&#39;s no redundancy to exploit that way - degree is genuinely 13, full
+rank, nothing to interpolate.</li>
+<li>Guessing well-known 256-bit primes (secp256k1, Curve25519, NIST P-256,
+<code>2^256-189</code>, ...) also fails - <code>p</code> is freshly random <em>per round</em>, not a
+fixed system constant, which the digit-length distribution of samples
+across many rounds confirms (no consistent ceiling near any famous prime).</li>
+</ul>
+<p>Only once the attached <code>server.py</code>/<code>app.py</code> source was available did the real
+shape of the problem - a fresh random elliptic curve per round, x-only leaked
+points, <code>hand[slot]</code> semantics - become clear enough to solve properly rather
+than guess.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#the-service">The service</a></li><li><a href="#the-math-recovering-the-curve-from-x-coordinates-only">The math: recovering the curve from x-coordinates only</a></li><li><a href="#putting-it-together">Putting it together</a></li><li><a href="#dead-ends-worth-noting">Dead ends worth noting</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="sudokrypt.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Sudokrypt</span></a>
+    <a class="wu-pager-link wu-pager-next" href="biblocker.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">biblocker</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=16"></script>
+</body>
+</html>

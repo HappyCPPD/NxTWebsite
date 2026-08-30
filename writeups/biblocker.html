@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>biblocker · Kaspersky CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The &quot;Trusted Potato Module&quot; is a SIGSEGV handler that hands back AES key material derived from the fault address via XTEA. Re-implement the CRC and XTEA statically. The key is `target_key XOR mask`." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=16" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>biblocker</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-rev">rev</span>
+      <span class="wu-pts">50 pts</span>
+      <span class="wu-when">solved Aug 30, 01:57</span>
+    </div>
+    <h1>biblocker <span>SIGSEGV &quot;TPM&quot;</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">kaspersky{s1gn4l5_pr0v1d3d_tPm_k1nd4_sus}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<blockquote>
+<p>You&#39;re asking why BitbLocker uses TPM? Well, you only need to understand the power contained in those three letters:
+T - Trusted / P - Potato / M - Module</p>
+</blockquote>
+<p>The whole challenge is the hint: the &quot;TPM&quot; is a <strong>SIGSEGV handler</strong> that provides the key material out of band.</p>
+<hr>
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<pre><code class="language-bash">file files/biblocker_5d741069dd2afdda
+# ELF 64-bit LSB pie executable, x86-64, dynamically linked, not stripped
+md5sum files/biblocker_5d741069dd2afdda
+# 96d209649384dc92fdfc095adb6aa6c4
+</code></pre>
+<p>Not stripped, so <code>nm</code> gives a very informative symbol table:</p>
+<pre><code>AES_CBC_decrypt_buffer   derive_decrypt_key      segsegv_handler
+AES_init_ctx_iv          validate_key            resolve_sigaction
+sha256_*                 fs_img_begin/fs_img_end target_key
+mount_squashfs_blob      create_memfd            check_tracer
+sm_crc32_1/2/3           confuse_path            get_tracer_pid
+</code></pre>
+<p>Interesting strings: <code>squashfs</code>, <code>/mnt/biblocker</code>, <code>/dev/loop-control</code>, <code>blablablablablab</code>,
+<code>invalid password!</code>, <code>corrupted image!</code>, <code>memfd_create</code>.</p>
+<p>So: password → key → AES-CBC decrypt an embedded squashfs image → write to a memfd → loop-mount it.</p>
+<h2 id="2-decompilation-ida-pro-91-headless"><a class="wu-anchor" href="#2-decompilation-ida-pro-91-headless" aria-hidden="true">#</a>2. Decompilation (IDA Pro 9.1 headless)</h2>
+<p><code>ida-pro-mcp</code> was not wired up in this session, so IDA was driven headless with an IDAPython script:</p>
+<p><code>decomp.py</code></p>
+<pre><code class="language-python">import idautils, idc, ida_hexrays, ida_auto, ida_pro
+
+ida_auto.auto_wait()
+out = open(&quot;decomp.c&quot;, &quot;w&quot;)
+ida_hexrays.init_hexrays_plugin()
+for ea in idautils.Functions():
+    out.write(&quot;//==== %s @ 0x%X ====\n&quot; % (idc.get_func_name(ea), ea))
+    try:
+        out.write(str(ida_hexrays.decompile(ea)) + &quot;\n\n&quot;)
+    except Exception as e:
+        out.write(&quot;// decompile failed: %s\n\n&quot; % e)
+out.close()
+ida_pro.qexit(0)
+</code></pre>
+<pre><code class="language-bash">cp files/biblocker_5d741069dd2afdda ./biblocker.elf
+TVHEADLESS=1 idat -A -S&quot;decomp.py&quot; biblocker.elf     # -&gt; decomp.c (2270 lines)
+</code></pre>
+<h2 id="3-program-logic"><a class="wu-anchor" href="#3-program-logic" aria-hidden="true">#</a>3. Program logic</h2>
+<h3 id="main-0x56d0"><a class="wu-anchor" href="#main-0x56d0" aria-hidden="true">#</a><code>main</code> @ <code>0x56D0</code></h3>
+<pre><code class="language-c">derive_decrypt_key(argv[1], key);                       // key = 16 bytes
+v7 = MEMORY[0xA524F867B50] ^ key[0..15];                // &lt;-- faulting load
+if (v7 != target_key) { puts(&quot;invalid password!&quot;); return 1; }
+
+prepare_mount_path(&quot;/mnt/biblocker&quot;);
+memfd = create_memfd();                                  // memfd_create(&quot;biblocker&quot;, 1)
+aes_cbc_decrypt_to_fd(fs_img_begin, fs_img_end - fs_img_begin, key, memfd);
+mount_squashfs_blob(memfd, &quot;/mnt/biblocker&quot;);
+</code></pre>
+<h3 id="derive-decrypt-key-0x41c0"><a class="wu-anchor" href="#derive-decrypt-key-0x41c0" aria-hidden="true">#</a><code>derive_decrypt_key</code> @ <code>0x41C0</code></h3>
+<pre><code class="language-c">sha256(password) -&gt; h[32]
+for (i = 0; i &lt; 16; i++) key[i] = h[i] ^ h[i+16];
+</code></pre>
+<p>Plain SHA-256 folded in half → <strong>AES-128 key</strong>. Not invertible, and brute-forcing the password is
+explicitly out of scope - but we don&#39;t need the password at all.</p>
+<h3 id="aes-cbc-decrypt-to-fd-0x5e50"><a class="wu-anchor" href="#aes-cbc-decrypt-to-fd-0x5e50" aria-hidden="true">#</a><code>aes_cbc_decrypt_to_fd</code> @ <code>0x5E50</code></h3>
+<pre><code class="language-c">AES_init_ctx_iv(ctx, key, &quot;blablablablablab&quot;);   // IV is a hardcoded ASCII string
+AES_CBC_decrypt_buffer_to_fd(ctx, blob, len, fd);
+// then reads the last block back and validates PKCS#7 padding
+</code></pre>
+<h3 id="validate-key-0x4240-the-key-equation"><a class="wu-anchor" href="#validate-key-0x4240-the-key-equation" aria-hidden="true">#</a><code>validate_key</code> @ <code>0x4240</code> - the key equation</h3>
+<pre><code class="language-asm">4240: movups xmm0,[rdi]                  ; derived key
+4243: movaps [rsp-0x18],xmm0
+424d: movabs rsi,0xa524f867b50           ; &lt;-- absolute, UNMAPPED address
+4257: mov    rax,QWORD PTR [rsi]         ; 48 8b 06        (3 bytes) -&gt; SIGSEGV
+425a: xor    QWORD PTR [rcx],rax
+425d: mov    rax,QWORD PTR [rsi+0x8]     ; 48 8b 46 08     (4 bytes) -&gt; SIGSEGV
+4261: xor    QWORD PTR [rcx+0x8],rax
+...   cmp against target_key
+</code></pre>
+<p>So the check is simply:</p>
+<pre><code>derived_key XOR mask == target_key      =&gt;      AES_key = target_key XOR mask
+</code></pre>
+<p><code>target_key</code> @ <code>0x8670</code> in <code>.data</code>:</p>
+<pre><code>8670  d6b9ac3e 973f597a b291bd21 cb0db68a
+</code></pre>
+<p><code>mask</code> is <em>never stored anywhere</em>. It is produced by the SIGSEGV handler - the &quot;Trusted Potato Module&quot;.</p>
+<h2 id="4-the-quottpmquot-segsegv-handler-0x4ff0"><a class="wu-anchor" href="#4-the-quottpmquot-segsegv-handler-0x4ff0" aria-hidden="true">#</a>4. The &quot;TPM&quot;: <code>segsegv_handler</code> @ <code>0x4FF0</code></h2>
+<p>The third handler argument is a <code>ucontext_t *</code>. On x86-64 glibc, <code>uc_mcontext.gregs[]</code> starts at
+<code>ucontext + 40</code>, i.e. <code>a3[5]</code> in qword indices, so <code>a3[i] == gregs[i-5]</code>:</p>
+<table>
+<thead>
+<tr>
+<th>decompiler</th>
+<th>greg index</th>
+<th>register</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>a3[15]</code></td>
+<td>10</td>
+<td><code>RBP</code></td>
+</tr>
+<tr>
+<td><code>a3[18]</code></td>
+<td>13</td>
+<td><code>RAX</code></td>
+</tr>
+<tr>
+<td><code>a3[20]</code></td>
+<td>15</td>
+<td><code>RSP</code></td>
+</tr>
+<tr>
+<td><code>a3[21]</code></td>
+<td>16</td>
+<td><code>RIP</code></td>
+</tr>
+<tr>
+<td><code>a3[23]</code></td>
+<td>18</td>
+<td><code>CSGSFS</code></td>
+</tr>
+<tr>
+<td><code>a3[27]</code></td>
+<td>22</td>
+<td><strong><code>CR2</code> (fault address)</strong></td>
+</tr>
+</tbody></table>
+<p>Handler behaviour:</p>
+<pre><code class="language-c">v6 = sm_crc32_3(&amp;gregs[CR2], 8);            // CRC32 of the 8-byte fault address
+v5 = (*(u8*)(RIP + 2) &amp; 0xF) - 5;           // opcode-shape check on the faulting insn
+
+key[0..1] = 0xB7DA05A379A0A4 * CR2;         // XTEA key, derived from the fault address
+key[2..3] = 0xB015462CBD5972 * CR2;
+
+if (v5 == 1 &amp;&amp; v6 ==   569722185) { ct = 0xB08863AE1CF8A11D; RIP += 3; }
+else if (v5 == 1 &amp;&amp; v6 == -1471963024) { ct = 0x09692350899D4F57; RIP += 4; }
+else { /* fake epilogue: emulate leave/ret to confuse tracing */ }
+
+// 32-round XTEA decryption, delta = -1207154922, sum = 25748160
+for (i = 0; i &lt; 32; i++) {
+    hi -= (key[3] + (lo &gt;&gt; 5)) ^ (sum + lo) ^ (key[2] + 16*lo);
+    lo -= (key[1] + (hi &gt;&gt; 5)) ^ (sum + hi) ^ (key[0] + 16*hi);
+    sum -= delta;
+}
+gregs[RAX] = (hi &lt;&lt; 32) | lo;               // hand the mask qword back to the code
+</code></pre>
+<p>The two branches map exactly onto the two faulting instructions:</p>
+<ul>
+<li><code>mov rax,[rsi]</code>     = <code>48 8b 06</code>    → byte at <code>RIP+2</code> is <code>0x06</code>, low nibble <code>6</code>, <code>6-5 = 1</code> ✓, length <strong>3</strong></li>
+<li><code>mov rax,[rsi+0x8]</code> = <code>48 8b 46 08</code> → byte at <code>RIP+2</code> is <code>0x46</code>, low nibble <code>6</code>, <code>6-5 = 1</code> ✓, length <strong>4</strong></li>
+</ul>
+<p>and are disambiguated by <code>sm_crc32_3</code> (a custom reflected CRC32, poly <code>0xF6ABF146</code>,
+init <code>~0x3DD8B0B8</code>) over <code>CR2 = 0xa524f867b50</code> and <code>0xa524f867b58</code>.</p>
+<h2 id="5-static-emulation"><a class="wu-anchor" href="#5-static-emulation" aria-hidden="true">#</a>5. Static emulation</h2>
+<p><code>solve.py</code> reimplements the CRC and the XTEA round exactly, with no execution of the binary
+(no root, no loop devices, no mounting, and it also sidesteps the <code>check_tracer</code>/<code>get_tracer_pid</code>
+anti-debug and the <code>text_crc</code> self-integrity checks).</p>
+<pre><code class="language-bash">python3 solve.py
+</code></pre>
+<pre><code>CR2=0xa524f867b50 crc32_3=569722185    -&gt; mask qword 0x7b596340958bc1bc
+CR2=0xa524f867b58 crc32_3=-1471963024  -&gt; mask qword 0x05d4168edd6f1910
+mask        : bcc18b954063597b10196fdd8e16d405
+target_key  : d6b9ac3e973f597ab291bd21cb0db68a
+AES-128 key : 6a7827abd75c0001a288d2fc451b628f
+decrypted 4096 bytes, magic: b&#39;hsqs&#39;
+</code></pre>
+<p>Both computed CRCs matched the hardcoded constants exactly - strong confirmation the register
+mapping and the fault addresses were read correctly.</p>
+<p>Note on extraction of the ciphertext: <code>fs_img_begin</code>/<code>fs_img_end</code> are vaddrs <code>0x3138</code>/<code>0x4148</code>,
+and the executable <code>LOAD</code> segment maps file offset <code>0x1d90</code> → vaddr <code>0x2d90</code>, so
+<code>file_offset = vaddr - 0x1000</code>. Blob length <code>0x1010</code> = 4112 bytes (16-aligned, as
+<code>aes_cbc_decrypt_to_fd</code> requires).</p>
+<h2 id="6-flag"><a class="wu-anchor" href="#6-flag" aria-hidden="true">#</a>6. Flag</h2>
+<pre><code class="language-bash">file fs.squashfs
+# Squashfs filesystem, little endian, version 4.0, zlib compressed, 2 inodes
+unsquashfs -q fs.squashfs
+cat squashfs-root/flag.txt
+</code></pre>
+<pre><code>kaspersky{s1gn4l5_pr0v1d3d_tPm_k1nd4_sus}
+</code></pre>
+<p>Submission:</p>
+<pre><code class="language-bash">/Users/dan/ctf/kaspersky/kasperskyflag 20 &#39;kaspersky{s1gn4l5_pr0v1d3d_tPm_k1nd4_sus}&#39;
+# {&quot;status&quot;: &quot;Correct&quot;}
+</code></pre>
+<hr>
+<h2 id="files-in-this-directory"><a class="wu-anchor" href="#files-in-this-directory" aria-hidden="true">#</a>Files in this directory</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>files/biblocker_5d741069dd2afdda</code></td>
+<td>original attachment (untouched)</td>
+</tr>
+<tr>
+<td><code>biblocker.elf</code></td>
+<td>working copy fed to IDA</td>
+</tr>
+<tr>
+<td><code>decomp.py</code></td>
+<td>IDAPython headless decompilation driver</td>
+</tr>
+<tr>
+<td><code>decomp.c</code></td>
+<td>full Hex-Rays output</td>
+</tr>
+<tr>
+<td><code>solve.py</code></td>
+<td>TPM/XTEA emulation + AES-CBC decryption</td>
+</tr>
+<tr>
+<td><code>fs.squashfs</code></td>
+<td>recovered squashfs image</td>
+</tr>
+<tr>
+<td><code>squashfs-root/flag.txt</code></td>
+<td>the flag</td>
+</tr>
+</tbody></table>
+<h2 id="anti-analysis-features-noted-all-bypassed-by-pure-static-solving"><a class="wu-anchor" href="#anti-analysis-features-noted-all-bypassed-by-pure-static-solving" aria-hidden="true">#</a>Anti-analysis features noted (all bypassed by pure static solving)</h2>
+<ul>
+<li><code>check_tracer</code> / <code>get_tracer_pid</code>, parses <code>/proc/self/status</code> <code>TracerPid</code>, so a debugger changes behaviour.</li>
+<li><code>text_crc</code> + <code>g_text_addr</code>/<code>g_text_end</code> + <code>sm_crc32_1/2/3</code>, self-integrity checks over <code>.text</code>.</li>
+<li>Manual ELF symbol resolution (<code>elf_hash</code>, <code>elf_gnu_hash</code>, <code>resolve_elf_sym_hash</code>,
+<code>resolve_elf_sym_gnu_hash</code>, <code>resolve_sigaction</code>) - <code>sigaction</code> is resolved by hand rather than via the PLT.</li>
+<li><code>confuse_path</code>, <code>sm_crc32_confuse</code>, <code>jmp_table</code>, <code>skip</code>/<code>skip_1</code>/<code>return_slide</code>/<code>zero_stub</code>, CFG obfuscation.</li>
+<li>The <code>else</code> branch of the SIGSEGV handler forges a <code>leave; ret</code> in the trap frame, so an unexpected
+fault silently unwinds instead of crashing - designed to punish patching or single-stepping.</li>
+</ul>
+<h2 id="remaining-unknowns"><a class="wu-anchor" href="#remaining-unknowns" aria-hidden="true">#</a>Remaining unknowns</h2>
+<p>The original password is not recovered: <code>derive_decrypt_key</code> is a one-way SHA-256 fold, and the
+challenge only ever compares the folded output. Brute force was deliberately not attempted; it is
+unnecessary because the AES key itself is fully determined by <code>target_key XOR mask</code>.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-decompilation-ida-pro-91-headless">2. Decompilation (IDA Pro 9.1 headless)</a></li><li><a href="#3-program-logic">3. Program logic</a></li><li><a href="#4-the-quottpmquot-segsegv-handler-0x4ff0">4. The &amp;quot;TPM&amp;quot;: segsegv_handler @ 0x4FF0</a></li><li><a href="#5-static-emulation">5. Static emulation</a></li><li><a href="#6-flag">6. Flag</a></li><li><a href="#files-in-this-directory">Files in this directory</a></li><li><a href="#anti-analysis-features-noted-all-bypassed-by-pure-static-solving">Anti-analysis features noted (all bypassed by pure static solving)</a></li><li><a href="#remaining-unknowns">Remaining unknowns</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="shiny-sweetie-curve.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Shiny Sweetie Curve</span></a>
+    <a class="wu-pager-link wu-pager-next" href="censored.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Censored</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=16"></script>
+</body>
+</html>

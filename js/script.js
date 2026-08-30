@@ -2,23 +2,26 @@ const nav = document.getElementById('nav');
 const navToggle = document.getElementById('navToggle');
 const mobilePanel = document.getElementById('mobilePanel');
 
-navToggle.addEventListener('click', () => {
-  const isOpen = nav.classList.toggle('is-open');
-  navToggle.setAttribute('aria-expanded', String(isOpen));
-});
-
-mobilePanel.querySelectorAll('a').forEach((link) => {
-  link.addEventListener('click', () => {
-    nav.classList.remove('is-open');
-    navToggle.setAttribute('aria-expanded', 'false');
+if (navToggle && mobilePanel) {
+  navToggle.addEventListener('click', () => {
+    const isOpen = nav.classList.toggle('is-open');
+    navToggle.setAttribute('aria-expanded', String(isOpen));
   });
-});
+
+  mobilePanel.querySelectorAll('a').forEach((link) => {
+    link.addEventListener('click', () => {
+      nav.classList.remove('is-open');
+      navToggle.setAttribute('aria-expanded', 'false');
+    });
+  });
+}
 
 const onScroll = () => nav.classList.toggle('is-stuck', window.scrollY > 8);
 window.addEventListener('scroll', onScroll, { passive: true });
 onScroll();
 
-const navLinks = Array.from(document.querySelectorAll('.nav-links a'));
+const navLinks = Array.from(document.querySelectorAll('.nav-links a'))
+  .filter((link) => (link.getAttribute('href') || '').startsWith('#'));
 const sections = navLinks
   .map((link) => document.querySelector(link.getAttribute('href')))
   .filter(Boolean);
@@ -52,6 +55,8 @@ if (navClock) {
 
 const joinForm = document.getElementById('joinForm');
 const formStatus = document.getElementById('formStatus');
+
+if (joinForm) {
 const submitBtn = joinForm.querySelector('button[type="submit"]');
 
 joinForm.addEventListener('submit', async (e) => {
@@ -91,6 +96,7 @@ joinForm.addEventListener('submit', async (e) => {
     submitBtn.querySelector('.btn-label').textContent = 'Send application';
   }
 });
+}
 
 const gameOut = document.getElementById('gameOut');
 
@@ -111,7 +117,7 @@ if (gameOut) {
     home: dir({
       guest: dir({
         'readme.txt': file(
-          'sandbox box #4 — rebuilt from the 2019 image.\n' +
+          'sandbox box #4, rebuilt from the 2019 image.\n' +
           'nothing on this host is production. break it however you like.\n',
           { owner: 'guest' }
         ),
@@ -138,7 +144,7 @@ if (gameOut) {
         'deploy.log': file(
           'rotate ok  /var/backups/db-01.tar.gz\n' +
           'rotate ok  /var/backups/db-02.tar.gz\n' +
-          'rotate ERR /root/.ssh — refused, running unprivileged\n',
+          'rotate ERR /root/.ssh - refused, running unprivileged\n',
           { owner: 'svc' }
         ),
       }, { owner: 'svc', mode: 'drwx------', read: ['svc', 'root'] }),
@@ -576,7 +582,59 @@ if (gameOut) {
 }
 
 console.log(
-  '%cnxt_ctfs%c you found the console. the flag is one decode away — check data-x on #term.',
+  '%cnxt_ctfs%c you found the console. the flag is one decode away. check data-x on #term.',
   'background:#e6293f;color:#fff;font-weight:700;padding:2px 6px;border-radius:3px',
   'color:#9d98a6'
 );
+
+/* ---------- Writeup pages: copy-flag buttons ---------- */
+document.querySelectorAll('.wu-copy[data-copy]').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const target = document.querySelector(btn.getAttribute('data-copy'));
+    if (!target) return;
+    const text = target.textContent.trim();
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      const r = document.createRange();
+      r.selectNodeContents(target);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+      try { document.execCommand('copy'); } catch (e) {}
+      sel.removeAllRanges();
+    }
+    const original = btn.textContent;
+    btn.textContent = 'copied';
+    btn.classList.add('is-done');
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.classList.remove('is-done');
+    }, 1600);
+  });
+});
+
+/* ---------- Writeup pages: table-of-contents scroll-spy ---------- */
+const wuToc = document.querySelector('.wu-toc');
+if (wuToc && 'IntersectionObserver' in window) {
+  const items = new Map();
+  wuToc.querySelectorAll('a[href^="#"]').forEach((a) => {
+    const id = decodeURIComponent(a.getAttribute('href').slice(1));
+    const heading = document.getElementById(id);
+    if (heading) items.set(heading, a.parentElement);
+  });
+
+  let current = null;
+  const spy = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        if (current) current.classList.remove('is-active');
+        current = items.get(entry.target) || null;
+        if (current) current.classList.add('is-active');
+      });
+    },
+    { rootMargin: '-80px 0px -70% 0px' }
+  );
+  items.forEach((_li, heading) => spy.observe(heading));
+}
