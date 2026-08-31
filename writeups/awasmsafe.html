@@ -7,7 +7,7 @@
 <meta name="description" content="The password check is a WASM RC4 whose key is derived from the page's own source and CSP hash, gated behind ~56 anti-Node fingerprint checks. Run the real Electron renderer, then solve the RC4 algebraically." />
 <link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
 <link rel="stylesheet" href="../css/fonts.css?v=2" />
-<link rel="stylesheet" href="../css/styles.css?v=16" />
+<link rel="stylesheet" href="../css/styles.css?v=17" />
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -56,7 +56,8 @@
   </div>
 </nav>
 
-<main class="wu-main container" id="top">
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
   <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>awasmsafe</span></div>
 
   <header class="wu-head">
@@ -87,10 +88,16 @@ letting you <code>read</code>/<code>store</code> a secret.</p>
 <h2 id="1-getting-the-source-out"><a class="wu-anchor" href="#1-getting-the-source-out" aria-hidden="true">#</a>1. Getting the source out</h2>
 <p>Electron apps package their JS/HTML/assets into an <code>app.asar</code> archive next
 to the native binary. Extracting the Linux build:</p>
-<pre><code class="language-bash">./awasmsafe_*.AppImage --appimage-extract
-npx asar extract squashfs-root/resources/app.asar app_extracted
-</code></pre>
-<p>That yields three files: <code>package.json</code>, <code>index.js</code> (the Electron main
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">./awasmsafe_*.AppImage --appimage-extract</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">npx asar extract squashfs-root/resources/app.asar app_extracted</span></span></code></pre>
+      
+    </figure><p>That yields three files: <code>package.json</code>, <code>index.js</code> (the Electron main
 process - just boilerplate that creates a <code>BrowserWindow</code> with
 <code>nodeIntegration:false, contextIsolation:true, sandbox:true</code> and loads
 <code>safe.html</code>), and <code>safe.html</code>, the entire app.</p>
@@ -103,24 +110,42 @@ byte array.</li>
 <code>init()</code> that gzip-decompresses <code>codeBuffer</code>, <code>WebAssembly.instantiate</code>s
 it, and exposes the result as <code>window.checkFlag</code>:</li>
 </ul>
-<pre><code class="language-js">window.checkFlag = (flag) =&gt;
-  instance.exports.check_flag(window.return((new TextEncoder()).encode(flag)));
-</code></pre>
-<p>So the actual password check is not in JavaScript at all - it&#39;s compiled to
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">js</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-js"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-variable language_">window</span>.<span class="hljs-property">checkFlag</span> = <span class="hljs-function">(<span class="hljs-params">flag</span>) =&gt;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  instance.<span class="hljs-property">exports</span>.<span class="hljs-title function_">check_flag</span>(<span class="hljs-variable language_">window</span>.<span class="hljs-keyword">return</span>((<span class="hljs-keyword">new</span> <span class="hljs-title class_">TextEncoder</span>()).<span class="hljs-title function_">encode</span>(flag)));</span></span></code></pre>
+      
+    </figure><p>So the actual password check is not in JavaScript at all - it&#39;s compiled to
 WebAssembly. The only import the module needs is a single generic callback:</p>
-<pre><code class="language-js">const { instance } = await WebAssembly.instantiate(await decompress(codeBuffer), {
-  env: { e: (c =&gt; eval(wgs(c))), memory }
-});
-</code></pre>
-<p><code>env.e</code> reads a null-terminated string out of WASM linear memory and
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">js</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-js"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">const</span> { instance } = <span class="hljs-keyword">await</span> <span class="hljs-title class_">WebAssembly</span>.<span class="hljs-title function_">instantiate</span>(<span class="hljs-keyword">await</span> <span class="hljs-title function_">decompress</span>(codeBuffer), {</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-attr">env</span>: { <span class="hljs-attr">e</span>: (<span class="hljs-function"><span class="hljs-params">c</span> =&gt;</span> <span class="hljs-built_in">eval</span>(<span class="hljs-title function_">wgs</span>(c))), memory }</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">});</span></span></code></pre>
+      
+    </figure><p><code>env.e</code> reads a null-terminated string out of WASM linear memory and
 <code>eval()</code>s it in the page. That&#39;s the module&#39;s entire escape hatch back into
 JS - and it turns out to matter a lot.</p>
 <h2 id="2-pulling-the-wasm-apart"><a class="wu-anchor" href="#2-pulling-the-wasm-apart" aria-hidden="true">#</a>2. Pulling the WASM apart</h2>
-<pre><code class="language-python">import re, gzip
-m = re.search(r&#39;window\.codeBuffer = new Uint8Array\(\[([\d,]+)\]\)&#39;, html)
-wasm = gzip.decompress(bytes(int(x) for x in m.group(1).split(&#39;,&#39;)))
-</code></pre>
-<p>12,995 bytes, exporting only <code>check_flag</code>, <code>malloc</code>, <code>free</code>. Disassembling
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> re, gzip</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">m = re.search(<span class="hljs-string">r&#x27;window\.codeBuffer = new Uint8Array\(\[([\d,]+)\]\)&#x27;</span>, html)</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">wasm = gzip.decompress(<span class="hljs-built_in">bytes</span>(<span class="hljs-built_in">int</span>(x) <span class="hljs-keyword">for</span> x <span class="hljs-keyword">in</span> m.group(<span class="hljs-number">1</span>).split(<span class="hljs-string">&#x27;,&#x27;</span>)))</span></span></code></pre>
+      
+    </figure><p>12,995 bytes, exporting only <code>check_flag</code>, <code>malloc</code>, <code>free</code>. Disassembling
 with <code>wabt</code> (<code>wasm2wat</code>) gives ~5,200 lines of <code>.wat</code>, clearly compiled C,
 not hand-written, complete with an optimized SWAR <code>strlen</code>, a <code>memcmp</code>, and
 a from-scratch RC4 and a small LCG PRNG. <code>check_flag</code> itself is a thin
@@ -149,9 +174,15 @@ seed for step 2, and the string evaluated in step 4.</p>
 <h2 id="3-what-actually-gets-eval39d"><a class="wu-anchor" href="#3-what-actually-gets-eval39d" aria-hidden="true">#</a>3. What actually gets <code>eval</code>&#39;d</h2>
 <p>Dumping WASM linear memory at address <code>67504</code> after instantiation shows the
 plaintext string directly:</p>
-<pre><code>(typeof global).length
-</code></pre>
-<p>This is a deliberate anti-Node-analysis trick. In a real browser or
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">(typeof global).length</code></pre>
+      
+    </figure><p>This is a deliberate anti-Node-analysis trick. In a real browser or
 Electron <em>renderer</em> (which is what actually runs this page -
 <code>nodeIntegration:false</code> means there is no Node <code>global</code>), <code>typeof global</code>
 evaluates to <code>&quot;undefined&quot;</code> (<code>typeof</code> never throws on an unresolved
@@ -161,29 +192,47 @@ just runs it in <code>node</code> gets silently fed the wrong PRNG seed and will
 recover the right value, with no error to tip them off.</p>
 <p>There&#39;s a second, more direct anti-Node measure elsewhere in the module&#39;s
 startup code (traced separately): one of the <code>eval</code>&#39;d strings is literally</p>
-<pre><code class="language-js">try { process.exit(1) } catch (e) {  }
-</code></pre>
-<p>In Node, <code>process</code> exists, so this instantly kills the analysis process. In
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">js</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-js"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">try</span> { process.<span class="hljs-title function_">exit</span>(<span class="hljs-number">1</span>) } <span class="hljs-keyword">catch</span> (e) {  }</span></span></code></pre>
+      
+    </figure><p>In Node, <code>process</code> exists, so this instantly kills the analysis process. In
 a real browser, <code>process</code> doesn&#39;t exist, the <code>ReferenceError</code> is caught,
 and it&#39;s a no-op. (Direct <code>eval</code> inherits the caller&#39;s lexical scope, so
 this can be defeated by locally shadowing <code>process</code>, but it&#39;s a strong
 signal the challenge wants you in a real renderer, not Node.)</p>
 <p>The big 187-byte string (step 4 above), once decrypted by the WASM&#39;s own
 helper cipher, turns out to be:</p>
-<pre><code class="language-js">window.return(h(
-  document.querySelectorAll(&#39;script&#39;)[1].textContent,
-  document.querySelectorAll(&#39;*&#39;)[5].content?.split(&#39; &#39;)[1]?.slice(8,-1)
-  || &#39;Gn8FyC3e2b2zK/pAXa0HXHOZaEa7Z1h2DbAzZO25YXk=&#39;
-))
-</code></pre>
-<p>with <code>window.h</code> defined back in <code>safe.html</code> as:</p>
-<pre><code class="language-js">window.h = (d, s) =&gt; {
-  var r = Uint8Array.fromBase64(s);
-  for (var i = 0; i &lt; d.length; i++) r[i % r.length] += d.charCodeAt(i);
-  return r;
-};
-</code></pre>
-<p>This is a <strong>self-referential key</strong>: it&#39;s derived from the app&#39;s own shipped
+<figure class="wu-code" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">js</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-js"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-variable language_">window</span>.<span class="hljs-keyword">return</span>(<span class="hljs-title function_">h</span>(</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-variable language_">document</span>.<span class="hljs-title function_">querySelectorAll</span>(<span class="hljs-string">&#x27;script&#x27;</span>)[<span class="hljs-number">1</span>].<span class="hljs-property">textContent</span>,</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  <span class="hljs-variable language_">document</span>.<span class="hljs-title function_">querySelectorAll</span>(<span class="hljs-string">&#x27;*&#x27;</span>)[<span class="hljs-number">5</span>].<span class="hljs-property">content</span>?.<span class="hljs-title function_">split</span>(<span class="hljs-string">&#x27; &#x27;</span>)[<span class="hljs-number">1</span>]?.<span class="hljs-title function_">slice</span>(<span class="hljs-number">8</span>,-<span class="hljs-number">1</span>)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">  || <span class="hljs-string">&#x27;Gn8FyC3e2b2zK/pAXa0HXHOZaEa7Z1h2DbAzZO25YXk=&#x27;</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">))</span></span></code></pre>
+      
+    </figure><p>with <code>window.h</code> defined back in <code>safe.html</code> as:</p>
+<figure class="wu-code" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">js</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-js"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-variable language_">window</span>.<span class="hljs-property">h</span> = <span class="hljs-function">(<span class="hljs-params">d, s</span>) =&gt;</span> {</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-keyword">var</span> r = <span class="hljs-title class_">Uint8Array</span>.<span class="hljs-title function_">fromBase64</span>(s);</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>; i &lt; d.<span class="hljs-property">length</span>; i++) r[i % r.<span class="hljs-property">length</span>] += d.<span class="hljs-title function_">charCodeAt</span>(i);</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">  <span class="hljs-keyword">return</span> r;</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">};</span></span></code></pre>
+      
+    </figure><p>This is a <strong>self-referential key</strong>: it&#39;s derived from the app&#39;s own shipped
 source text, at runtime, from inside the running page.</p>
 <ul>
 <li><code>document.querySelectorAll(&#39;script&#39;)[1].textContent</code> is the literal
@@ -208,21 +257,30 @@ directly: earlier in the module&#39;s startup (<code>func 5</code>, run automati
 the WASM <code>start</code> function, before <code>check_flag</code> is ever called), there&#39;s a
 loop that evaluates <strong>~55 more strings</strong>, one per iteration, all of the
 form:</p>
-<pre><code>window.toString().replaceAll(/\n| /g,&#39;&#39;).length
-document.toString().replaceAll(/\n| /g,&#39;&#39;).length
-navigator.toString().replaceAll(/\n| /g,&#39;&#39;).length
-HTMLElement.toString().replaceAll(/\n| /g,&#39;&#39;).length
-WebGLRenderingContext.toString().replaceAll(/\n| /g,&#39;&#39;).length
-RTCPeerConnection.toString().replaceAll(/\n| /g,&#39;&#39;).length
-... (localStorage, MediaRecorder, ServiceWorker, Notification, Clipboard, ...)
-</code></pre>
-<p>This is a battery of &quot;does this look like a real Electron/Chromium
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">window.toString().replaceAll(/\n| /g,'').length
+document.toString().replaceAll(/\n| /g,'').length
+navigator.toString().replaceAll(/\n| /g,'').length
+HTMLElement.toString().replaceAll(/\n| /g,'').length
+WebGLRenderingContext.toString().replaceAll(/\n| /g,'').length
+RTCPeerConnection.toString().replaceAll(/\n| /g,'').length
+... (localStorage, MediaRecorder, ServiceWorker, Notification, Clipboard, ...)</code></pre>
+      
+    </figure><p>This is a battery of &quot;does this look like a real Electron/Chromium
 renderer&quot; checks, stripped of whitespace so exact formatting doesn&#39;t
 matter. Each numeric result gets folded, one at a time, into a small
 rolling 8-byte buffer via addition and XOR. That buffer is then XORed
 directly over the <strong>36-byte ciphertext</strong> the rest of <code>check_flag</code> reads
 from (address <code>67536</code>) - permanently, once, at startup.</p>
-<p>In other words: the ciphertext that <code>decrypted_target</code> is derived from is
+
+<div class="wu-admon wu-admon-insight">
+      <p class="wu-admon-h">Insight</p>
+      <p>In other words: the ciphertext that <code>decrypted_target</code> is derived from is
 <em>itself</em> scrambled by real-environment fingerprint data before <code>check_flag</code>
 ever runs. Running the WASM under Node with these globals simply undefined
 doesn&#39;t crash anything (the challenge doesn&#39;t want a crash - it wants a
@@ -230,6 +288,8 @@ silent wrong answer) - it just folds in the wrong numbers, and no password,
 however cleverly derived, will ever satisfy the final <code>memcmp</code>. Every path
 through this challenge that isn&#39;t &quot;be a real Chromium renderer&quot; produces
 plausible-looking garbage with no indication anything went wrong.</p>
+
+    </div>
 <h2 id="5-getting-a-real-renderer-to-answer-honestly"><a class="wu-anchor" href="#5-getting-a-real-renderer-to-answer-honestly" aria-hidden="true">#</a>5. Getting a real renderer to answer honestly</h2>
 <p>Given all that, the only reliable way to recover the true values is to let
 an actual Electron/Chromium instance run the actual page. The sandbox this
@@ -244,13 +304,19 @@ allowlist.</li>
 (<code>-o Dir::State::Lists=... -o Dir::Cache=...</code>), which lets it update package
 lists and <code>--download-only</code> fetch <code>.deb</code>s without root. <code>dpkg-deb -x</code> then
 extracts a <code>.deb</code>&#39;s contents anywhere, no privileges needed:</p>
-<pre><code class="language-bash">apt-get -o Dir::State::Lists=~/apt/lists -o Dir::Cache=~/apt/cache \
-  -o Dir::Etc::SourceList=/etc/apt/sources.list update
-apt-get -o ... install --download-only -y libgtk-3-0 libxdamage1
-for deb in ~/apt/cache/archives/*.deb; do dpkg-deb -x &quot;$deb&quot; ~/localroot; done
-LD_LIBRARY_PATH=~/localroot/usr/lib/x86_64-linux-gnu ./awasmsafe ...
-</code></pre>
-<p>That&#39;s enough to get the real, packaged app running headless under <code>Xvfb</code>.</p>
+<figure class="wu-code" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">apt-get -o Dir::State::Lists=~/apt/lists -o Dir::Cache=~/apt/cache \</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  -o Dir::Etc::SourceList=/etc/apt/sources.list update</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">apt-get -o ... install --download-only -y libgtk-3-0 libxdamage1</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-keyword">for</span> deb <span class="hljs-keyword">in</span> ~/apt/cache/archives/*.deb; <span class="hljs-keyword">do</span> dpkg-deb -x <span class="hljs-string">&quot;<span class="hljs-variable">$deb</span>&quot;</span> ~/localroot; <span class="hljs-keyword">done</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">LD_LIBRARY_PATH=~/localroot/usr/lib/x86_64-linux-gnu ./awasmsafe ...</span></span></code></pre>
+      
+    </figure><p>That&#39;s enough to get the real, packaged app running headless under <code>Xvfb</code>.</p>
 <p>Two more traps on the way to a clean answer:</p>
 <ul>
 <li><strong>Don&#39;t touch the DOM structure.</strong> An instrumented test page needs its
@@ -276,30 +342,54 @@ a <code>preload.js</code> + <code>contextBridge</code> + <code>ipcRenderer.send(
 Node main process (and hence to stdout) cleanly.</li>
 </ul>
 <p>With that in place, the real renderer reports, honestly:</p>
-<pre><code>seed  = 9                                    (typeof global).length, real renderer
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-text">seed  = 9                                    (typeof global).length, real renderer
 r     = d850442ebf57f96a47fe4cda47e4eb735ec96f3c2578d1736be77eb15247a1af
 cipher36 (post-fingerprint-XOR) = 089ffbf7c29848177a6b81747622bac0979404b534d9d38af396675fc1b30f80536dc1fb
 target = LCG-decrypt(seed, cipher36)
        = e91a30db53d5df5996dafceb8cfc3e35a4fc9f119122e7378c5c31c7e223f8de973802fb
 keystream = RC4-PRGA(r, 36 bytes)
-       = 827b43ab36a7ac32efa18bdfff916106c899fc65e34b8106e9386ef08612c1bff2093786
-</code></pre>
-<h2 id="6-solving-instead-of-guessing"><a class="wu-anchor" href="#6-solving-instead-of-guessing" aria-hidden="true">#</a>6. Solving instead of guessing</h2>
+       = 827b43ab36a7ac32efa18bdfff916106c899fc65e34b8106e9386ef08612c1bff2093786</code></pre>
+      
+    </figure><h2 id="6-solving-instead-of-guessing"><a class="wu-anchor" href="#6-solving-instead-of-guessing" aria-hidden="true">#</a>6. Solving instead of guessing</h2>
 <p>RC4 encryption is <code>out = data XOR keystream(key)</code>, and the keystream itself
 never depends on the data - only the key and requested length. So instead
 of brute-forcing a 36-byte password, just invert the XOR:</p>
-<pre><code>password = target XOR keystream(r)
-</code></pre>
-<pre><code class="language-python">password = bytes(a ^ b for a, b in zip(target, keystream))
-# b&#39;kaspersky{w4sm_3lectrif1ed_7d19ae15}&#39;
-</code></pre>
-<p>36 bytes, clean ASCII, right format for the CTF. Feeding it back into the
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-12" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-12"><code class="language-text">password = target XOR keystream(r)</code></pre>
+      
+    </figure><figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-13" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-13"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">password = <span class="hljs-built_in">bytes</span>(a ^ b <span class="hljs-keyword">for</span> a, b <span class="hljs-keyword">in</span> <span class="hljs-built_in">zip</span>(target, keystream))</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># b&#x27;kaspersky{w4sm_3lectrif1ed_7d19ae15}&#x27;</span></span></span></code></pre>
+      
+    </figure><p>36 bytes, clean ASCII, right format for the CTF. Feeding it back into the
 live <code>window.checkFlag()</code> in the same real-renderer run confirms it:
 <code>check_flag(password) == 1</code>.</p>
 <h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
-<pre><code>kaspersky{w4sm_3lectrif1ed_7d19ae15}
-</code></pre>
-<h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-14" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-14"><code class="language-text">kaspersky{w4sm_3lectrif1ed_7d19ae15}</code></pre>
+      
+    </figure><h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
 <ul>
 <li><code>SOLUTION.md</code>, condensed version of this writeup.</li>
 <li><code>solve_harness.html</code>, an earlier, Node.js-oriented exploration attempt,
@@ -309,8 +399,9 @@ Electron-based approach above.</li>
 
     </article>
     <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#1-getting-the-source-out">1. Getting the source out</a></li><li><a href="#2-pulling-the-wasm-apart">2. Pulling the WASM apart</a></li><li><a href="#3-what-actually-gets-eval39d">3. What actually gets eval&amp;#39;d</a></li><li><a href="#4-the-part-that-actually-breaks-naive-reversing">4. The part that actually breaks naive reversing</a></li><li><a href="#5-getting-a-real-renderer-to-answer-honestly">5. Getting a real renderer to answer honestly</a></li><li><a href="#6-solving-instead-of-guessing">6. Solving instead of guessing</a></li><li><a href="#flag">Flag</a></li><li><a href="#files">Files</a></li></ol>
+        <ol><li><a href="#1-getting-the-source-out">1. Getting the source out</a></li><li><a href="#2-pulling-the-wasm-apart">2. Pulling the WASM apart</a></li><li><a href="#3-what-actually-gets-eval39d">3. What actually gets eval&#39;d</a></li><li><a href="#4-the-part-that-actually-breaks-naive-reversing">4. The part that actually breaks naive reversing</a></li><li><a href="#5-getting-a-real-renderer-to-answer-honestly">5. Getting a real renderer to answer honestly</a></li><li><a href="#6-solving-instead-of-guessing">6. Solving instead of guessing</a></li><li><a href="#flag">Flag</a></li><li><a href="#files">Files</a></li></ol>
       </nav>
   </div>
 
@@ -350,6 +441,6 @@ Electron-based approach above.</li>
   </div>
 </footer>
 
-<script src="../js/script.js?v=16"></script>
+<script src="../js/script.js?v=17"></script>
 </body>
 </html>

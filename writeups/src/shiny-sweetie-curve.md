@@ -140,6 +140,7 @@ Result: `{"ok": true, "message": "kaspersky{g4mbl1ng_1s_b4d_t4k3_c4r3_0f_y0urs3l
 
 ## Dead ends worth noting
 
+::: pitfall
 - The obvious first guess - treat the 14 samples as `(x=1..14, y=sample)` and
   Lagrange-interpolate a degree-13 polynomial to evaluate at `target`, is a
   red herring. It *does* produce an exact integer (guaranteed by finite
@@ -152,6 +153,7 @@ Result: `{"ok": true, "message": "kaspersky{g4mbl1ng_1s_b4d_t4k3_c4r3_0f_y0urs3l
   `2^256-189`, ...) also fails - `p` is freshly random *per round*, not a
   fixed system constant, which the digit-length distribution of samples
   across many rounds confirms (no consistent ceiling near any famous prime).
+:::
 
 Only once the attached `server.py`/`app.py` source was available did the real
 shape of the problem - a fresh random elliptic curve per round, x-only leaked

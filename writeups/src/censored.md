@@ -81,9 +81,11 @@ profile_value = floor(sigma · 2^18)
 where `sigma ∈ [0, 1)` is the normalized arc-length along a calibration curve
 at the point corresponding to the nonce.
 
+::: insight
 The XOR masks depend on `SHA256("telemetry" || calibration_id || commitment || label)`,
 all values known to the attacker after receiving the PUB data and the signature.
 So we can fully unmask `profile_value`.
+:::
 
 ---
 

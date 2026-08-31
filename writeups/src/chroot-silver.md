@@ -148,9 +148,11 @@ kaspersky{a9f61e72-504f-4d36-8094-be8147e05f42}
 
 ## Takeaways
 
+::: pitfall
 - `SOCAT_PPID=1` (or any `*_PPID=1` env) → the jail's parent lives outside it.
 - musl jails: build PIE musl binaries, run via `/lib/ld-musl-x86_64.so.1`.
 - `printf %b` octal escapes are greedy in busybox - all-octal 3-digit encoding
   or you silently corrupt the upload.
 - The flag is per-instance; re-leak on every fresh spawn, and search by content
   instead of guessing paths.
+:::

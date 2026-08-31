@@ -183,8 +183,10 @@ kaspersky{D4mn_1m_s0_c00l!!_1_c4n_d0_sud0ku_n0w_st4cy_t0t4lly_g01ng_t0_pr0m_w1th
   `col_for_base`) is a red herring for the attacker - it's only used
   server-side as a self-consistency check during encryption and is never
   needed to decrypt.
-- The core design mistake is reusing one global block counter (and thus
-  one continuous keystream) across both the attacker-controlled oracle and
-  the flag encryption, combined with a rotation checksum that leaks
-  keystream information mod 16 for free. Either one alone would likely
-  have been fine; together they fully break the scheme.
+::: insight
+The core design mistake is reusing one global block counter (and thus
+one continuous keystream) across both the attacker-controlled oracle and
+the flag encryption, combined with a rotation checksum that leaks
+keystream information mod 16 for free. Either one alone would likely
+have been fine; together they fully break the scheme.
+:::

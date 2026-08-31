@@ -7,7 +7,7 @@
 <meta name="description" content="A fresh random curve every round, only x-coordinates leaked. X-only addition identities plus a resultant-and-GCD trick recover the secret prime, then `a`, `b`, and the step point." />
 <link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
 <link rel="stylesheet" href="../css/fonts.css?v=2" />
-<link rel="stylesheet" href="../css/styles.css?v=16" />
+<link rel="stylesheet" href="../css/styles.css?v=17" />
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -56,7 +56,8 @@
   </div>
 </nav>
 
-<main class="wu-main container" id="top">
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
   <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>shiny-sweetie-curve</span></div>
 
   <header class="wu-head">
@@ -77,40 +78,52 @@
     <article class="wu-article">
 <h2 id="the-service"><a class="wu-anchor" href="#the-service" aria-hidden="true">#</a>The service</h2>
 <p><code>GET /api/deal</code> returns:</p>
-<pre><code class="language-json">{
-  &quot;id&quot;: &quot;&lt;token&gt;&quot;,
-  &quot;samples&quot;: [&quot;&lt;77-digit int&gt;&quot;, ... x14],
-  &quot;target&quot;: 4294968905,
-  &quot;ttl&quot;: 300
-}
-</code></pre>
-<p><code>POST /api/submit</code> takes <code>{id, slot, value}</code> (<code>slot</code> is <code>0</code> for the LEFT card, <code>1</code>
+<figure class="wu-code" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;&lt;token&gt;&quot;</span><span class="hljs-punctuation">,</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  <span class="hljs-attr">&quot;samples&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;&lt;77-digit int&gt;&quot;</span><span class="hljs-punctuation">,</span> ... x14<span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">  <span class="hljs-attr">&quot;target&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">4294968905</span><span class="hljs-punctuation">,</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">  <span class="hljs-attr">&quot;ttl&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">300</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"><span class="hljs-punctuation">}</span></span></span></code></pre>
+      
+    </figure><p><code>POST /api/submit</code> takes <code>{id, slot, value}</code> (<code>slot</code> is <code>0</code> for the LEFT card, <code>1</code>
 for RIGHT) and checks <code>value</code> against a server-side secret with
 <code>hmac.compare_digest</code>. Getting it right returns the flag.</p>
 <p>The attached <code>server.py</code> shows what&#39;s actually happening:</p>
-<pre><code class="language-python">BITS = 255
-LANE_SAMPLES = 7
-TARGET_INDEX = (1 &lt;&lt; 32) + 1609
-
-def generate_instance():
-    p = random_prime(BITS)                 # fresh 255-bit prime every round
-    a, b = rnd.randrange(p), rnd.randrange(p)
-    curve = Curve(p, a, b)                  # y^2 = x^3 + a x + b  (mod p)
-    step = random_point(curve)
-    jump = curve.mul(TARGET_INDEX, step)    # TARGET_INDEX * step
-
-    u, v = random_point(curve), random_point(curve)
-    xs0, _ = orbit(curve, u, step, 7)       # u, u+step, ..., u+6*step
-    xs1, _ = orbit(curve, v, step, 7)       # v, v+step, ..., v+6*step
-
-    mask = shuffle([0]*7 + [1]*7)           # interleave the two lanes
-    samples = interleave(xs0, xs1, mask)    # only x-coordinates, shuffled order
-
-    target0 = curve.add(u, jump)
-    target1 = curve.add(v, jump)
-    hand_values = (targets[mask[0]], targets[1 - mask[0]])   # LEFT, RIGHT
-</code></pre>
-<p>So: every round is a <strong>brand-new random elliptic curve</strong> (<code>p, a, b</code> all secret,
+<figure class="wu-code" data-lines="21">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">BITS = <span class="hljs-number">255</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">LANE_SAMPLES = <span class="hljs-number">7</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">TARGET_INDEX = (<span class="hljs-number">1</span> &lt;&lt; <span class="hljs-number">32</span>) + <span class="hljs-number">1609</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">generate_instance</span>():</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">    p = random_prime(BITS)                 <span class="hljs-comment"># fresh 255-bit prime every round</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    a, b = rnd.randrange(p), rnd.randrange(p)</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    curve = Curve(p, a, b)                  <span class="hljs-comment"># y^2 = x^3 + a x + b  (mod p)</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    step = random_point(curve)</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">    jump = curve.mul(TARGET_INDEX, step)    <span class="hljs-comment"># TARGET_INDEX * step</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">    u, v = random_point(curve), random_point(curve)</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">    xs0, _ = orbit(curve, u, step, <span class="hljs-number">7</span>)       <span class="hljs-comment"># u, u+step, ..., u+6*step</span></span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">    xs1, _ = orbit(curve, v, step, <span class="hljs-number">7</span>)       <span class="hljs-comment"># v, v+step, ..., v+6*step</span></span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc">    mask = shuffle([<span class="hljs-number">0</span>]*<span class="hljs-number">7</span> + [<span class="hljs-number">1</span>]*<span class="hljs-number">7</span>)           <span class="hljs-comment"># interleave the two lanes</span></span></span>
+<span class="wu-line" data-line="17"><span class="wu-ln">17</span><span class="wu-lc">    samples = interleave(xs0, xs1, mask)    <span class="hljs-comment"># only x-coordinates, shuffled order</span></span></span>
+<span class="wu-line" data-line="18"><span class="wu-ln">18</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="19"><span class="wu-ln">19</span><span class="wu-lc">    target0 = curve.add(u, jump)</span></span>
+<span class="wu-line" data-line="20"><span class="wu-ln">20</span><span class="wu-lc">    target1 = curve.add(v, jump)</span></span>
+<span class="wu-line" data-line="21"><span class="wu-ln">21</span><span class="wu-lc">    hand_values = (targets[mask[<span class="hljs-number">0</span>]], targets[<span class="hljs-number">1</span> - mask[<span class="hljs-number">0</span>]])   <span class="hljs-comment"># LEFT, RIGHT</span></span></span></code></pre>
+      
+    </figure><p>So: every round is a <strong>brand-new random elliptic curve</strong> (<code>p, a, b</code> all secret,
 <code>p</code> is a fresh 255-bit prime). Two &quot;lanes&quot; walk the curve in fixed steps of a
 secret point <code>D</code> from two secret starting points <code>u</code> and <code>v</code>. The 14 visible
 numbers are just the x-coordinates of these 14 points, shuffled together but
@@ -126,10 +139,16 @@ standard chord/tangent addition law gives <code>x(A+B)</code> and <code>x(A−B)
 cross terms in <code>y_A y_B</code>, and <code>y_A², y_B²</code> get replaced with <code>x_A³+a x_A+b</code>
 and <code>x_B³+a x_B+b</code>. The result is two identities that use <strong>only
 x-coordinates and the curve constants</strong> - no <code>y</code> needed:</p>
-<pre><code>x(A+B) + x(A−B) = 2(x_A³+x_B³ + a(x_A+x_B) + 2b)/(x_A−x_B)² − 2(x_A+x_B)
-x(A+B) · x(A−B) = (x_A²+x_A x_B+x_B²+a)²/(x_A−x_B)² − (x_A+x_B)·[the sum term] + (x_A+x_B)²
-</code></pre>
-<p>Apply this with <code>A = P_i</code> (the i-th point in a lane, known x) and <code>B = step</code>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">x(A+B) + x(A−B) = 2(x_A³+x_B³ + a(x_A+x_B) + 2b)/(x_A−x_B)² − 2(x_A+x_B)
+x(A+B) · x(A−B) = (x_A²+x_A x_B+x_B²+a)²/(x_A−x_B)² − (x_A+x_B)·[the sum term] + (x_A+x_B)²</code></pre>
+      
+    </figure><p>Apply this with <code>A = P_i</code> (the i-th point in a lane, known x) and <code>B = step</code>
 (unknown x, call it <code>s</code>). Then <code>A+B = P_{i+1}</code> and <code>A−B = P_{i-1}</code>, both
 known. Clearing denominators gives, for every interior index <code>i</code> of a lane:</p>
 <ul>
@@ -147,9 +166,15 @@ x-coordinates - and it is <strong>guaranteed to be a multiple of <code>p</code><
 mod <code>p</code> the true <code>(a, b, s)</code> is an actual common root of <code>F1</code> and <code>F2</code>.</p>
 <p>Do this twice with two different windows of points (5-6 points total) to get
 two independent multiples of <code>p</code>, then:</p>
-<pre><code>p = gcd(R_A, R_B)
-</code></pre>
-<p>For a <em>wrong</em> grouping of points (not really from the same lane), <code>R_A</code> and
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">p = gcd(R_A, R_B)</code></pre>
+      
+    </figure><p>For a <em>wrong</em> grouping of points (not really from the same lane), <code>R_A</code> and
 <code>R_B</code> are just unrelated large integers with no reason to share a 255-bit
 factor - <code>gcd</code> is small. For the <em>correct</em> grouping, <code>gcd</code> lands exactly on
 the secret prime. This turns &quot;is this the right lane?&quot; into a cheap,
@@ -186,7 +211,10 @@ by construction (<code>hand_values[0] = targets[mask[0]]</code>).</p>
 </ol>
 <p>Result: <code>{&quot;ok&quot;: true, &quot;message&quot;: &quot;kaspersky{g4mbl1ng_1s_b4d_t4k3_c4r3_0f_y0urs3lf}&quot;}</code>.</p>
 <h2 id="dead-ends-worth-noting"><a class="wu-anchor" href="#dead-ends-worth-noting" aria-hidden="true">#</a>Dead ends worth noting</h2>
-<ul>
+
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <ul>
 <li>The obvious first guess - treat the 14 samples as <code>(x=1..14, y=sample)</code> and
 Lagrange-interpolate a degree-13 polynomial to evaluate at <code>target</code>, is a
 red herring. It <em>does</em> produce an exact integer (guaranteed by finite
@@ -200,6 +228,8 @@ rank, nothing to interpolate.</li>
 fixed system constant, which the digit-length distribution of samples
 across many rounds confirms (no consistent ceiling near any famous prime).</li>
 </ul>
+
+    </div>
 <p>Only once the attached <code>server.py</code>/<code>app.py</code> source was available did the real
 shape of the problem - a fresh random elliptic curve per round, x-only leaked
 points, <code>hand[slot]</code> semantics - become clear enough to solve properly rather
@@ -207,6 +237,7 @@ than guess.</p>
 
     </article>
     <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
         <ol><li><a href="#the-service">The service</a></li><li><a href="#the-math-recovering-the-curve-from-x-coordinates-only">The math: recovering the curve from x-coordinates only</a></li><li><a href="#putting-it-together">Putting it together</a></li><li><a href="#dead-ends-worth-noting">Dead ends worth noting</a></li></ol>
       </nav>
@@ -248,6 +279,6 @@ than guess.</p>
   </div>
 </footer>
 
-<script src="../js/script.js?v=16"></script>
+<script src="../js/script.js?v=17"></script>
 </body>
 </html>

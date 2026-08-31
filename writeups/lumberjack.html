@@ -7,7 +7,7 @@
 <meta name="description" content="An ONNX-to-native compiler never bounds-checks `feature_idx`. A negative index reads the `FLAG` env pointer off the stack, one float at a time, through a tree-classifier oracle." />
 <link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
 <link rel="stylesheet" href="../css/fonts.css?v=2" />
-<link rel="stylesheet" href="../css/styles.css?v=16" />
+<link rel="stylesheet" href="../css/styles.css?v=17" />
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -56,7 +56,8 @@
   </div>
 </nav>
 
-<main class="wu-main container" id="top">
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
   <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>lumberjack</span></div>
 
   <header class="wu-head">
@@ -77,66 +78,116 @@
     <article class="wu-article">
 <h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
 <p>A web service (<code>https://&lt;instance-id&gt;.kit.sasc.tf</code>) lets you <code>POST /upload</code> an
-ONNX model containing a <code>TreeEnsembleClassifier</code>. The service compiles the
+<button type="button" class="wu-gloss" data-def="Open Neural Network Exchange - a portable file format for trained ML models.">ONNX</button> model containing a <code>TreeEnsembleClassifier</code>. The service compiles the
 model to a native x86-64 binary and runs it. Visiting the returned URL executes
 the binary and returns its stdout:</p>
-<pre><code>Predicted Class: X (probability: Y.YY)
-</code></pre>
-<p>The flag lives in the <code>FLAG</code> environment variable inside the sandbox that
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">Predicted Class: X (probability: Y.YY)</code></pre>
+      
+    </figure><p>The flag lives in the <code>FLAG</code> environment variable inside the sandbox that
 runs the compiled binary.</p>
 <h2 id="root-cause"><a class="wu-anchor" href="#root-cause" aria-hidden="true">#</a>Root cause</h2>
 <p>The ONNX-to-C compiler backend translates each tree node&#39;s feature lookup
 directly into a pointer-offset read:</p>
-<pre><code class="language-c">float val = features[node-&gt;feature_idx];
-</code></pre>
-<p><code>feature_idx</code> comes straight from the untrusted <code>nodes_featureids</code> attribute
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">c</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-c"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-type">float</span> val = features[node-&gt;feature_idx];</span></span></code></pre>
+      
+    </figure><p><code>feature_idx</code> comes straight from the untrusted <code>nodes_featureids</code> attribute
 in the uploaded ONNX model and is never bounds-checked. Compiled, the access
 becomes:</p>
-<pre><code class="language-asm">mov    -0x8(%rbp), %rax      ; rax = features pointer
-sub    $0x40, %rax           ; features - 64 bytes  (feature_idx = -16)
-movss  (%rax), %xmm1
-</code></pre>
+
+<div class="wu-annotate">
+      <figure class="wu-code" data-lines="3">
+      <figcaption>
+        <span class="wu-code-title">tree_eval (compiled)</span>
+        <span class="wu-code-lang">asm</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-asm"><span class="wu-line wu-line-marked" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">mov</span>    -<span class="hljs-number">0x8</span>(%rbp), %rax</span></span>
+<span class="wu-line wu-line-marked" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">sub</span>    <span class="hljs-number">$0</span>x40, %rax</span></span>
+<span class="wu-line wu-line-marked" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">movss</span>  (%rax), %xmm1</span></span></code></pre>
+      
+    </figure>
+      <ol class="wu-annotate-notes"><li class="wu-annotate-note" data-line="1"><span class="wu-annotate-ln">1</span><span class="wu-annotate-text">Load the <code>features</code> pointer from the stack frame.</span></li><li class="wu-annotate-note" data-line="2"><span class="wu-annotate-ln">2</span><span class="wu-annotate-text">Subtract 64 bytes: with <code>feature_idx = -16</code> this is <code>features + feature_idx * 4</code>, and nothing here checks the result stays in bounds.</span></li><li class="wu-annotate-note" data-line="3"><span class="wu-annotate-ln">3</span><span class="wu-annotate-text">Dereference straight off the end of the array.</span></li></ol>
+    </div>
 <p>i.e. the effective address is <code>features + feature_idx * sizeof(float)</code>.
 Supplying a <strong>negative</strong> <code>feature_idx</code> walks the read backwards off the start
 of the <code>features</code> array and directly into other stack contents of <code>main()</code>.
 Empirically, <code>feature_idx = -16</code> through <code>-5</code> (offsets <code>-64</code> to <code>-20</code> bytes
 relative to <code>features</code>) land exactly on the bytes of the <code>FLAG</code> string that
 <code>getenv(&quot;FLAG&quot;)</code> returns, four bytes (one <code>float</code>) at a time.</p>
-<p>This is a classic <strong>out-of-bounds array read via attacker-controlled index</strong>,
-made into a clean oracle because the ONNX <code>TreeEnsembleClassifier</code> lets you
+
+<div class="wu-admon wu-admon-insight">
+      <p class="wu-admon-h">Insight</p>
+      <p>This is a classic <strong>out-of-bounds array read via attacker-controlled index</strong>,
+made into a clean <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> because the ONNX <code>TreeEnsembleClassifier</code> lets you
 turn &quot;is <code>features[idx] &gt; threshold</code>?&quot; into an observable output
 (<code>probability &gt; 0</code> vs <code>probability == 0</code>).</p>
+
+    </div>
 <h2 id="building-the-oracle"><a class="wu-anchor" href="#building-the-oracle" aria-hidden="true">#</a>Building the oracle</h2>
-<ol>
-<li>Train a trivial <code>sklearn.ensemble.RandomForestClassifier</code> with
+
+<div class="wu-steps">
+      
+      <div class="wu-steps-nav" role="tablist" aria-label="Steps"><button type="button" class="wu-step-dot" role="tab" aria-selected="true" data-step="0">1</button><button type="button" class="wu-step-dot" role="tab" aria-selected="false" data-step="1">2</button><button type="button" class="wu-step-dot" role="tab" aria-selected="false" data-step="2">3</button></div>
+      <div class="wu-steps-body"><section class="wu-step is-current" data-step="0">
+          <h4 class="wu-step-title"><span class="wu-step-num">1/3</span>Train a probe model</h4>
+          <p>Train a trivial <code>sklearn.ensemble.RandomForestClassifier</code> with
 <code>n_estimators=2, max_depth=1</code> (fixed <code>random_state=99</code> for reproducibility)
-and export it with <code>skl2onnx</code>, this gives a minimal, valid
-<code>TreeEnsembleClassifier</code> graph to mutate.</li>
-<li>For every internal (non-leaf) node, patch the ONNX attributes directly on
-the loaded protobuf:<ul>
+and export it with <code>skl2onnx</code> - this gives a minimal, valid
+<code>TreeEnsembleClassifier</code> graph to mutate.</p>
+
+        </section><section class="wu-step" data-step="1">
+          <h4 class="wu-step-title"><span class="wu-step-num">2/3</span>Patch the ONNX attributes</h4>
+          <p>For every internal (non-leaf) node, patch the ONNX attributes directly on
+the loaded protobuf:</p>
+<ul>
 <li><code>nodes_featureids</code> → the target OOB index (e.g. <code>-16</code>)</li>
 <li><code>nodes_values</code> → the probe threshold</li>
 <li><code>class_ids</code> → <code>[0, 1, 0, 1]</code></li>
-<li><code>class_weights</code> → <code>[0.0, 1.0, 0.0, 1.0]</code>
-so that the reported <code>probability</code> is the fraction of the two trees whose
-split evaluated <code>feature[idx] &gt; threshold</code>.</li>
+<li><code>class_weights</code> → <code>[0.0, 1.0, 0.0, 1.0]</code></li>
 </ul>
-</li>
-<li>Upload the patched model, fetch the result page, and parse
-<code>probability: ([\d.]+)</code>. <code>probability &gt; 0</code> ⇔ <code>feature[idx] &gt; threshold</code>.</li>
-</ol>
+<p>so that the reported <code>probability</code> is the fraction of the two trees whose
+split evaluated <code>feature[idx] &gt; threshold</code>.</p>
+
+        </section><section class="wu-step" data-step="2">
+          <h4 class="wu-step-title"><span class="wu-step-num">3/3</span>Query and parse</h4>
+          <p>Upload the patched model, fetch the result page, and parse
+<code>probability: ([\d.]+)</code>. <code>probability &gt; 0</code> means <code>feature[idx] &gt; threshold</code>.</p>
+
+        </section></div>
+      <div class="wu-steps-controls">
+        <button type="button" class="wu-step-prev">&larr; prev</button>
+        <button type="button" class="wu-step-showall">show all</button>
+        <button type="button" class="wu-step-next">next &rarr;</button>
+      </div>
+    </div>
 <p>This gives a single boolean oracle per HTTP round trip: <em>is the leaked
 float greater than a threshold I choose?</em></p>
 <h2 id="recovering-each-4-byte-word"><a class="wu-anchor" href="#recovering-each-4-byte-word" aria-hidden="true">#</a>Recovering each 4-byte word</h2>
-<p>With a <code>&gt;</code> oracle over IEEE-754 floats, binary search recovers the exact bit
+<p>With a <code>&gt;</code> oracle over <button type="button" class="wu-gloss" data-def="The standard binary format for floating-point numbers, used by almost every language's float/double type.">IEEE-754</button> floats, <button type="button" class="wu-gloss" data-def="A search that halves the remaining range each step, needing only log2(N) probes to pin down a value.">binary search</button> recovers the exact bit
 pattern of <code>feature[idx]</code>, which - for the flag bytes - is just
 <code>struct.unpack(&#39;&lt;f&#39;, flag[i:i+4])</code>.</p>
-<p><strong>First attempt (buggy):</strong> search only positive magnitudes using a two-phase
+
+<div class="wu-tabs" id="wu-tabs-1">
+      
+      <div class="wu-tabs-nav" role="tablist"><button type="button" class="wu-tab is-current" role="tab" aria-selected="true" id="wu-tabs-1-tab-0" aria-controls="wu-tabs-1-panel-0" data-tab="0">Buggy: positive-only two-phase search</button><button type="button" class="wu-tab" role="tab" aria-selected="false" id="wu-tabs-1-tab-1" aria-controls="wu-tabs-1-panel-1" data-tab="1">Fixed: full-range signed search</button></div>
+      <div class="wu-tabs-body"><div class="wu-tabpanel is-current" role="tabpanel" id="wu-tabs-1-panel-0" aria-labelledby="wu-tabs-1-tab-0" data-tab="0"><p>Search only positive magnitudes using a two-phase
 scheme - binary search the exponent over powers of two (<code>2^-150 .. 2^130</code>),
 then binary search the mantissa within the located exponent band. This works
 perfectly as long as the target float is positive, which every in-bounds
 flag-character word is (ASCII bytes have their sign bit clear when read as
-the MSB of a little-endian float). It silently produces <strong>garbage</strong> the
+the MSB of a <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> float). It silently produces <strong>garbage</strong> the
 moment the 4-byte window straddles the end of the flag string: the byte right
 after the <code>NUL</code> terminator is uncontrolled adjacent stack/env data, and if its
 high bit happens to be set, the reinterpreted float is <em>negative</em> - a value
@@ -147,23 +198,33 @@ boundary - plausible-looking but wrong bytes, no visible error.</p>
 non-ASCII noise, and guessing &quot;the flag must end in <code>}</code> right after this&quot;
 was <strong>wrong</strong> - the real bytes still had two more <code>};</code>-relevant characters
 sitting right at that boundary.</p>
-<p><strong>Fix - full-range signed search:</strong> binary search directly over the 32-bit
+</div><div class="wu-tabpanel" role="tabpanel" id="wu-tabs-1-panel-1" aria-labelledby="wu-tabs-1-tab-1" data-tab="1"><p>Binary search directly over the 32-bit
 pattern using an order-preserving transform of IEEE-754 bits instead of
 treating exponent/mantissa separately:</p>
-<pre><code class="language-python">def key_to_bits(key):
-    # maps a uint32 &quot;key&quot; back to a float32 bit pattern such that
-    # key is monotonic in the float&#39;s numeric value (handles sign correctly)
-    if key &amp; 0x80000000:
-        return key - 0x80000000        # positive half: keys &gt;= 0x80000000
-    else:
-        return (~key) &amp; 0xFFFFFFFF     # negative half: keys &lt;  0x80000000
-</code></pre>
-<p>Binary-searching <code>key</code> over the full <code>[0, 0xFFFFFFFF]</code> range and mapping each
+<figure class="wu-code" data-lines="7">
+      <figcaption>
+        <span class="wu-code-title">leak_robust.py</span>
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">key_to_bits</span>(<span class="hljs-params">key</span>):</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">    <span class="hljs-comment"># maps a uint32 &quot;key&quot; back to a float32 bit pattern such that</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">    <span class="hljs-comment"># key is monotonic in the float&#x27;s numeric value (handles sign correctly)</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">    <span class="hljs-keyword">if</span> key &amp; <span class="hljs-number">0x80000000</span>:</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">        <span class="hljs-keyword">return</span> key - <span class="hljs-number">0x80000000</span>        <span class="hljs-comment"># positive half: keys &gt;= 0x80000000</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">    <span class="hljs-keyword">else</span>:</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">        <span class="hljs-keyword">return</span> (~key) &amp; <span class="hljs-number">0xFFFFFFFF</span>     <span class="hljs-comment"># negative half: keys &lt;  0x80000000</span></span></span></code></pre>
+      
+    </figure><p>Binary-searching <code>key</code> over the full <code>[0, 0xFFFFFFFF]</code> range and mapping each
 midpoint back to a float threshold via <code>key_to_bits</code> handles positive <em>and</em>
 negative floats uniformly (NaN thresholds are skipped/nudged since NaN
 comparisons are never true). 32 iterations fully determine the bit pattern.</p>
-<h2 id="full-exploit-flow"><a class="wu-anchor" href="#full-exploit-flow" aria-hidden="true">#</a>Full exploit flow</h2>
-<ol>
+</div></div>
+    </div>
+
+<details class="wu-spoiler">
+      <summary>Show the full exploit flow</summary>
+      <div class="wu-spoiler-body"><ol>
 <li>Leak <code>feature_idx = -16 .. -6</code> (11 words = 44 bytes) with the simple
 positive-only searcher - safe, since all of these land squarely inside the
 flag string (<code>kaspersky{...}</code>, all printable ASCII, sign bit always 0).</li>
@@ -175,12 +236,23 @@ silently corrupting the last recovered characters.</li>
 of the flag remains.</li>
 <li>Concatenate all recovered bytes in order and decode as ASCII.</li>
 </ol>
+</div>
+    </details>
 <h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
-<pre><code>kaspersky{3d87a80c-9ab7-4c35-aeb4-f64bbae9bb44}
-</code></pre>
-<p>(Standard 36-character UUID inside <code>kaspersky{}</code>, 8-4-4-4-12 hex groups.)</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">kaspersky{3d87a80c-9ab7-4c35-aeb4-f64bbae9bb44}</code></pre>
+      
+    </figure><p>(Standard 36-character UUID inside <code>kaspersky{}</code>, 8-4-4-4-12 hex groups.)</p>
 <h2 id="lesson-learned-pitfall-to-flag-for-next-time"><a class="wu-anchor" href="#lesson-learned-pitfall-to-flag-for-next-time" aria-hidden="true">#</a>Lesson learned / pitfall to flag for next time</h2>
-<p>Never assume a leak oracle only needs to cover the sign you&#39;ve seen so far.
+
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <p>Never assume a leak oracle only needs to cover the sign you&#39;ve seen so far.
 The first 44 bytes all being positive floats (printable ASCII) provided no
 evidence the <em>next</em> word would be too - the moment the read window crosses a
 string terminator, the trailing bytes are attacker-uncontrolled memory and
@@ -188,6 +260,8 @@ can carry a set sign bit. A byte-leak binary search over raw memory should
 <strong>always</strong> cover the full signed range (or explicitly detect and fall back)
 rather than assume a value domain based on what earlier reads happened to
 return.</p>
+
+    </div>
 <h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
 <ul>
 <li><code>simple.py</code>, original solver (positive-only two-phase search); good for
@@ -202,8 +276,9 @@ above - treat its exact flag value as unverified).</li>
 
     </article>
     <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#root-cause">Root cause</a></li><li><a href="#building-the-oracle">Building the oracle</a></li><li><a href="#recovering-each-4-byte-word">Recovering each 4-byte word</a></li><li><a href="#full-exploit-flow">Full exploit flow</a></li><li><a href="#flag">Flag</a></li><li><a href="#lesson-learned-pitfall-to-flag-for-next-time">Lesson learned / pitfall to flag for next time</a></li><li><a href="#files">Files</a></li></ol>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#root-cause">Root cause</a></li><li><a href="#building-the-oracle">Building the oracle</a></li><li><a href="#recovering-each-4-byte-word">Recovering each 4-byte word</a></li><li><a href="#flag">Flag</a></li><li><a href="#lesson-learned-pitfall-to-flag-for-next-time">Lesson learned / pitfall to flag for next time</a></li><li><a href="#files">Files</a></li></ol>
       </nav>
   </div>
 
@@ -243,6 +318,6 @@ above - treat its exact flag value as unverified).</li>
   </div>
 </footer>
 
-<script src="../js/script.js?v=16"></script>
+<script src="../js/script.js?v=17"></script>
 </body>
 </html>

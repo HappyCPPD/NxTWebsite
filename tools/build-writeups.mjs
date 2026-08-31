@@ -10,50 +10,42 @@
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { marked } from './vendor/marked.esm.js';
+import { renderBody, esc } from './lib/renderer.mjs';
+import { applyGlossary } from './lib/glossary.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const cfg = JSON.parse(readFileSync(join(root, 'tools/writeups.config.json'), 'utf8'));
+const glossary = JSON.parse(readFileSync(join(root, 'tools/glossary.json'), 'utf8'));
 
-const CSS_V = 16;
-const JS_V = 16;
+const CSS_V = 17;
+const JS_V = 17;
 
-marked.setOptions({ gfm: true, breaks: false });
-
-const esc = (s) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-const slugify = (s) =>
-  s.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_]+/g, '-').replace(/-+/g, '-');
-
-/* Split the meta block (everything before the first horizontal rule) from the body. */
-function splitFrontMatter(md) {
-  const lines = md.split(/\r?\n/);
-  const idx = lines.findIndex((l, i) => i > 0 && l.trim() === '---');
-  if (idx === -1) return md;
-  return lines.slice(idx + 1).join('\n').trim();
-}
-
-/* Angle-bracket placeholders like <hex>, <R>, <instance-id> are common in these
- * writeups' prose. Outside code they'd be dropped as unknown HTML tags, so shield
- * them, but only alnum-led tokens, to leave blockquote markers and `a < b` alone. */
-function shieldPlaceholders(md) {
-  return md
-    .split(/(```[\s\S]*?```|`[^`]*`)/)
-    .map((part, i) => (i % 2 ? part : part.replace(/<([A-Za-z0-9_][^<>\n]*?)>/g, '&lt;$1&gt;')))
-    .join('');
-}
-
-function renderBody(md) {
-  let html = marked.parse(shieldPlaceholders(splitFrontMatter(md)));
-  const toc = [];
-  html = html.replace(/<(h[23])>([\s\S]*?)<\/\1>/g, (_m, tag, inner) => {
-    const text = inner.replace(/<[^>]+>/g, '');
-    const id = slugify(text);
-    if (tag === 'h2') toc.push({ id, text });
-    return `<${tag} id="${id}"><a class="wu-anchor" href="#${id}" aria-hidden="true">#</a>${inner}</${tag}>`;
-  });
-  return { html, toc };
+/* Nest h3 entries under their preceding h2 in the sidebar TOC. `toc` text is
+ * already HTML-entity-escaped once by the heading renderer - do not esc() it
+ * again here, or quotes in headings double-escape to `&amp;quot;`. */
+function renderToc(toc) {
+  if (!toc.length) return '';
+  let html = '';
+  let open2 = false;
+  let open3 = false;
+  for (const t of toc) {
+    if (t.level === 2) {
+      if (open3) { html += '</ol>'; open3 = false; }
+      if (open2) html += '</li>';
+      html += `<li><a href="#${t.id}">${t.text}</a>`;
+      open2 = true;
+    } else {
+      if (!open3) { html += '<ol class="wu-toc-sub">'; open3 = true; }
+      html += `<li><a href="#${t.id}">${t.text}</a></li>`;
+    }
+  }
+  if (open3) html += '</ol>';
+  if (open2) html += '</li>';
+  return `<nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol>${html}</ol>
+      </nav>`;
 }
 
 function navHtml(prefix) {
@@ -221,16 +213,12 @@ ${cards}
 /* ---------- detail pages ---------- */
 function buildDetail(c, i) {
   const md = readFileSync(join(root, 'writeups/src', `${c.slug}.md`), 'utf8');
-  const { html, toc } = renderBody(md);
+  const { html: rendered, toc } = renderBody(md);
+  const html = applyGlossary(rendered, glossary);
   const prev = cfg.challenges[i - 1];
   const next = cfg.challenges[i + 1];
 
-  const tocHtml = toc.length
-    ? `<nav class="wu-toc" aria-label="On this page">
-        <p class="wu-toc-h">On this page</p>
-        <ol>${toc.map((t) => `<li><a href="#${t.id}">${esc(t.text)}</a></li>`).join('')}</ol>
-      </nav>`
-    : '';
+  const tocHtml = renderToc(toc);
 
   const prevCard = prev
     ? `<a class="wu-pager-link wu-pager-prev" href="${prev.slug}.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">${esc(prev.name)}</span></a>`
@@ -243,7 +231,8 @@ function buildDetail(c, i) {
     ${nextCard}
   </nav>`;
 
-  const body = `<main class="wu-main container" id="top">
+  const body = `<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
   <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>${esc(c.slug)}</span></div>
 
   <header class="wu-head">

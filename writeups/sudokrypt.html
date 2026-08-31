@@ -7,7 +7,7 @@
 <meta name="description" content="The Feistel and sudoku layers are keyless and publicly invertible. Two design leaks recover both secret permutations, and a shared block counter exposes the spectral keystream as a degree-56 linear recurrence." />
 <link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
 <link rel="stylesheet" href="../css/fonts.css?v=2" />
-<link rel="stylesheet" href="../css/styles.css?v=16" />
+<link rel="stylesheet" href="../css/styles.css?v=17" />
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -56,7 +56,8 @@
   </div>
 </nav>
 
-<main class="wu-main container" id="top">
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
   <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>sudokrypt</span></div>
 
   <header class="wu-head">
@@ -79,12 +80,18 @@
 <p>The challenge is a custom 128-bit block cipher (&quot;SudoKrypt&quot;) built on top of a
 16×16 Hexadoku (sudoku) grid, plus a homebrew &quot;spectral&quot; keystream generator.
 The server exposes a menu:</p>
-<pre><code>1) encrypt one block
-2) peek at Stacy&#39;s homework (once)
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">1) encrypt one block
+2) peek at Stacy's homework (once)
 3) how many queries are left
-4) get me out
-</code></pre>
-<p>Option 1 is a chosen-plaintext encryption oracle (default 96 queries per
+4) get me out</code></pre>
+      
+    </figure><p>Option 1 is a chosen-plaintext encryption <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> (default 96 queries per
 connection). Option 2 encrypts the flag exactly once and immediately closes
 the oracle. The cipher looks intimidating - Feistel wrapping, bit diffusion,
 a sudoku board, a 56-term modular exponential keystream - but almost none of
@@ -137,9 +144,15 @@ candidate value of <code>symbol_inv[k]</code>, the two observable fields
 (<code>row_field</code>, <code>col_field</code>) always have a unique, self-consistent solution
 for <code>row_code</code>/<code>mask</code>, a single query leaks nothing.</p>
 <p>The escape hatch is <code>block_rotation</code>:</p>
-<pre><code>rotation = (sum(values) + 3*values[0] + block_number) &amp; 15
-</code></pre>
-<p>Since <code>256 mod 16 == 0</code>, this checksum only depends on the <strong>low byte</strong> of
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">rotation = (sum(values) + 3*values[0] + block_number) &amp; 15</code></pre>
+      
+    </figure><p>Since <code>256 mod 16 == 0</code>, this checksum only depends on the <strong>low byte</strong> of
 each lane&#39;s keystream value - exactly the byte that falls out of the
 <code>row_code</code>/<code>mask</code> formula once you guess <code>symbol_inv[k]</code>. So: fix a
 candidate symbol at all 16 byte lanes in one query (rotation already known
@@ -209,24 +222,35 @@ keystream samples for the linear-algebra step).</p>
 <code>server.py</code> before running against the real server (5/5 successful runs).</p>
 <hr>
 <h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
-<pre><code>kaspersky{D4mn_1m_s0_c00l!!_1_c4n_d0_sud0ku_n0w_st4cy_t0t4lly_g01ng_t0_pr0m_w1th_m3}
-</code></pre>
-<hr>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">kaspersky{D4mn_1m_s0_c00l!!_1_c4n_d0_sud0ku_n0w_st4cy_t0t4lly_g01ng_t0_pr0m_w1th_m3}</code></pre>
+      
+    </figure><hr>
 <h2 id="notes"><a class="wu-anchor" href="#notes" aria-hidden="true">#</a>Notes</h2>
 <ul>
 <li>The &quot;Hexadoku&quot; board itself (the actual sudoku grid, <code>row_for_shift</code>,
 <code>col_for_base</code>) is a red herring for the attacker - it&#39;s only used
 server-side as a self-consistency check during encryption and is never
 needed to decrypt.</li>
-<li>The core design mistake is reusing one global block counter (and thus
+</ul>
+
+<div class="wu-admon wu-admon-insight">
+      <p class="wu-admon-h">Insight</p>
+      <p>The core design mistake is reusing one global block counter (and thus
 one continuous keystream) across both the attacker-controlled oracle and
 the flag encryption, combined with a rotation checksum that leaks
 keystream information mod 16 for free. Either one alone would likely
-have been fine; together they fully break the scheme.</li>
-</ul>
+have been fine; together they fully break the scheme.</p>
 
+    </div>
     </article>
     <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
         <ol><li><a href="#overview">Overview</a></li><li><a href="#cipher-structure-sudokrypt-corepy">Cipher structure (sudokrypt_core.py)</a></li><li><a href="#leak-1-q-perm-in-a-single-query">Leak #1 - q_perm in a single query</a></li><li><a href="#leak-2-symbol-perm-via-a-free-checksum">Leak #2 - symbol_perm via a free checksum</a></li><li><a href="#leak-3-the-spectral-keystream-generator">Leak #3 - the spectral keystream generator</a></li><li><a href="#putting-it-together">Putting it together</a></li><li><a href="#implementation">Implementation</a></li><li><a href="#flag">Flag</a></li><li><a href="#notes">Notes</a></li></ol>
       </nav>
@@ -268,6 +292,6 @@ have been fine; together they fully break the scheme.</li>
   </div>
 </footer>
 
-<script src="../js/script.js?v=16"></script>
+<script src="../js/script.js?v=17"></script>
 </body>
 </html>

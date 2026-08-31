@@ -160,8 +160,10 @@ Submitted with:
 
 ## Takeaways
 
+::: pitfall
 - `chroot` only changes the process root; it does **not** revoke `CAP_SYS_CHROOT` or
   reset the cwd, so a root process trivially escapes. It is an isolation convenience,
   not a security sandbox - hence *"Why do you need Docker when you have chroot?"*.
 - Missing binaries in a jail are not a barrier: `printf` octal writes arbitrary bytes and
   `ld-linux.so <file>` executes non-`+x` ELFs.
+:::

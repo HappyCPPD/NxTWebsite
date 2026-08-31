@@ -7,7 +7,7 @@
 <meta name="description" content="Each Schnorr signature ships a &quot;diagnostic&quot; blob whose XOR masks are computable from public data. Unmask it for ~16 bits of nonce per signature, then solve the Hidden Number Problem by lattice reduction." />
 <link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
 <link rel="stylesheet" href="../css/fonts.css?v=2" />
-<link rel="stylesheet" href="../css/styles.css?v=16" />
+<link rel="stylesheet" href="../css/styles.css?v=17" />
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -56,7 +56,8 @@
   </div>
 </nav>
 
-<main class="wu-main container" id="top">
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
   <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>censored</span></div>
 
   <header class="wu-head">
@@ -87,10 +88,16 @@ recover the long-term secret key.</p>
 <code>give_me_gift</code> and submitting it yields the flag.</p>
 <hr>
 <h2 id="protocol"><a class="wu-anchor" href="#protocol" aria-hidden="true">#</a>Protocol</h2>
-<pre><code>Censored diagnostics, probably fine
-Try: PUB | SIGN &lt;hex&gt; | SUBMIT &lt;hex&gt; &lt;R&gt; &lt;s&gt;
-</code></pre>
-<ul>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">Censored diagnostics, probably fine
+Try: PUB | SIGN &lt;hex&gt; | SUBMIT &lt;hex&gt; &lt;R&gt; &lt;s&gt;</code></pre>
+      
+    </figure><ul>
 <li><strong>PUB</strong> - returns the DSA group parameters <code>(p, q, g, y)</code>, the remaining
 signature quota (36 total), and a randomly generated <code>calibration</code> object.</li>
 <li><strong>SIGN</strong> <code>&lt;hex&gt;</code> - signs an arbitrary message (except <code>give_me_gift</code>) using a
@@ -123,29 +130,52 @@ fresh random nonce. Returns <code>(R, s)</code> plus a diagnostic blob.</li>
 <hr>
 <h2 id="the-diagnostic-leak"><a class="wu-anchor" href="#the-diagnostic-leak" aria-hidden="true">#</a>The Diagnostic Leak</h2>
 <p>Each SIGN response includes a <code>diag</code> field:</p>
-<pre><code class="language-json">{
-  &quot;patch&quot;:   &lt;12-bit integer&gt;,   // XOR-masked with telemetry_mask
-  &quot;resid&quot;:   &lt;6-bit integer&gt;,    // XOR-masked with telemetry_mask
-  &quot;curv&quot;:    &lt;8-bit integer&gt;,
-  &quot;basin&quot;:   &lt;3-bit integer&gt;,
-  &quot;iters&quot;:   &lt;integer&gt;,
-  &quot;health&quot;:  &quot;&lt;hex string&gt;&quot;
-}
-</code></pre>
-<p>The <code>patch</code> + <code>resid</code> fields combine to form an 18-bit <code>profile_value</code>:</p>
-<pre><code>profile_value = floor(sigma · 2^18)
-</code></pre>
-<p>where <code>sigma ∈ [0, 1)</code> is the normalized arc-length along a calibration curve
+<figure class="wu-code" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-attr">&quot;patch&quot;</span><span class="hljs-punctuation">:</span>   &lt;<span class="hljs-number">12</span>-bit integer&gt;<span class="hljs-punctuation">,</span>   <span class="hljs-comment">// XOR-masked with telemetry_mask</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  <span class="hljs-attr">&quot;resid&quot;</span><span class="hljs-punctuation">:</span>   &lt;<span class="hljs-number">6</span>-bit integer&gt;<span class="hljs-punctuation">,</span>    <span class="hljs-comment">// XOR-masked with telemetry_mask</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">  <span class="hljs-attr">&quot;curv&quot;</span><span class="hljs-punctuation">:</span>    &lt;<span class="hljs-number">8</span>-bit integer&gt;<span class="hljs-punctuation">,</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">  <span class="hljs-attr">&quot;basin&quot;</span><span class="hljs-punctuation">:</span>   &lt;<span class="hljs-number">3</span>-bit integer&gt;<span class="hljs-punctuation">,</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">  <span class="hljs-attr">&quot;iters&quot;</span><span class="hljs-punctuation">:</span>   &lt;integer&gt;<span class="hljs-punctuation">,</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">  <span class="hljs-attr">&quot;health&quot;</span><span class="hljs-punctuation">:</span>  <span class="hljs-string">&quot;&lt;hex string&gt;&quot;</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"><span class="hljs-punctuation">}</span></span></span></code></pre>
+      
+    </figure><p>The <code>patch</code> + <code>resid</code> fields combine to form an 18-bit <code>profile_value</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">profile_value = floor(sigma · 2^18)</code></pre>
+      
+    </figure><p>where <code>sigma ∈ [0, 1)</code> is the normalized arc-length along a calibration curve
 at the point corresponding to the nonce.</p>
-<p>The XOR masks depend on <code>SHA256(&quot;telemetry&quot; || calibration_id || commitment || label)</code>,
+
+<div class="wu-admon wu-admon-insight">
+      <p class="wu-admon-h">Insight</p>
+      <p>The XOR masks depend on <code>SHA256(&quot;telemetry&quot; || calibration_id || commitment || label)</code>,
 all values known to the attacker after receiving the PUB data and the signature.
 So we can fully unmask <code>profile_value</code>.</p>
+
+    </div>
 <hr>
 <h2 id="calibration-curve-geometry"><a class="wu-anchor" href="#calibration-curve-geometry" aria-hidden="true">#</a>Calibration Curve Geometry</h2>
 <p>The calibration defines a parametric curve derived from a polar radius function:</p>
-<pre><code>r(θ) = (1 + 0.25·sin(3θ + π))^1.4 + 2·exp(-((θ - π/2)/0.3)^2)
-</code></pre>
-<p>Points on the curve: <code>(x, y) = (r(θ)·cos(θ), r(θ)·sin(θ))</code></p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">r(θ) = (1 + 0.25·sin(3θ + π))^1.4 + 2·exp(-((θ - π/2)/0.3)^2)</code></pre>
+      
+    </figure><p>Points on the curve: <code>(x, y) = (r(θ)·cos(θ), r(θ)·sin(θ))</code></p>
 <p>An affine transformation (random 2×2 matrix + translation) maps these to
 <code>(u, v)</code> coordinates. The nonce maps to an angle <code>θ = 2π · nonce / Q</code>, and
 then:</p>
@@ -160,10 +190,16 @@ nonce via piecewise linear interpolation of the inverse function.</p>
 <hr>
 <h2 id="from-profile-value-to-nonce-range"><a class="wu-anchor" href="#from-profile-value-to-nonce-range" aria-hidden="true">#</a>From profile_value to Nonce Range</h2>
 <p>Given <code>profile_value = pv</code>:</p>
-<pre><code>sigma_low  = pv / 2^18
-sigma_high = (pv + 1) / 2^18
-</code></pre>
-<p>We find all LUT segments whose sigma range overlaps <code>[sigma_low, sigma_high)</code>.
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">sigma_low  = pv / 2^18
+sigma_high = (pv + 1) / 2^18</code></pre>
+      
+    </figure><p>We find all LUT segments whose sigma range overlaps <code>[sigma_low, sigma_high)</code>.
 For each matching segment, the fractional overlap gives corresponding nonce
 sub-intervals. Merging adjacent intervals yields the nonce range.</p>
 <p>On average, each <code>profile_value</code> maps to a nonce range of width ~2^240
@@ -172,32 +208,62 @@ signatures, this provides ~480 bits of constraint - more than enough for HNP.</p
 <hr>
 <h2 id="hidden-number-problem-hnp-attack"><a class="wu-anchor" href="#hidden-number-problem-hnp-attack" aria-hidden="true">#</a>Hidden Number Problem (HNP) Attack</h2>
 <p>For each signature <code>i</code> with known nonce range <code>[lo_i, hi_i)</code>:</p>
-<pre><code>s_i = nonce_i + c_i · sk  (mod Q)
-nonce_i ∈ [lo_i, hi_i)
-</code></pre>
-<p>Let <code>mid_i = (lo_i + hi_i) / 2</code> and <code>X = max(hi_i - lo_i) / 2</code>. Then:</p>
-<pre><code>s_i - mid_i = x_i + c_i · sk  (mod Q)   where |x_i| ≤ X
-</code></pre>
-<p>Define <code>a_i = (s_i - mid_i) mod Q</code>. We have:</p>
-<pre><code>a_i ≡ x_i + c_i · sk  (mod Q)    with |x_i| ≤ X
-</code></pre>
-<p>This is the Hidden Number Problem: given many pairs <code>(c_i, a_i)</code>, find <code>sk</code>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">s_i = nonce_i + c_i · sk  (mod Q)
+nonce_i ∈ [lo_i, hi_i)</code></pre>
+      
+    </figure><p>Let <code>mid_i = (lo_i + hi_i) / 2</code> and <code>X = max(hi_i - lo_i) / 2</code>. Then:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">s_i - mid_i = x_i + c_i · sk  (mod Q)   where |x_i| ≤ X</code></pre>
+      
+    </figure><p>Define <code>a_i = (s_i - mid_i) mod Q</code>. We have:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">a_i ≡ x_i + c_i · sk  (mod Q)    with |x_i| ≤ X</code></pre>
+      
+    </figure><p>This is the Hidden Number Problem: given many pairs <code>(c_i, a_i)</code>, find <code>sk</code>
 such that each <code>a_i - c_i · sk ≡ x_i (mod Q)</code> with small <code>|x_i|</code>.</p>
 <h3 id="lattice-construction"><a class="wu-anchor" href="#lattice-construction" aria-hidden="true">#</a>Lattice Construction</h3>
 <p>We build a Q-scaled centered HNP lattice of dimension <code>(n+2) × (n+2)</code>:</p>
-<pre><code>     |  Q^2       0      ...      0      |   0     0  |
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">     |  Q^2       0      ...      0      |   0     0  |
      |   0       Q^2     ...      0      |   0     0  |
      |  ...                             |          |
 B =  |   0        0      ...    Q^2     |   0     0  |
      | c_0·Q   c_1·Q    ...  c_{n-1}·Q |   X     0  |
-     | a&#39;_0·Q  a&#39;_1·Q   ... a&#39;_{n-1}·Q |   0    X·Q |
-</code></pre>
-<p>where <code>a&#39;_i = (a_i - X) mod Q</code> (centering the observation around 0 so the
+     | a'_0·Q  a'_1·Q   ... a'_{n-1}·Q |   0    X·Q |</code></pre>
+      
+    </figure><p>where <code>a&#39;_i = (a_i - X) mod Q</code> (centering the observation around 0 so the
 error is bounded by ±X rather than [0, 2X]).</p>
 <p>The target short vector is:</p>
-<pre><code>v = (x_0·Q, x_1·Q, ..., x_{n-1}·Q, -sk·X, X·Q)
-</code></pre>
-<p>Of length: <code>sqrt(n · (X·Q)² + (sk·X)² + (X·Q)²) ≈ sqrt(n+2) · X · Q</code>.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-text">v = (x_0·Q, x_1·Q, ..., x_{n-1}·Q, -sk·X, X·Q)</code></pre>
+      
+    </figure><p>Of length: <code>sqrt(n · (X·Q)² + (sk·X)² + (X·Q)²) ≈ sqrt(n+2) · X · Q</code>.</p>
 <p>LLL finds a short vector in the lattice. Scanning rows where the last column
 equals <code>X·Q</code> yields the secret key at column <code>n</code> (divided by <code>X</code>).</p>
 <hr>
@@ -221,9 +287,15 @@ the secret key, forges a signature, and submits it</li>
 <p>Key dependencies: <code>fpylll</code> for LLL lattice reduction.</p>
 <hr>
 <h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
-<pre><code>kaspersky{N0w_4ll_tH3_4nsW3rs_4r3_1n_y0ur_h4nds!!!!}
-</code></pre>
-<hr>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-text">kaspersky{N0w_4ll_tH3_4nsW3rs_4r3_1n_y0ur_h4nds!!!!}</code></pre>
+      
+    </figure><hr>
 <h2 id="notes"><a class="wu-anchor" href="#notes" aria-hidden="true">#</a>Notes</h2>
 <ul>
 <li>The challenge name &quot;Censored&quot; refers to the diagnostic blob - the &quot;censored&quot;
@@ -238,8 +310,9 @@ centering observation rows around 0 so entries are bounded by X rather than Q.</
 
     </article>
     <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#overview">Overview</a></li><li><a href="#protocol">Protocol</a></li><li><a href="#signature-scheme">Signature Scheme</a></li><li><a href="#the-diagnostic-leak">The Diagnostic Leak</a></li><li><a href="#calibration-curve-geometry">Calibration Curve Geometry</a></li><li><a href="#from-profile-value-to-nonce-range">From profile_value to Nonce Range</a></li><li><a href="#hidden-number-problem-hnp-attack">Hidden Number Problem (HNP) Attack</a></li><li><a href="#forging-the-signature">Forging the Signature</a></li><li><a href="#implementation">Implementation</a></li><li><a href="#flag">Flag</a></li><li><a href="#notes">Notes</a></li></ol>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#protocol">Protocol</a></li><li><a href="#signature-scheme">Signature Scheme</a></li><li><a href="#the-diagnostic-leak">The Diagnostic Leak</a></li><li><a href="#calibration-curve-geometry">Calibration Curve Geometry</a></li><li><a href="#from-profile-value-to-nonce-range">From profile_value to Nonce Range</a></li><li><a href="#hidden-number-problem-hnp-attack">Hidden Number Problem (HNP) Attack</a><ol class="wu-toc-sub"><li><a href="#lattice-construction">Lattice Construction</a></li></ol></li><li><a href="#forging-the-signature">Forging the Signature</a></li><li><a href="#implementation">Implementation</a></li><li><a href="#flag">Flag</a></li><li><a href="#notes">Notes</a></li></ol>
       </nav>
   </div>
 
@@ -279,6 +352,6 @@ centering observation rows around 0 so entries are bounded by X rather than Q.</
   </div>
 </footer>
 
-<script src="../js/script.js?v=16"></script>
+<script src="../js/script.js?v=17"></script>
 </body>
 </html>

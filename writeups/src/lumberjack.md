@@ -35,11 +35,16 @@ float val = features[node->feature_idx];
 in the uploaded ONNX model and is never bounds-checked. Compiled, the access
 becomes:
 
-```asm
-mov    -0x8(%rbp), %rax      ; rax = features pointer
-sub    $0x40, %rax           ; features - 64 bytes  (feature_idx = -16)
+::: annotate
+```asm title="tree_eval (compiled)"
+mov    -0x8(%rbp), %rax
+sub    $0x40, %rax
 movss  (%rax), %xmm1
 ```
+1. Load the `features` pointer from the stack frame.
+2. Subtract 64 bytes: with `feature_idx = -16` this is `features + feature_idx * 4`, and nothing here checks the result stays in bounds.
+3. Dereference straight off the end of the array.
+:::
 
 i.e. the effective address is `features + feature_idx * sizeof(float)`.
 Supplying a **negative** `feature_idx` walks the read backwards off the start
@@ -48,27 +53,37 @@ Empirically, `feature_idx = -16` through `-5` (offsets `-64` to `-20` bytes
 relative to `features`) land exactly on the bytes of the `FLAG` string that
 `getenv("FLAG")` returns, four bytes (one `float`) at a time.
 
+::: insight
 This is a classic **out-of-bounds array read via attacker-controlled index**,
 made into a clean oracle because the ONNX `TreeEnsembleClassifier` lets you
 turn "is `features[idx] > threshold`?" into an observable output
 (`probability > 0` vs `probability == 0`).
+:::
 
 ## Building the oracle
 
-1. Train a trivial `sklearn.ensemble.RandomForestClassifier` with
-   `n_estimators=2, max_depth=1` (fixed `random_state=99` for reproducibility)
-   and export it with `skl2onnx`, this gives a minimal, valid
-   `TreeEnsembleClassifier` graph to mutate.
-2. For every internal (non-leaf) node, patch the ONNX attributes directly on
-   the loaded protobuf:
-   - `nodes_featureids` → the target OOB index (e.g. `-16`)
-   - `nodes_values` → the probe threshold
-   - `class_ids` → `[0, 1, 0, 1]`
-   - `class_weights` → `[0.0, 1.0, 0.0, 1.0]`
-   so that the reported `probability` is the fraction of the two trees whose
-   split evaluated `feature[idx] > threshold`.
-3. Upload the patched model, fetch the result page, and parse
-   `probability: ([\d.]+)`. `probability > 0` ⇔ `feature[idx] > threshold`.
+::: steps
+### Train a probe model
+Train a trivial `sklearn.ensemble.RandomForestClassifier` with
+`n_estimators=2, max_depth=1` (fixed `random_state=99` for reproducibility)
+and export it with `skl2onnx` - this gives a minimal, valid
+`TreeEnsembleClassifier` graph to mutate.
+
+### Patch the ONNX attributes
+For every internal (non-leaf) node, patch the ONNX attributes directly on
+the loaded protobuf:
+- `nodes_featureids` → the target OOB index (e.g. `-16`)
+- `nodes_values` → the probe threshold
+- `class_ids` → `[0, 1, 0, 1]`
+- `class_weights` → `[0.0, 1.0, 0.0, 1.0]`
+
+so that the reported `probability` is the fraction of the two trees whose
+split evaluated `feature[idx] > threshold`.
+
+### Query and parse
+Upload the patched model, fetch the result page, and parse
+`probability: ([\d.]+)`. `probability > 0` means `feature[idx] > threshold`.
+:::
 
 This gives a single boolean oracle per HTTP round trip: *is the leaked
 float greater than a threshold I choose?*
@@ -79,7 +94,9 @@ With a `>` oracle over IEEE-754 floats, binary search recovers the exact bit
 pattern of `feature[idx]`, which - for the flag bytes - is just
 `struct.unpack('<f', flag[i:i+4])`.
 
-**First attempt (buggy):** search only positive magnitudes using a two-phase
+::: tabs
+### Buggy: positive-only two-phase search
+Search only positive magnitudes using a two-phase
 scheme - binary search the exponent over powers of two (`2^-150 .. 2^130`),
 then binary search the mantissa within the located exponent band. This works
 perfectly as long as the target float is positive, which every in-bounds
@@ -97,11 +114,12 @@ non-ASCII noise, and guessing "the flag must end in `}` right after this"
 was **wrong** - the real bytes still had two more `};`-relevant characters
 sitting right at that boundary.
 
-**Fix - full-range signed search:** binary search directly over the 32-bit
+### Fixed: full-range signed search
+Binary search directly over the 32-bit
 pattern using an order-preserving transform of IEEE-754 bits instead of
 treating exponent/mantissa separately:
 
-```python
+```python title="leak_robust.py"
 def key_to_bits(key):
     # maps a uint32 "key" back to a float32 bit pattern such that
     # key is monotonic in the float's numeric value (handles sign correctly)
@@ -115,9 +133,9 @@ Binary-searching `key` over the full `[0, 0xFFFFFFFF]` range and mapping each
 midpoint back to a float threshold via `key_to_bits` handles positive *and*
 negative floats uniformly (NaN thresholds are skipped/nudged since NaN
 comparisons are never true). 32 iterations fully determine the bit pattern.
+:::
 
-## Full exploit flow
-
+::: spoiler Show the full exploit flow
 1. Leak `feature_idx = -16 .. -6` (11 words = 44 bytes) with the simple
    positive-only searcher - safe, since all of these land squarely inside the
    flag string (`kaspersky{...}`, all printable ASCII, sign bit always 0).
@@ -128,6 +146,7 @@ comparisons are never true). 32 iterations fully determine the bit pattern.
    (`feature_idx = -4`) and observing non-ASCII/garbage - proof nothing more
    of the flag remains.
 4. Concatenate all recovered bytes in order and decode as ASCII.
+:::
 
 ## Flag
 
@@ -139,6 +158,7 @@ kaspersky{3d87a80c-9ab7-4c35-aeb4-f64bbae9bb44}
 
 ## Lesson learned / pitfall to flag for next time
 
+::: pitfall
 Never assume a leak oracle only needs to cover the sign you've seen so far.
 The first 44 bytes all being positive floats (printable ASCII) provided no
 evidence the *next* word would be too - the moment the read window crosses a
@@ -147,6 +167,7 @@ can carry a set sign bit. A byte-leak binary search over raw memory should
 **always** cover the full signed range (or explicitly detect and fall back)
 rather than assume a value domain based on what earlier reads happened to
 return.
+:::
 
 ## Files
 

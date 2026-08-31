@@ -1,0 +1,16 @@
+[
+  { "term": "TreeEnsembleClassifier", "def": "An ONNX operator that packs a random-forest / gradient-boosted-tree model into a single portable node." },
+  { "term": "ONNX", "def": "Open Neural Network Exchange - a portable file format for trained ML models." },
+  { "term": "OOB read", "def": "Out-of-bounds read: accessing memory outside an array's allocated range, usually via an unchecked index." },
+  { "term": "IEEE-754", "def": "The standard binary format for floating-point numbers, used by almost every language's float/double type." },
+  { "term": "SUID", "def": "Set-user-ID: a file permission bit that runs a program as its owner (often root) instead of the invoking user." },
+  { "term": "chroot", "def": "A syscall that changes a process's apparent root directory, used to sandbox or jail it." },
+  { "term": "segfault", "def": "Segmentation fault: a crash caused by accessing memory the process isn't allowed to touch." },
+  { "term": "binary search", "def": "A search that halves the remaining range each step, needing only log2(N) probes to pin down a value." },
+  { "term": "oracle", "def": "In an exploit, anything that answers a single yes/no question about hidden state, one query at a time." },
+  { "term": "little-endian", "def": "A byte order where the least-significant byte is stored first." },
+  { "term": "stack canary", "def": "A random value placed before a return address; if overwritten by a buffer overflow, the program detects it and aborts." },
+  { "term": "TPM", "def": "Trusted Platform Module: a chip (or emulated component) that stores keys and attests to system state." },
+  { "term": "ROP", "def": "Return-oriented programming: chaining existing code fragments (gadgets) via the stack to execute arbitrary logic without injecting new code." },
+  { "term": "ASLR", "def": "Address Space Layout Randomization: randomizes memory addresses each run to make exploits harder to write reliably." }
+]

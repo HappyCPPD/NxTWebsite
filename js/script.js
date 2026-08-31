@@ -638,3 +638,235 @@ if (wuToc && 'IntersectionObserver' in window) {
   );
   items.forEach((_li, heading) => spy.observe(heading));
 }
+
+/* ---------- Writeup pages: reading progress bar ---------- */
+(() => {
+  const bar = document.getElementById('wuProgress');
+  const article = document.querySelector('.wu-article');
+  if (!bar || !article) return;
+
+  let start = 0;
+  let end = 0;
+  const measure = () => {
+    start = article.offsetTop;
+    end = start + article.offsetHeight - window.innerHeight;
+  };
+  measure();
+  window.addEventListener('resize', measure, { passive: true });
+
+  let queued = false;
+  const paint = () => {
+    queued = false;
+    const pct = end > start ? Math.min(1, Math.max(0, (window.scrollY - start) / (end - start))) : 0;
+    bar.style.width = `${pct * 100}%`;
+  };
+  window.addEventListener(
+    'scroll',
+    () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(paint);
+    },
+    { passive: true }
+  );
+  paint();
+})();
+
+/* ---------- Writeup pages: mobile TOC drawer ---------- */
+(() => {
+  const toc = document.querySelector('.wu-toc');
+  const toggle = document.querySelector('.wu-toc-toggle');
+  if (!toc || !toggle) return;
+  toggle.addEventListener('click', () => {
+    const isOpen = toc.classList.toggle('is-open');
+    toggle.setAttribute('aria-expanded', String(isOpen));
+  });
+})();
+
+/* ---------- Writeup pages: collapsible long code blocks ---------- */
+document.querySelectorAll('.wu-code.is-collapsible').forEach((figure) => {
+  const btn = figure.querySelector('.wu-code-more');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const expanded = figure.classList.toggle('is-expanded');
+    btn.setAttribute('aria-expanded', String(expanded));
+    btn.textContent = expanded ? btn.dataset.less : btn.dataset.more;
+  });
+});
+
+/* ---------- Writeup pages: ::: annotate line <-> note sync ---------- */
+document.querySelectorAll('.wu-annotate').forEach((block) => {
+  const notes = Array.from(block.querySelectorAll('.wu-annotate-note'));
+  const lines = new Map();
+  block.querySelectorAll('.wu-line[data-line]').forEach((el) => lines.set(el.getAttribute('data-line'), el));
+
+  const focusLine = (n, scrollLine) => {
+    block.querySelectorAll('.is-focused').forEach((el) => el.classList.remove('is-focused'));
+    const note = notes.find((el) => el.getAttribute('data-line') === n);
+    const line = lines.get(n);
+    if (note) note.classList.add('is-focused');
+    if (line) {
+      line.classList.add('is-focused');
+      if (scrollLine) line.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  };
+
+  notes.forEach((note) => {
+    note.addEventListener('click', () => focusLine(note.getAttribute('data-line'), true));
+  });
+  lines.forEach((line, n) => {
+    line.addEventListener('click', () => focusLine(n, false));
+  });
+});
+
+/* ---------- Writeup pages: ::: steps stepper ---------- */
+document.querySelectorAll('.wu-steps').forEach((steps) => {
+  const panels = Array.from(steps.querySelectorAll(':scope > .wu-steps-body > .wu-step'));
+  const dots = Array.from(steps.querySelectorAll(':scope > .wu-steps-nav > .wu-step-dot'));
+  const prevBtn = steps.querySelector('.wu-step-prev');
+  const nextBtn = steps.querySelector('.wu-step-next');
+  const allBtn = steps.querySelector('.wu-step-showall');
+  if (!panels.length) return;
+  steps.classList.add('is-enhanced');
+
+  let current = 0;
+  const render = () => {
+    panels.forEach((p, i) => p.classList.toggle('is-current', i === current));
+    dots.forEach((d, i) => d.setAttribute('aria-selected', String(i === current)));
+    if (prevBtn) prevBtn.disabled = current === 0;
+    if (nextBtn) nextBtn.disabled = current === panels.length - 1;
+  };
+  const goTo = (i) => {
+    current = Math.min(panels.length - 1, Math.max(0, i));
+    steps.classList.remove('is-all');
+    render();
+  };
+
+  dots.forEach((dot, i) => dot.addEventListener('click', () => goTo(i)));
+  if (prevBtn) prevBtn.addEventListener('click', () => goTo(current - 1));
+  if (nextBtn) nextBtn.addEventListener('click', () => goTo(current + 1));
+  if (allBtn) {
+    allBtn.addEventListener('click', () => {
+      const showingAll = steps.classList.toggle('is-all');
+      allBtn.textContent = showingAll ? 'step through' : 'show all';
+    });
+  }
+  steps.addEventListener('keydown', (e) => {
+    if (steps.classList.contains('is-all')) return;
+    if (e.key === 'ArrowRight') goTo(current + 1);
+    else if (e.key === 'ArrowLeft') goTo(current - 1);
+    else return;
+    e.preventDefault();
+  });
+
+  render();
+});
+
+/* ---------- Writeup pages: ::: tabs ---------- */
+document.querySelectorAll('.wu-tabs').forEach((tabs) => {
+  const buttons = Array.from(tabs.querySelectorAll(':scope > .wu-tabs-nav > .wu-tab'));
+  const panels = Array.from(tabs.querySelectorAll(':scope > .wu-tabs-body > .wu-tabpanel'));
+  if (!buttons.length) return;
+  tabs.classList.add('is-enhanced');
+
+  const select = (i) => {
+    buttons.forEach((b, idx) => {
+      b.classList.toggle('is-current', idx === i);
+      b.setAttribute('aria-selected', String(idx === i));
+      b.tabIndex = idx === i ? 0 : -1;
+    });
+    panels.forEach((p, idx) => p.classList.toggle('is-current', idx === i));
+  };
+
+  buttons.forEach((btn, i) => {
+    btn.addEventListener('click', () => select(i));
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') { select((i + 1) % buttons.length); buttons[(i + 1) % buttons.length].focus(); }
+      else if (e.key === 'ArrowLeft') { select((i - 1 + buttons.length) % buttons.length); buttons[(i - 1 + buttons.length) % buttons.length].focus(); }
+      else return;
+      e.preventDefault();
+    });
+  });
+
+  select(0);
+});
+
+/* ---------- Writeup pages: ```session replayable terminal ---------- */
+document.querySelectorAll('.wu-session').forEach((session) => {
+  const btn = session.querySelector('.wu-session-replay');
+  const body = session.querySelector('.wu-session-body');
+  if (!btn || !body) return;
+  const original = Array.from(body.querySelectorAll('.wu-term-line')).map((el) => ({
+    kind: el.getAttribute('data-kind'),
+    html: el.innerHTML,
+  }));
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let playing = false;
+  btn.addEventListener('click', async () => {
+    if (playing) return;
+    playing = true;
+    session.classList.add('is-replaying');
+    btn.disabled = true;
+    body.textContent = '';
+
+    if (reduceMotion) {
+      original.forEach((row) => {
+        const line = document.createElement('span');
+        line.className = 'wu-term-line';
+        line.setAttribute('data-kind', row.kind);
+        line.innerHTML = row.html;
+        body.appendChild(line);
+      });
+    } else {
+      for (const row of original) {
+        const line = document.createElement('span');
+        line.className = 'wu-term-line';
+        line.setAttribute('data-kind', row.kind);
+        body.appendChild(line);
+        if (row.kind === 'cmd') {
+          const tmp = document.createElement('div');
+          tmp.innerHTML = row.html;
+          const prompt = tmp.querySelector('.wu-term-prompt');
+          const cmdText = tmp.querySelector('.wu-term-cmd') ? tmp.querySelector('.wu-term-cmd').textContent : '';
+          if (prompt) line.appendChild(prompt);
+          const cmdEl = document.createElement('span');
+          cmdEl.className = 'wu-term-cmd';
+          line.appendChild(cmdEl);
+          for (let i = 0; i < cmdText.length; i++) {
+            cmdEl.textContent += cmdText[i];
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((r) => setTimeout(r, 14));
+          }
+        } else {
+          line.innerHTML = row.html;
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 40));
+        }
+      }
+    }
+
+    session.classList.remove('is-replaying');
+    btn.disabled = false;
+    playing = false;
+  });
+});
+
+/* ---------- Writeup pages: glossary tooltips (tap-to-open on touch) ---------- */
+document.querySelectorAll('.wu-gloss').forEach((term) => {
+  const pop = document.createElement('span');
+  pop.className = 'wu-gloss-pop';
+  pop.setAttribute('role', 'tooltip');
+  pop.textContent = term.getAttribute('data-def') || '';
+  term.appendChild(pop);
+
+  term.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = term.getAttribute('data-open') === 'true';
+    document.querySelectorAll('.wu-gloss[data-open="true"]').forEach((el) => el.removeAttribute('data-open'));
+    if (!isOpen) term.setAttribute('data-open', 'true');
+  });
+});
+document.addEventListener('click', () => {
+  document.querySelectorAll('.wu-gloss[data-open="true"]').forEach((el) => el.removeAttribute('data-open'));
+});

