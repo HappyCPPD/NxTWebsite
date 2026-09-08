@@ -7,3 +7,7 @@
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Raw CTF challenge archives / source drops (not published to the site)
+challenges/
+*.zip

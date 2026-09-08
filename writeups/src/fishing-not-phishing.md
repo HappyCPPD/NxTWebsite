@@ -13,7 +13,7 @@ and UTC time it started fishing, and the port-to-fishing-ground distance. The
 challenge ran in September 2026 and says "three years ago, during this same
 month", so the window is **September 2023**.
 
-![The cropped challenge photo: a partial name board on the bow, blue hull, white superstructure, blue external stairway](../images/tfc-fishing-not-phishing.jpg "326x200")
+![The cropped challenge photo: a partial name board on the bow, blue hull, white superstructure, blue external stairway](../images/writeups/fishing-not-phishing.jpg "326x200")
 
 *The only handholds are the partial lettering on the bow and the hull profile.*
 

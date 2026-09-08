@@ -110,13 +110,14 @@
       "event": "TFC CTF 26",
       "team": "NxT",
       "attribution": "solo",
-      "cert": "images/tfc-ctf-26-diploma.png",
+      "cert": "images/events/tfc-ctf-26.png",
       "certW": 2400,
       "certH": 1697,
       "certAlt": "TFC CTF 26 certificate of participation for Ashton Ang Wu Zun, team NxT, placed 162nd of 1,027 teams",
       "result": {
         "placement": "162nd",
         "field": "of 1,027 teams",
+        "weight": 77.08,
         "solves": 7,
         "date": "6 September 2026"
       },
@@ -187,7 +188,7 @@
     {
       "slug": "nxt",
       "handle": "NxT",
-      "avatar": "images/NxT-nobg.png",
+      "avatar": "images/avatars/nxt.png",
       "tag": "solo",
       "focus": ["Forensics", "OSINT", "Crypto"],
       "bio": "Forensics and OSINT by habit, crypto when a lattice is involved. Runs the occasional CTF solo under the handle NxT.",
@@ -196,7 +197,7 @@
     {
       "slug": "txn",
       "handle": "TxN",
-      "avatar": "images/TxN.jpg",
+      "avatar": "images/avatars/txn.jpg",
       "tag": "team lead",
       "focus": ["Web", "Pwn", "Reverse"],
       "bio": "Team lead. Web, binary exploitation, and reverse engineering.",
@@ -205,7 +206,7 @@
     {
       "slug": "dxt",
       "handle": "DxT",
-      "avatar": "images/dxt_logo.png",
+      "avatar": "images/avatars/dxt.png",
       "tag": "newest member",
       "focus": ["OSINT"],
       "bio": "Newest member of the team. OSINT focus.",
