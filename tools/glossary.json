@@ -12,5 +12,13 @@
   { "term": "stack canary", "def": "A random value placed before a return address; if overwritten by a buffer overflow, the program detects it and aborts." },
   { "term": "TPM", "def": "Trusted Platform Module: a chip (or emulated component) that stores keys and attests to system state." },
   { "term": "ROP", "def": "Return-oriented programming: chaining existing code fragments (gadgets) via the stack to execute arbitrary logic without injecting new code." },
-  { "term": "ASLR", "def": "Address Space Layout Randomization: randomizes memory addresses each run to make exploits harder to write reliably." }
+  { "term": "ASLR", "def": "Address Space Layout Randomization: randomizes memory addresses each run to make exploits harder to write reliably." },
+  { "term": "MT19937", "def": "The standard Mersenne Twister PRNG: a 624-word state and a fixed output transform, fully predictable once enough output is seen." },
+  { "term": "Mersenne Twister", "def": "A fast, long-period pseudo-random generator (Python's `random`), but not cryptographically secure." },
+  { "term": "Z3", "def": "An SMT solver: give it symbolic variables and constraints and it finds a satisfying assignment or proves none exists." },
+  { "term": "LLL", "def": "Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time." },
+  { "term": "approximate GCD", "def": "Recovering a hidden common factor p from samples p*q_i + r_i with small noise r_i, typically via a lattice." },
+  { "term": "haversine", "def": "A formula for the great-circle distance between two latitude/longitude points on a sphere." },
+  { "term": "MMSI", "def": "Maritime Mobile Service Identity: a 9-digit number identifying a ship's radio and AIS transponder." },
+  { "term": "acrostic", "def": "A hidden message spelled by the first letter or word of each line or sentence." }
 ]

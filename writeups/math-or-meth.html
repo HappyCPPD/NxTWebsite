@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MATH OR METH? · TFC CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="One row of a small-entry matrix is the flag's base-33 digits, and only `h = a A mod p` is published. Two LLL passes recover the hidden row lattice, and one vector decodes to printable text." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>math-or-meth</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-crypto">crypto</span>
+      <span class="wu-pts">298 pts</span>
+    </div>
+    <h1>MATH OR METH? <span>hidden row in a lattice</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">TFCCTF{this_is_a_very_very_long_flag_for_a_short_ctf_chall_ggs}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>The challenge encodes the flag body as a vector of <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> base-33 digits
+and plants it as one row of a small random matrix <code>A</code> (57 rows, 88 columns). It
+publishes only the product</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">h = a * A  (mod p)</code></pre>
+      
+    </figure><p>for a secret row vector <code>a</code> and a 1084-bit prime <code>p</code>, and withholds both <code>a</code> and
+<code>A</code>. The goal is to recover the planted row.</p>
+<h2 id="the-digit-vector"><a class="wu-anchor" href="#the-digit-vector" aria-hidden="true">#</a>The digit vector</h2>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">base = B + <span class="hljs-number">1</span>  <span class="hljs-comment"># 33</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">while</span> x:</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">    row.append(x % base)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">    x //= base</span></span></code></pre>
+      
+    </figure><p>So the planted row <code>f</code> satisfies <code>x = sum(f[j] * 33**j)</code> with every coordinate in
+<code>[0, 32]</code>. Recovering <code>f</code> and reading it as base-33 gives the flag body.</p>
+<h2 id="vulnerability"><a class="wu-anchor" href="#vulnerability" aria-hidden="true">#</a>Vulnerability</h2>
+<p>Work in the lattice of integer vectors that are consistent with the single
+published modular relation:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">L = { v in Z^88 : &lt;h, v&gt; = 0 (mod p) }</code></pre>
+      
+    </figure><p>Every integer null-vector of <code>A</code> lies in <code>L</code>, because <code>A v = 0</code> implies
+<code>&lt;h, v&gt; = a A v = 0</code>. With 57 rows and 88 columns, <code>A</code> has expected nullity
+<code>88 - 57 = 31</code>, and those 31 null-vectors are short since every entry
+of <code>A</code> is small. Any vector that only satisfies the modular relation is huge by
+comparison, on the order of <code>p</code>. <button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button> on <code>L</code> therefore recovers exactly the 31
+short null-relations.</p>
+
+<div class="wu-admon wu-admon-insight">
+      <p class="wu-admon-h">Insight</p>
+      <p>Two rounds of LLL. The first recovers the null-space of the hidden matrix as
+short vectors. Stack them into <code>Y</code>. Every original row of <code>A</code> is orthogonal to
+<code>Y</code>, so the integer right kernel of <code>Y</code> contains the row lattice of <code>A</code>. A
+second LLL on that kernel produces short vectors in the hidden row lattice. One
+of them, up to sign and small combinations, has all 88 coordinates in <code>[0, 32]</code>
+and decodes to printable text.</p>
+
+    </div>
+<h2 id="solver"><a class="wu-anchor" href="#solver" aria-hidden="true">#</a>Solver</h2>
+<figure class="wu-code is-collapsible" data-lines="33">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># SageMath, run from the challenge directory</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">inv = inverse_mod(h[<span class="hljs-number">0</span>], p)</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">rows = [[p] + [<span class="hljs-number">0</span>] * (m - <span class="hljs-number">1</span>)]</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-keyword">for</span> j <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">1</span>, m):</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">    v = [<span class="hljs-number">0</span>] * m</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">    v[<span class="hljs-number">0</span>] = ZZ((-h[j] * inv) % p)</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    <span class="hljs-keyword">if</span> v[<span class="hljs-number">0</span>] &gt; p // <span class="hljs-number">2</span>:</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">        v[<span class="hljs-number">0</span>] -= p</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    v[j] = <span class="hljs-number">1</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">    rows.append(v)</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">K = Matrix(ZZ, rows).LLL(delta=<span class="hljs-number">0.999</span>)</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">short = [v <span class="hljs-keyword">for</span> v <span class="hljs-keyword">in</span> K.rows() <span class="hljs-keyword">if</span> v.norm() &lt; <span class="hljs-number">10000</span>]      <span class="hljs-comment"># ~31 of these</span></span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc">Y = Matrix(ZZ, short).row_space().basis_matrix()</span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc">R = Y.right_kernel_matrix().LLL(delta=<span class="hljs-number">0.999</span>)           <span class="hljs-comment"># hidden row lattice</span></span></span>
+<span class="wu-line" data-line="17"><span class="wu-ln">17</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="18"><span class="wu-ln">18</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">decode</span>(<span class="hljs-params">v</span>):</span></span>
+<span class="wu-line" data-line="19"><span class="wu-ln">19</span><span class="wu-lc">    <span class="hljs-keyword">if</span> <span class="hljs-built_in">min</span>(v) &lt; <span class="hljs-number">0</span> <span class="hljs-keyword">or</span> <span class="hljs-built_in">max</span>(v) &gt; B:</span></span>
+<span class="wu-line" data-line="20"><span class="wu-ln">20</span><span class="wu-lc">        <span class="hljs-keyword">return</span> <span class="hljs-literal">None</span></span></span>
+<span class="wu-line" data-line="21"><span class="wu-ln">21</span><span class="wu-lc">    x = <span class="hljs-built_in">sum</span>(ZZ(v[i]) * ZZ(B + <span class="hljs-number">1</span>) ** i <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(m))</span></span>
+<span class="wu-line" data-line="22"><span class="wu-ln">22</span><span class="wu-lc">    <span class="hljs-keyword">return</span> <span class="hljs-built_in">int</span>(x).to_bytes((<span class="hljs-built_in">int</span>(x).bit_length() + <span class="hljs-number">7</span>) // <span class="hljs-number">8</span>, <span class="hljs-string">&#x27;big&#x27;</span>)</span></span>
+<span class="wu-line" data-line="23"><span class="wu-ln">23</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="24"><span class="wu-ln">24</span><span class="wu-lc"><span class="hljs-comment"># search the short basis, its signs, and modest pairwise combinations</span></span></span>
+<span class="wu-line" data-line="25"><span class="wu-ln">25</span><span class="wu-lc">candidates = <span class="hljs-built_in">list</span>(R.rows())</span></span>
+<span class="wu-line" data-line="26"><span class="wu-ln">26</span><span class="wu-lc"><span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(R.nrows()):</span></span>
+<span class="wu-line" data-line="27"><span class="wu-ln">27</span><span class="wu-lc">    <span class="hljs-keyword">for</span> j <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(i):</span></span>
+<span class="wu-line" data-line="28"><span class="wu-ln">28</span><span class="wu-lc">        candidates += [R[i] + R[j], R[i] - R[j], -R[i] + R[j], -R[i] - R[j]]</span></span>
+<span class="wu-line" data-line="29"><span class="wu-ln">29</span><span class="wu-lc"><span class="hljs-keyword">for</span> v <span class="hljs-keyword">in</span> candidates:</span></span>
+<span class="wu-line" data-line="30"><span class="wu-ln">30</span><span class="wu-lc">    <span class="hljs-keyword">for</span> w <span class="hljs-keyword">in</span> (v, -v):</span></span>
+<span class="wu-line" data-line="31"><span class="wu-ln">31</span><span class="wu-lc">        msg = decode(w)</span></span>
+<span class="wu-line" data-line="32"><span class="wu-ln">32</span><span class="wu-lc">        <span class="hljs-keyword">if</span> msg <span class="hljs-keyword">and</span> (<span class="hljs-string">b&#x27;TFCCTF&#x27;</span> <span class="hljs-keyword">in</span> msg <span class="hljs-keyword">or</span> <span class="hljs-built_in">all</span>(<span class="hljs-number">32</span> &lt;= c &lt; <span class="hljs-number">127</span> <span class="hljs-keyword">for</span> c <span class="hljs-keyword">in</span> msg)):</span></span>
+<span class="wu-line" data-line="33"><span class="wu-ln">33</span><span class="wu-lc">            <span class="hljs-built_in">print</span>(<span class="hljs-string">&#x27;CANDIDATE&#x27;</span>, msg)</span></span></code></pre>
+      <button type="button" class="wu-code-more" aria-expanded="false" data-more="+21 lines" data-less="show less">+21 lines</button>
+    </figure><div class="wu-session">
+      <div class="wu-session-bar">
+        <span class="wu-session-label">session</span>
+        <button type="button" class="wu-session-replay">replay</button>
+      </div>
+      <pre class="wu-session-body"><span class="wu-term-line" data-kind="cmd"><span class="wu-term-prompt">$</span><span class="wu-term-cmd">sage solve_math_or_meth.sage</span></span>
+<span class="wu-term-line" data-kind="out">short modular relations: 31</span>
+<span class="wu-term-line" data-kind="out">relation rank: 31</span>
+<span class="wu-term-line" data-kind="out">row lattice: 57 88</span>
+<span class="wu-term-line" data-kind="out">CANDIDATE b'this_is_a_very_very_long_flag_for_a_short_ctf_chall_ggs'</span></pre>
+    </div><p>The challenge source wraps the recovered body in <code>TFCCTF{}</code>.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">TFCCTF{this_is_a_very_very_long_flag_for_a_short_ctf_chall_ggs}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#the-digit-vector">The digit vector</a></li><li><a href="#vulnerability">Vulnerability</a></li><li><a href="#solver">Solver</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="discord-shenanigans-v6.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Discord Shenanigans V6</span></a>
+    <a class="wu-pager-link wu-pager-next" href="rules.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">RULES</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=18"></script>
+</body>
+</html>

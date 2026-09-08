@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Writeups · Kaspersky CTF 2026 · NXT_CTFS</title>
-<meta name="description" content="NXT_CTFS writeups for Kaspersky CTF 2026: SlopGate, Lumberjack, chroot-bronze, awasmsafe, chroot-silver, Sudokrypt, Shiny Sweetie Curve, biblocker, Censored." />
+<title>Writeups · NXT_CTFS</title>
+<meta name="description" content="NXT_CTFS challenge writeups for Kaspersky CTF 2026 and TFC CTF 26." />
 <link rel="icon" href="images/Logo-nobg.png" type="image/png" />
 <link rel="stylesheet" href="css/fonts.css?v=2" />
-<link rel="stylesheet" href="css/styles.css?v=17" />
+<link rel="stylesheet" href="css/styles.css?v=18" />
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -58,146 +58,262 @@
 
 <main id="top">
   <section class="wu-hero container">
-    <p class="eyebrow"><span class="dot"></span>Kaspersky CTF 2026</p>
+    <p class="eyebrow"><span class="dot"></span>NXT_CTFS</p>
     <h1>Writeups</h1>
-    <p class="wu-hero-lede">How the team solved each challenge at Kaspersky CTF 2026. Root cause first, then the exploit. 9 solves, 736 points, 69th in the Asia regional league.</p>
-    <div class="wu-scoreline">
-      <span><b>69th</b> Asia regional league</span>
-      <span><b>736</b> points</span>
-      <span><b>9</b> solves</span>
-      <span><b>NxT</b> · ITE College West</span>
-    </div>
+    <p class="wu-hero-lede">How each challenge was solved, root cause first and then the exploit. Grouped by event.</p>
   </section>
 
   <section class="section container" style="border-top:none;padding-top:0">
-    <ul class="wu-grid">
-      <li class="wu-card">
-        <a class="wu-card-link" href="writeups/slopgate.html">
-          <div class="wu-card-top">
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-pts">182 pts</span>
-          </div>
-          <h3 class="wu-card-name">SlopGate<span class="wu-card-sub">QEMU escape</span></h3>
-          <p class="wu-card-blurb">The hardened SlopGate PCI device is a decoy. The serial console still drops to the QEMU monitor, and `migrate &quot;exec:...&quot;` runs a command on the host.</p>
-          <div class="wu-card-foot">
-            <code class="wu-flag">kaspersky{I_th1nk_w3_b0th_g0t_dumb3r_wh1l3_s0lvin6_this_t4sk}</code>
-            <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
-          </div>
-        </a>
-      </li>
-      <li class="wu-card">
-        <a class="wu-card-link" href="writeups/lumberjack.html">
-          <div class="wu-card-top">
-            <span class="wu-cat wu-cat-ai">AI</span>
-            <span class="wu-pts">89 pts</span>
-          </div>
-          <h3 class="wu-card-name">Lumberjack<span class="wu-card-sub">ML / OOB read</span></h3>
-          <p class="wu-card-blurb">An ONNX-to-native compiler never bounds-checks `feature_idx`. A negative index reads the `FLAG` env pointer off the stack, one float at a time, through a tree-classifier oracle.</p>
-          <div class="wu-card-foot">
-            <code class="wu-flag">kaspersky{3d87a80c-9ab7-4c35-aeb4-f64bbae9bb44}</code>
-            <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
-          </div>
-        </a>
-      </li>
-      <li class="wu-card">
-        <a class="wu-card-link" href="writeups/chroot-bronze.html">
-          <div class="wu-card-top">
-            <span class="wu-cat wu-cat-misc">misc</span>
-            <span class="wu-pts">77 pts</span>
-          </div>
-          <h3 class="wu-card-name">chroot-bronze<span class="wu-card-sub">chroot escape</span></h3>
-          <p class="wu-card-blurb">Root inside a bare chroot. Ship an ELF with `printf` octal escapes, run it via `ld.so` to dodge the missing `+x`, then the classic `chroot`/`chdir(&quot;..&quot;)` walk-out.</p>
-          <div class="wu-card-foot">
-            <code class="wu-flag">kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}</code>
-            <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
-          </div>
-        </a>
-      </li>
-      <li class="wu-card">
-        <a class="wu-card-link" href="writeups/awasmsafe.html">
-          <div class="wu-card-top">
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-pts">74 pts</span>
-          </div>
-          <h3 class="wu-card-name">awasmsafe<span class="wu-card-sub">WASM + Electron</span></h3>
-          <p class="wu-card-blurb">The password check is a WASM RC4 whose key is derived from the page's own source and CSP hash, gated behind ~56 anti-Node fingerprint checks. Run the real Electron renderer, then solve the RC4 algebraically.</p>
-          <div class="wu-card-foot">
-            <code class="wu-flag">kaspersky{w4sm_3lectrif1ed_7d19ae15}</code>
-            <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
-          </div>
-        </a>
-      </li>
-      <li class="wu-card">
-        <a class="wu-card-link" href="writeups/chroot-silver.html">
-          <div class="wu-card-top">
-            <span class="wu-cat wu-cat-misc">misc</span>
-            <span class="wu-pts">64 pts</span>
-          </div>
-          <h3 class="wu-card-name">chroot-silver<span class="wu-card-sub">sandbox escape</span></h3>
-          <p class="wu-card-blurb">`SOCAT_PPID=1` gives it away: the jailer lives outside the jail. Build a musl PIE, upload it with all-3-digit octal `printf`, run via the musl loader, and escape through a saved root fd.</p>
-          <div class="wu-card-foot">
-            <code class="wu-flag">kaspersky{a9f61e72-504f-4d36-8094-be8147e05f42}</code>
-            <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
-          </div>
-        </a>
-      </li>
-      <li class="wu-card">
-        <a class="wu-card-link" href="writeups/sudokrypt.html">
-          <div class="wu-card-top">
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-pts">50 pts</span>
-          </div>
-          <h3 class="wu-card-name">Sudokrypt<span class="wu-card-sub">custom cipher</span></h3>
-          <p class="wu-card-blurb">The Feistel and sudoku layers are keyless and publicly invertible. Two design leaks recover both secret permutations, and a shared block counter exposes the spectral keystream as a degree-56 linear recurrence.</p>
-          <div class="wu-card-foot">
-            <code class="wu-flag">kaspersky{D4mn_1m_s0_c00l!!_1_c4n_d0_sud0ku_n0w_st4cy_t0t4lly_g01ng_t0_pr0m_w1th_m3}</code>
-            <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
-          </div>
-        </a>
-      </li>
-      <li class="wu-card">
-        <a class="wu-card-link" href="writeups/shiny-sweetie-curve.html">
-          <div class="wu-card-top">
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-pts">50 pts</span>
-          </div>
-          <h3 class="wu-card-name">Shiny Sweetie Curve<span class="wu-card-sub">elliptic curve</span></h3>
-          <p class="wu-card-blurb">A fresh random curve every round, only x-coordinates leaked. X-only addition identities plus a resultant-and-GCD trick recover the secret prime, then `a`, `b`, and the step point.</p>
-          <div class="wu-card-foot">
-            <code class="wu-flag">kaspersky{g4mbl1ng_1s_b4d_t4k3_c4r3_0f_y0urs3lf}</code>
-            <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
-          </div>
-        </a>
-      </li>
-      <li class="wu-card">
-        <a class="wu-card-link" href="writeups/biblocker.html">
-          <div class="wu-card-top">
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-pts">50 pts</span>
-          </div>
-          <h3 class="wu-card-name">biblocker<span class="wu-card-sub">SIGSEGV &quot;TPM&quot;</span></h3>
-          <p class="wu-card-blurb">The &quot;Trusted Potato Module&quot; is a SIGSEGV handler that hands back AES key material derived from the fault address via XTEA. Re-implement the CRC and XTEA statically. The key is `target_key XOR mask`.</p>
-          <div class="wu-card-foot">
-            <code class="wu-flag">kaspersky{s1gn4l5_pr0v1d3d_tPm_k1nd4_sus}</code>
-            <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
-          </div>
-        </a>
-      </li>
-      <li class="wu-card">
-        <a class="wu-card-link" href="writeups/censored.html">
-          <div class="wu-card-top">
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-pts">50 pts</span>
-          </div>
-          <h3 class="wu-card-name">Censored<span class="wu-card-sub">HNP / lattice</span></h3>
-          <p class="wu-card-blurb">Each Schnorr signature ships a &quot;diagnostic&quot; blob whose XOR masks are computable from public data. Unmask it for ~16 bits of nonce per signature, then solve the Hidden Number Problem by lattice reduction.</p>
-          <div class="wu-card-foot">
-            <code class="wu-flag">kaspersky{N0w_4ll_tH3_4nsW3rs_4r3_1n_y0ur_h4nds!!!!}</code>
-            <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
-          </div>
-        </a>
-      </li>
-    </ul>
+    <div class="wu-eventgroup">
+      <div class="wu-eventgroup-head">
+        <h2>Kaspersky CTF 2026</h2>
+        <div class="wu-scoreline">
+      <span><b>69th</b> Asia regional league</span>
+      <span><b>736</b> points</span>
+      <span><b>9</b> solves</span>
+      <span><b>NxT</b> &middot; ITE College West</span>
+        </div>
+      </div>
+      <ul class="wu-grid">
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/slopgate.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-pwn">pwn</span>
+              <span class="wu-pts">182 pts</span>
+            </div>
+            <h3 class="wu-card-name">SlopGate<span class="wu-card-sub">QEMU escape</span></h3>
+            <p class="wu-card-blurb">The hardened SlopGate PCI device is a decoy. The serial console still drops to the QEMU monitor, and `migrate &quot;exec:...&quot;` runs a command on the host.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">kaspersky{I_th1nk_w3_b0th_g0t_dumb3r_wh1l3_s0lvin6_this_t4sk}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/lumberjack.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-ai">AI</span>
+              <span class="wu-pts">89 pts</span>
+            </div>
+            <h3 class="wu-card-name">Lumberjack<span class="wu-card-sub">ML / OOB read</span></h3>
+            <p class="wu-card-blurb">An ONNX-to-native compiler never bounds-checks `feature_idx`. A negative index reads the `FLAG` env pointer off the stack, one float at a time, through a tree-classifier oracle.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">kaspersky{3d87a80c-9ab7-4c35-aeb4-f64bbae9bb44}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/chroot-bronze.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-misc">misc</span>
+              <span class="wu-pts">77 pts</span>
+            </div>
+            <h3 class="wu-card-name">chroot-bronze<span class="wu-card-sub">chroot escape</span></h3>
+            <p class="wu-card-blurb">Root inside a bare chroot. Ship an ELF with `printf` octal escapes, run it via `ld.so` to dodge the missing `+x`, then the classic `chroot`/`chdir(&quot;..&quot;)` walk-out.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/awasmsafe.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-rev">rev</span>
+              <span class="wu-pts">74 pts</span>
+            </div>
+            <h3 class="wu-card-name">awasmsafe<span class="wu-card-sub">WASM + Electron</span></h3>
+            <p class="wu-card-blurb">The password check is a WASM RC4 whose key is derived from the page's own source and CSP hash, gated behind ~56 anti-Node fingerprint checks. Run the real Electron renderer, then solve the RC4 algebraically.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">kaspersky{w4sm_3lectrif1ed_7d19ae15}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/chroot-silver.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-misc">misc</span>
+              <span class="wu-pts">64 pts</span>
+            </div>
+            <h3 class="wu-card-name">chroot-silver<span class="wu-card-sub">sandbox escape</span></h3>
+            <p class="wu-card-blurb">`SOCAT_PPID=1` gives it away: the jailer lives outside the jail. Build a musl PIE, upload it with all-3-digit octal `printf`, run via the musl loader, and escape through a saved root fd.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">kaspersky{a9f61e72-504f-4d36-8094-be8147e05f42}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/sudokrypt.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-crypto">crypto</span>
+              <span class="wu-pts">50 pts</span>
+            </div>
+            <h3 class="wu-card-name">Sudokrypt<span class="wu-card-sub">custom cipher</span></h3>
+            <p class="wu-card-blurb">The Feistel and sudoku layers are keyless and publicly invertible. Two design leaks recover both secret permutations, and a shared block counter exposes the spectral keystream as a degree-56 linear recurrence.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">kaspersky{D4mn_1m_s0_c00l!!_1_c4n_d0_sud0ku_n0w_st4cy_t0t4lly_g01ng_t0_pr0m_w1th_m3}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/shiny-sweetie-curve.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-crypto">crypto</span>
+              <span class="wu-pts">50 pts</span>
+            </div>
+            <h3 class="wu-card-name">Shiny Sweetie Curve<span class="wu-card-sub">elliptic curve</span></h3>
+            <p class="wu-card-blurb">A fresh random curve every round, only x-coordinates leaked. X-only addition identities plus a resultant-and-GCD trick recover the secret prime, then `a`, `b`, and the step point.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">kaspersky{g4mbl1ng_1s_b4d_t4k3_c4r3_0f_y0urs3lf}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/biblocker.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-rev">rev</span>
+              <span class="wu-pts">50 pts</span>
+            </div>
+            <h3 class="wu-card-name">biblocker<span class="wu-card-sub">SIGSEGV &quot;TPM&quot;</span></h3>
+            <p class="wu-card-blurb">The &quot;Trusted Potato Module&quot; is a SIGSEGV handler that hands back AES key material derived from the fault address via XTEA. Re-implement the CRC and XTEA statically. The key is `target_key XOR mask`.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">kaspersky{s1gn4l5_pr0v1d3d_tPm_k1nd4_sus}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/censored.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-crypto">crypto</span>
+              <span class="wu-pts">50 pts</span>
+            </div>
+            <h3 class="wu-card-name">Censored<span class="wu-card-sub">HNP / lattice</span></h3>
+            <p class="wu-card-blurb">Each Schnorr signature ships a &quot;diagnostic&quot; blob whose XOR masks are computable from public data. Unmask it for ~16 bits of nonce per signature, then solve the Hidden Number Problem by lattice reduction.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">kaspersky{N0w_4ll_tH3_4nsW3rs_4r3_1n_y0ur_h4nds!!!!}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="wu-eventgroup">
+      <div class="wu-eventgroup-head">
+        <h2>TFC CTF 26</h2>
+        <div class="wu-scoreline">
+      <span><b>162nd</b> of 1,027 teams</span>
+      <span><b>7</b> solves</span>
+      <span><b>NxT</b> &middot; solo</span>
+        </div>
+      </div>
+      <ul class="wu-grid">
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/discord-shenanigans-v6.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-misc">misc</span>
+              <span class="wu-pts">340 pts</span>
+            </div>
+            <h3 class="wu-card-name">Discord Shenanigans V6<span class="wu-card-sub">acrostic in #announcements</span></h3>
+            <p class="wu-card-blurb">The pre-event announcement is an acrostic. First letters spell LCASTLE, and the opening words &quot;Less than&quot; tell you to drop the leading L. The hidden word is CASTLE.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">TFCCTF{CASTLE}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/math-or-meth.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-crypto">crypto</span>
+              <span class="wu-pts">298 pts</span>
+            </div>
+            <h3 class="wu-card-name">MATH OR METH?<span class="wu-card-sub">hidden row in a lattice</span></h3>
+            <p class="wu-card-blurb">One row of a small-entry matrix is the flag's base-33 digits, and only `h = a A mod p` is published. Two LLL passes recover the hidden row lattice, and one vector decodes to printable text.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">TFCCTF{this_is_a_very_very_long_flag_for_a_short_ctf_chall_ggs}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/rules.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-misc">misc</span>
+              <span class="wu-pts">128 pts</span>
+            </div>
+            <h3 class="wu-card-name">RULES<span class="wu-card-sub">read the rules page</span></h3>
+            <p class="wu-card-blurb">The flag-format section of the site rules page uses a real flag as its example. Visiting the page marks the challenge solved.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">TFCCTF{M4ny_ch4ng3s...m0r3_3ff0rt}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/cer-frumos.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-crypto">crypto</span>
+              
+            </div>
+            <h3 class="wu-card-name">CER FRUMOS<span class="wu-card-sub">MT19937 state recovery</span></h3>
+            <p class="wu-card-blurb">625 partial Mersenne Twister outputs over-determine the 19968-bit state. Model the twist and temper in Z3, add the leaked bits as constraints, then read off the two words that seed the AES key and IV.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">TFCCTF{ursu_ursa_bea_ursus_intrun_urus_verzuliu}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/one-plus-one.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-crypto">crypto</span>
+              
+            </div>
+            <h3 class="wu-card-name">1+1<span class="wu-card-sub">approximate GCD</span></h3>
+            <p class="wu-card-blurb">Ten samples `x_i = p * q_i + r_i` share the secret `p` (the flag) with small noise `r_i`. A Howgrave-Graham AGCD lattice with the right scale recovers `q_0`, and `p = x_0 / q_0`.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">TFCCTF{nice_crypto_skillz_kid_you_will_be_great_one_day_af56c3}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/mid.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-crypto">crypto</span>
+              
+            </div>
+            <h3 class="wu-card-name">mid<span class="wu-card-sub">a lying binary-search oracle</span></h3>
+            <p class="wu-card-blurb">A 30-character password behind a comparison oracle that answers truthfully only while your submitted state matches a hidden mood. One provably-safe probe detects the mood flip; char-by-char search contains the damage.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">TFCCTF{w3_l0v3_a_g0od_b1nary_se4rch}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/fishing-not-phishing.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-osint">osint</span>
+              
+            </div>
+            <h3 class="wu-card-name">FISHING NOT PHISHING<span class="wu-card-sub">vessel tracking via AIS</span></h3>
+            <p class="wu-card-blurb">Reverse image search identifies the trawler STEAUA DE MARE 1. Global Fishing Watch gives the September 2023 voyage from Constanta, the first fishing event, and the coordinates for a haversine distance.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">TFCCTF{264900119_constanta_21.09.2023_07:17_AM_15.6}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+      </ul>
+    </div>
     <p class="wu-note">Solve scripts and challenge archives aren't published here. Ask in <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>. Flags are per-event; some sandbox challenges issued a per-instance flag.</p>
   </section>
 </main>
@@ -232,6 +348,6 @@
   </div>
 </footer>
 
-<script src="js/script.js?v=17"></script>
+<script src="js/script.js?v=18"></script>
 </body>
 </html>

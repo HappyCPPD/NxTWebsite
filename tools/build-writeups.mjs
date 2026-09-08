@@ -2,12 +2,13 @@
  *
  *   node tools/build-writeups.mjs
  *
- * Produces writeups.html (index) and writeups/<slug>.html (one per challenge).
+ * Produces writeups.html (multi-event index), writeups/<slug>.html (one per
+ * challenge, flat across events) and members/<slug>.html (one per team member).
  * The only dependency is the vendored marked (tools/vendor/marked.esm.js),
  * used at build time only. The published pages ship as static HTML with no
  * third-party requests, matching the rest of the site.
  */
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { renderBody, esc } from './lib/renderer.mjs';
@@ -17,8 +18,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const cfg = JSON.parse(readFileSync(join(root, 'tools/writeups.config.json'), 'utf8'));
 const glossary = JSON.parse(readFileSync(join(root, 'tools/glossary.json'), 'utf8'));
 
-const CSS_V = 17;
-const JS_V = 17;
+const CSS_V = 18;
+const JS_V = 18;
 
 /* Nest h3 entries under their preceding h2 in the sidebar TOC. `toc` text is
  * already HTML-entity-escaped once by the heading renderer - do not esc() it
@@ -48,7 +49,8 @@ function renderToc(toc) {
       </nav>`;
 }
 
-function navHtml(prefix) {
+function navHtml(prefix, active = 'writeups') {
+  const cls = (name) => (name === active ? ' class="is-active"' : '');
   return `<nav class="nav" id="nav">
   <div class="container nav-inner">
     <div class="nav-id">
@@ -62,8 +64,8 @@ function navHtml(prefix) {
       <a href="${prefix}index.html#about">about</a>
       <a href="${prefix}index.html#focus">categories</a>
       <a href="${prefix}index.html#results">results</a>
-      <a href="${prefix}writeups.html" class="is-active">writeups</a>
-      <a href="${prefix}index.html#team">team</a>
+      <a href="${prefix}writeups.html"${cls('writeups')}>writeups</a>
+      <a href="${prefix}index.html#team"${cls('team')}>team</a>
       <a href="${prefix}index.html#shell">challenge</a>
       <a href="${prefix}index.html#join">join</a>
     </div>
@@ -123,7 +125,7 @@ function footerHtml(prefix) {
 </footer>`;
 }
 
-function page({ prefix, title, desc, body }) {
+function page({ prefix, title, desc, body, navActive = 'writeups' }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -141,7 +143,7 @@ function page({ prefix, title, desc, body }) {
 <div class="backdrop" aria-hidden="true"></div>
 <div class="gutters" aria-hidden="true"></div>
 
-${navHtml(prefix)}
+${navHtml(prefix, navActive)}
 
 ${body}
 
@@ -157,43 +159,66 @@ const catLabel = {
   ai: 'AI', pwn: 'pwn', rev: 'rev', crypto: 'crypto', misc: 'misc', web: 'web', forensics: 'forensics', osint: 'osint',
 };
 
-/* ---------- index ---------- */
+/* Inner <span>s for a result scoreline. `placeClass` adds the .is-place hook
+ * used by the homepage / member-page styling; the writeups index leaves it off
+ * to match the pre-existing markup. */
+function scorelineSpans(ev, placeClass) {
+  const r = ev.result;
+  const s = [];
+  s.push(`<span${placeClass ? ' class="is-place"' : ''}><b>${esc(r.placement)}</b> ${esc(r.league || r.field || '')}</span>`);
+  if (r.points != null) s.push(`<span><b>${r.points}</b> points</span>`);
+  s.push(`<span><b>${r.solves}</b> solves</span>`);
+  const suffix = ev.attribution || ev.org;
+  s.push(`<span><b>${esc(ev.team)}</b>${suffix ? ` &middot; ${esc(suffix)}` : ''}</span>`);
+  return s.join('\n      ');
+}
+
+/* ---------- writeups index ---------- */
 function buildIndex() {
-  const r = cfg.result;
-  const cards = cfg.challenges
-    .map((c) => `      <li class="wu-card">
-        <a class="wu-card-link" href="writeups/${c.slug}.html">
-          <div class="wu-card-top">
-            <span class="wu-cat wu-cat-${c.category}">${catLabel[c.category] || c.category}</span>
-            <span class="wu-pts">${c.points} pts</span>
-          </div>
-          <h3 class="wu-card-name">${esc(c.name)}<span class="wu-card-sub">${esc(c.subtitle)}</span></h3>
-          <p class="wu-card-blurb">${esc(c.blurb)}</p>
-          <div class="wu-card-foot">
-            <code class="wu-flag">${esc(c.flag)}</code>
-            <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
-          </div>
-        </a>
-      </li>`)
-    .join('\n');
+  const eventNames = cfg.events.map((e) => e.event).join(' and ');
+
+  const groups = cfg.events
+    .map((ev) => {
+      const cards = ev.challenges
+        .map((c) => `        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/${c.slug}.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-${c.category}">${catLabel[c.category] || c.category}</span>
+              ${c.points != null ? `<span class="wu-pts">${c.points} pts</span>` : ''}
+            </div>
+            <h3 class="wu-card-name">${esc(c.name)}<span class="wu-card-sub">${esc(c.subtitle)}</span></h3>
+            <p class="wu-card-blurb">${esc(c.blurb)}</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">${esc(c.flag)}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>`)
+        .join('\n');
+
+      return `    <div class="wu-eventgroup">
+      <div class="wu-eventgroup-head">
+        <h2>${esc(ev.event)}</h2>
+        <div class="wu-scoreline">
+      ${scorelineSpans(ev)}
+        </div>
+      </div>
+      <ul class="wu-grid">
+${cards}
+      </ul>
+    </div>`;
+    })
+    .join('\n\n');
 
   const body = `<main id="top">
   <section class="wu-hero container">
-    <p class="eyebrow"><span class="dot"></span>${esc(cfg.event)}</p>
+    <p class="eyebrow"><span class="dot"></span>NXT_CTFS</p>
     <h1>Writeups</h1>
-    <p class="wu-hero-lede">How the team solved each challenge at ${esc(cfg.event)}. Root cause first, then the exploit. ${r.solves} solves, ${r.points} points, ${esc(r.placement)} in the ${esc(r.league)}.</p>
-    <div class="wu-scoreline">
-      <span><b>${esc(r.placement)}</b> ${esc(r.league)}</span>
-      <span><b>${r.points}</b> points</span>
-      <span><b>${r.solves}</b> solves</span>
-      <span><b>${esc(cfg.team)}</b> · ${esc(cfg.org)}</span>
-    </div>
+    <p class="wu-hero-lede">How each challenge was solved, root cause first and then the exploit. Grouped by event.</p>
   </section>
 
   <section class="section container" style="border-top:none;padding-top:0">
-    <ul class="wu-grid">
-${cards}
-    </ul>
+${groups}
     <p class="wu-note">Solve scripts and challenge archives aren't published here. Ask in <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>. Flags are per-event; some sandbox challenges issued a per-instance flag.</p>
   </section>
 </main>`;
@@ -202,8 +227,8 @@ ${cards}
     join(root, 'writeups.html'),
     page({
       prefix: '',
-      title: `Writeups · ${cfg.event} · NXT_CTFS`,
-      desc: `NXT_CTFS writeups for ${cfg.event}: ${cfg.challenges.map((c) => c.name).join(', ')}.`,
+      title: 'Writeups · NXT_CTFS',
+      desc: `NXT_CTFS challenge writeups for ${eventNames}.`,
       body,
     })
   );
@@ -211,12 +236,12 @@ ${cards}
 }
 
 /* ---------- detail pages ---------- */
-function buildDetail(c, i) {
+function buildDetail(ev, c, i) {
   const md = readFileSync(join(root, 'writeups/src', `${c.slug}.md`), 'utf8');
   const { html: rendered, toc } = renderBody(md);
   const html = applyGlossary(rendered, glossary);
-  const prev = cfg.challenges[i - 1];
-  const next = cfg.challenges[i + 1];
+  const prev = ev.challenges[i - 1];
+  const next = ev.challenges[i + 1];
 
   const tocHtml = renderToc(toc);
 
@@ -231,15 +256,19 @@ function buildDetail(c, i) {
     ${nextCard}
   </nav>`;
 
+  const headTags = [
+    `<span class="wu-cat wu-cat-${c.category}">${catLabel[c.category] || c.category}</span>`,
+    c.points != null ? `<span class="wu-pts">${c.points} pts</span>` : '',
+    c.solved ? `<span class="wu-when">solved ${esc(c.solved)}</span>` : '',
+  ].filter(Boolean).join('\n      ');
+
   const body = `<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
   <main class="wu-main container" id="top">
   <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>${esc(c.slug)}</span></div>
 
   <header class="wu-head">
     <div class="wu-head-tags">
-      <span class="wu-cat wu-cat-${c.category}">${catLabel[c.category] || c.category}</span>
-      <span class="wu-pts">${c.points} pts</span>
-      <span class="wu-when">solved ${esc(c.solved)}</span>
+      ${headTags}
     </div>
     <h1>${esc(c.name)} <span>${esc(c.subtitle)}</span></h1>
     <div class="wu-flagrow">
@@ -263,7 +292,7 @@ ${html}
     join(root, 'writeups', `${c.slug}.html`),
     page({
       prefix: '../',
-      title: `${c.name} · ${cfg.event} writeup · NXT_CTFS`,
+      title: `${c.name} · ${ev.event} writeup · NXT_CTFS`,
       desc: c.blurb,
       body,
     })
@@ -271,11 +300,105 @@ ${html}
   console.log(`wrote writeups/${c.slug}.html`);
 }
 
-buildIndex();
-cfg.challenges.forEach(buildDetail);
+/* ---------- member pages ---------- */
+function memberEventBlock(ev) {
+  const hasWhen = ev.challenges.some((c) => c.solved);
+  const rows = ev.challenges
+    .map((c) => `          <tr>
+            <th scope="row" class="solve-chal"><a href="../writeups/${c.slug}.html">${esc(c.name)}</a></th>
+            <td class="solve-cat"><span class="wu-cat wu-cat-${c.category}">${catLabel[c.category] || c.category}</span></td>
+            <td class="solve-pts">${c.points != null ? c.points : ''}</td>
+            ${hasWhen ? `<td class="solve-when">${c.solved ? esc(c.solved) : ''}</td>` : ''}
+          </tr>`)
+    .join('\n');
 
-/* sanity: warn on stray src files not in config */
-const known = new Set(cfg.challenges.map((c) => `${c.slug}.md`));
+  const certDims = ev.certW && ev.certH ? ` width="${ev.certW}" height="${ev.certH}"` : '';
+  const cert = ev.cert
+    ? `      <figure class="cert">
+        <img src="../${esc(ev.cert)}"${certDims} alt="${esc(ev.certAlt || ev.event + ' certificate')}" loading="lazy" />
+        <figcaption>${esc(ev.event)} &middot; certificate of participation</figcaption>
+      </figure>`
+    : '';
+
+  return `    <article class="mp-event">
+      <div class="mp-event-head">
+        <h2>${esc(ev.event)}</h2>
+        ${ev.result.date ? `<p class="mp-event-date">${esc(ev.result.date)}</p>` : ''}
+      </div>
+      <div class="results-scoreline">
+      ${scorelineSpans(ev, true)}
+      </div>
+${cert}
+      <div class="table-scroll">
+        <table class="solve-table">
+          <caption class="sr-only">Challenges solved at ${esc(ev.event)}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Challenge</th>
+              <th scope="col">Category</th>
+              <th scope="col" style="text-align:right">Points</th>
+              ${hasWhen ? '<th scope="col">Solved</th>' : ''}
+            </tr>
+          </thead>
+          <tbody>
+${rows}
+          </tbody>
+        </table>
+      </div>
+    </article>`;
+}
+
+function buildMembers() {
+  mkdirSync(join(root, 'members'), { recursive: true });
+  const byId = new Map(cfg.events.map((e) => [e.id, e]));
+
+  for (const m of cfg.members) {
+    const events = (m.events || []).map((id) => byId.get(id)).filter(Boolean);
+    const focus = (m.focus || []).map((f) => `<span class="tag">${esc(f)}</span>`).join('\n        ');
+    const eventsHtml = events.length
+      ? events.map(memberEventBlock).join('\n\n')
+      : '    <p class="mp-empty">No solo events logged yet.</p>';
+
+    const body = `<main class="mp-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../index.html#team">team</a> <span>/</span> <span>${esc(m.slug)}</span></div>
+
+  <header class="mp-head">
+    <img class="mp-avatar" src="../${esc(m.avatar)}" alt="${esc(m.handle)}" />
+    <div class="mp-id">
+      <h1>${esc(m.handle)}${m.tag ? ` <span class="mp-tag">${esc(m.tag)}</span>` : ''}</h1>
+      <div class="mp-focus">
+        ${focus}
+      </div>
+      ${m.bio ? `<p class="mp-bio">${esc(m.bio)}</p>` : ''}
+    </div>
+  </header>
+
+  <section class="mp-events">
+${eventsHtml}
+  </section>
+</main>`;
+
+    writeFileSync(
+      join(root, 'members', `${m.slug}.html`),
+      page({
+        prefix: '../',
+        title: `${m.handle} · NXT_CTFS`,
+        desc: `${m.handle}, NXT_CTFS. ${m.bio || ''}`.trim(),
+        body,
+        navActive: 'team',
+      })
+    );
+    console.log(`wrote members/${m.slug}.html`);
+  }
+}
+
+/* ---------- run ---------- */
+buildIndex();
+cfg.events.forEach((ev) => ev.challenges.forEach((c, i) => buildDetail(ev, c, i)));
+buildMembers();
+
+/* sanity: warn on stray src files not in any event */
+const known = new Set(cfg.events.flatMap((ev) => ev.challenges.map((c) => `${c.slug}.md`)));
 for (const f of readdirSync(join(root, 'writeups/src'))) {
   if (f.endsWith('.md') && !known.has(f)) console.warn(`! ${f} in writeups/src has no config entry`);
 }

@@ -1,104 +1,215 @@
 {
-  "event": "Kaspersky CTF 2026",
-  "team": "NxT",
-  "org": "ITE College West",
-  "result": {
-    "placement": "69th",
-    "league": "Asia regional league",
-    "points": 736,
-    "solves": 9,
-    "date": "30 August 2026"
-  },
-  "challenges": [
+  "events": [
     {
-      "slug": "slopgate",
-      "name": "SlopGate",
-      "category": "pwn",
-      "subtitle": "QEMU escape",
-      "points": 182,
-      "solved": "Aug 30, 06:14",
-      "flag": "kaspersky{I_th1nk_w3_b0th_g0t_dumb3r_wh1l3_s0lvin6_this_t4sk}",
-      "blurb": "The hardened SlopGate PCI device is a decoy. The serial console still drops to the QEMU monitor, and `migrate \"exec:...\"` runs a command on the host."
+      "id": "kaspersky-ctf-2026",
+      "event": "Kaspersky CTF 2026",
+      "team": "NxT",
+      "org": "ITE College West",
+      "result": {
+        "placement": "69th",
+        "league": "Asia regional league",
+        "points": 736,
+        "solves": 9,
+        "date": "30 August 2026"
+      },
+      "challenges": [
+        {
+          "slug": "slopgate",
+          "name": "SlopGate",
+          "category": "pwn",
+          "subtitle": "QEMU escape",
+          "points": 182,
+          "solved": "Aug 30, 06:14",
+          "flag": "kaspersky{I_th1nk_w3_b0th_g0t_dumb3r_wh1l3_s0lvin6_this_t4sk}",
+          "blurb": "The hardened SlopGate PCI device is a decoy. The serial console still drops to the QEMU monitor, and `migrate \"exec:...\"` runs a command on the host."
+        },
+        {
+          "slug": "lumberjack",
+          "name": "Lumberjack",
+          "category": "ai",
+          "subtitle": "ML / OOB read",
+          "points": 89,
+          "solved": "Aug 30, 19:35",
+          "flag": "kaspersky{3d87a80c-9ab7-4c35-aeb4-f64bbae9bb44}",
+          "blurb": "An ONNX-to-native compiler never bounds-checks `feature_idx`. A negative index reads the `FLAG` env pointer off the stack, one float at a time, through a tree-classifier oracle."
+        },
+        {
+          "slug": "chroot-bronze",
+          "name": "chroot-bronze",
+          "category": "misc",
+          "subtitle": "chroot escape",
+          "points": 77,
+          "solved": "Aug 29, 20:45",
+          "flag": "kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}",
+          "blurb": "Root inside a bare chroot. Ship an ELF with `printf` octal escapes, run it via `ld.so` to dodge the missing `+x`, then the classic `chroot`/`chdir(\"..\")` walk-out."
+        },
+        {
+          "slug": "awasmsafe",
+          "name": "awasmsafe",
+          "category": "rev",
+          "subtitle": "WASM + Electron",
+          "points": 74,
+          "solved": "Aug 30, 04:28",
+          "flag": "kaspersky{w4sm_3lectrif1ed_7d19ae15}",
+          "blurb": "The password check is a WASM RC4 whose key is derived from the page's own source and CSP hash, gated behind ~56 anti-Node fingerprint checks. Run the real Electron renderer, then solve the RC4 algebraically."
+        },
+        {
+          "slug": "chroot-silver",
+          "name": "chroot-silver",
+          "category": "misc",
+          "subtitle": "sandbox escape",
+          "points": 64,
+          "solved": "Aug 30, 03:14",
+          "flag": "kaspersky{a9f61e72-504f-4d36-8094-be8147e05f42}",
+          "blurb": "`SOCAT_PPID=1` gives it away: the jailer lives outside the jail. Build a musl PIE, upload it with all-3-digit octal `printf`, run via the musl loader, and escape through a saved root fd."
+        },
+        {
+          "slug": "sudokrypt",
+          "name": "Sudokrypt",
+          "category": "crypto",
+          "subtitle": "custom cipher",
+          "points": 50,
+          "solved": "Aug 30, 03:49",
+          "flag": "kaspersky{D4mn_1m_s0_c00l!!_1_c4n_d0_sud0ku_n0w_st4cy_t0t4lly_g01ng_t0_pr0m_w1th_m3}",
+          "blurb": "The Feistel and sudoku layers are keyless and publicly invertible. Two design leaks recover both secret permutations, and a shared block counter exposes the spectral keystream as a degree-56 linear recurrence."
+        },
+        {
+          "slug": "shiny-sweetie-curve",
+          "name": "Shiny Sweetie Curve",
+          "category": "crypto",
+          "subtitle": "elliptic curve",
+          "points": 50,
+          "solved": "Aug 30, 03:15",
+          "flag": "kaspersky{g4mbl1ng_1s_b4d_t4k3_c4r3_0f_y0urs3lf}",
+          "blurb": "A fresh random curve every round, only x-coordinates leaked. X-only addition identities plus a resultant-and-GCD trick recover the secret prime, then `a`, `b`, and the step point."
+        },
+        {
+          "slug": "biblocker",
+          "name": "biblocker",
+          "category": "rev",
+          "subtitle": "SIGSEGV \"TPM\"",
+          "points": 50,
+          "solved": "Aug 30, 01:57",
+          "flag": "kaspersky{s1gn4l5_pr0v1d3d_tPm_k1nd4_sus}",
+          "blurb": "The \"Trusted Potato Module\" is a SIGSEGV handler that hands back AES key material derived from the fault address via XTEA. Re-implement the CRC and XTEA statically. The key is `target_key XOR mask`."
+        },
+        {
+          "slug": "censored",
+          "name": "Censored",
+          "category": "crypto",
+          "subtitle": "HNP / lattice",
+          "points": 50,
+          "solved": "Aug 29, 22:01",
+          "flag": "kaspersky{N0w_4ll_tH3_4nsW3rs_4r3_1n_y0ur_h4nds!!!!}",
+          "blurb": "Each Schnorr signature ships a \"diagnostic\" blob whose XOR masks are computable from public data. Unmask it for ~16 bits of nonce per signature, then solve the Hidden Number Problem by lattice reduction."
+        }
+      ]
     },
     {
-      "slug": "lumberjack",
-      "name": "Lumberjack",
-      "category": "ai",
-      "subtitle": "ML / OOB read",
-      "points": 89,
-      "solved": "Aug 30, 19:35",
-      "flag": "kaspersky{3d87a80c-9ab7-4c35-aeb4-f64bbae9bb44}",
-      "blurb": "An ONNX-to-native compiler never bounds-checks `feature_idx`. A negative index reads the `FLAG` env pointer off the stack, one float at a time, through a tree-classifier oracle."
+      "id": "tfc-ctf-26",
+      "event": "TFC CTF 26",
+      "team": "NxT",
+      "attribution": "solo",
+      "cert": "images/tfc-ctf-26-diploma.png",
+      "certW": 2400,
+      "certH": 1697,
+      "certAlt": "TFC CTF 26 certificate of participation for Ashton Ang Wu Zun, team NxT, placed 162nd of 1,027 teams",
+      "result": {
+        "placement": "162nd",
+        "field": "of 1,027 teams",
+        "solves": 7,
+        "date": "6 September 2026"
+      },
+      "challenges": [
+        {
+          "slug": "discord-shenanigans-v6",
+          "name": "Discord Shenanigans V6",
+          "category": "misc",
+          "subtitle": "acrostic in #announcements",
+          "points": 340,
+          "flag": "TFCCTF{CASTLE}",
+          "blurb": "The pre-event announcement is an acrostic. First letters spell LCASTLE, and the opening words \"Less than\" tell you to drop the leading L. The hidden word is CASTLE."
+        },
+        {
+          "slug": "math-or-meth",
+          "name": "MATH OR METH?",
+          "category": "crypto",
+          "subtitle": "hidden row in a lattice",
+          "points": 298,
+          "flag": "TFCCTF{this_is_a_very_very_long_flag_for_a_short_ctf_chall_ggs}",
+          "blurb": "One row of a small-entry matrix is the flag's base-33 digits, and only `h = a A mod p` is published. Two LLL passes recover the hidden row lattice, and one vector decodes to printable text."
+        },
+        {
+          "slug": "rules",
+          "name": "RULES",
+          "category": "misc",
+          "subtitle": "read the rules page",
+          "points": 128,
+          "flag": "TFCCTF{M4ny_ch4ng3s...m0r3_3ff0rt}",
+          "blurb": "The flag-format section of the site rules page uses a real flag as its example. Visiting the page marks the challenge solved."
+        },
+        {
+          "slug": "cer-frumos",
+          "name": "CER FRUMOS",
+          "category": "crypto",
+          "subtitle": "MT19937 state recovery",
+          "flag": "TFCCTF{ursu_ursa_bea_ursus_intrun_urus_verzuliu}",
+          "blurb": "625 partial Mersenne Twister outputs over-determine the 19968-bit state. Model the twist and temper in Z3, add the leaked bits as constraints, then read off the two words that seed the AES key and IV."
+        },
+        {
+          "slug": "one-plus-one",
+          "name": "1+1",
+          "category": "crypto",
+          "subtitle": "approximate GCD",
+          "flag": "TFCCTF{nice_crypto_skillz_kid_you_will_be_great_one_day_af56c3}",
+          "blurb": "Ten samples `x_i = p * q_i + r_i` share the secret `p` (the flag) with small noise `r_i`. A Howgrave-Graham AGCD lattice with the right scale recovers `q_0`, and `p = x_0 / q_0`."
+        },
+        {
+          "slug": "mid",
+          "name": "mid",
+          "category": "crypto",
+          "subtitle": "a lying binary-search oracle",
+          "flag": "TFCCTF{w3_l0v3_a_g0od_b1nary_se4rch}",
+          "blurb": "A 30-character password behind a comparison oracle that answers truthfully only while your submitted state matches a hidden mood. One provably-safe probe detects the mood flip; char-by-char search contains the damage."
+        },
+        {
+          "slug": "fishing-not-phishing",
+          "name": "FISHING NOT PHISHING",
+          "category": "osint",
+          "subtitle": "vessel tracking via AIS",
+          "flag": "TFCCTF{264900119_constanta_21.09.2023_07:17_AM_15.6}",
+          "blurb": "Reverse image search identifies the trawler STEAUA DE MARE 1. Global Fishing Watch gives the September 2023 voyage from Constanta, the first fishing event, and the coordinates for a haversine distance."
+        }
+      ]
+    }
+  ],
+  "members": [
+    {
+      "slug": "nxt",
+      "handle": "NxT",
+      "avatar": "images/NxT-nobg.png",
+      "tag": "solo",
+      "focus": ["Forensics", "OSINT", "Crypto"],
+      "bio": "Forensics and OSINT by habit, crypto when a lattice is involved. Runs the occasional CTF solo under the handle NxT.",
+      "events": ["tfc-ctf-26"]
     },
     {
-      "slug": "chroot-bronze",
-      "name": "chroot-bronze",
-      "category": "misc",
-      "subtitle": "chroot escape",
-      "points": 77,
-      "solved": "Aug 29, 20:45",
-      "flag": "kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}",
-      "blurb": "Root inside a bare chroot. Ship an ELF with `printf` octal escapes, run it via `ld.so` to dodge the missing `+x`, then the classic `chroot`/`chdir(\"..\")` walk-out."
+      "slug": "txn",
+      "handle": "TxN",
+      "avatar": "images/TxN.jpg",
+      "tag": "team lead",
+      "focus": ["Web", "Pwn", "Reverse"],
+      "bio": "Team lead. Web, binary exploitation, and reverse engineering.",
+      "events": []
     },
     {
-      "slug": "awasmsafe",
-      "name": "awasmsafe",
-      "category": "rev",
-      "subtitle": "WASM + Electron",
-      "points": 74,
-      "solved": "Aug 30, 04:28",
-      "flag": "kaspersky{w4sm_3lectrif1ed_7d19ae15}",
-      "blurb": "The password check is a WASM RC4 whose key is derived from the page's own source and CSP hash, gated behind ~56 anti-Node fingerprint checks. Run the real Electron renderer, then solve the RC4 algebraically."
-    },
-    {
-      "slug": "chroot-silver",
-      "name": "chroot-silver",
-      "category": "misc",
-      "subtitle": "sandbox escape",
-      "points": 64,
-      "solved": "Aug 30, 03:14",
-      "flag": "kaspersky{a9f61e72-504f-4d36-8094-be8147e05f42}",
-      "blurb": "`SOCAT_PPID=1` gives it away: the jailer lives outside the jail. Build a musl PIE, upload it with all-3-digit octal `printf`, run via the musl loader, and escape through a saved root fd."
-    },
-    {
-      "slug": "sudokrypt",
-      "name": "Sudokrypt",
-      "category": "crypto",
-      "subtitle": "custom cipher",
-      "points": 50,
-      "solved": "Aug 30, 03:49",
-      "flag": "kaspersky{D4mn_1m_s0_c00l!!_1_c4n_d0_sud0ku_n0w_st4cy_t0t4lly_g01ng_t0_pr0m_w1th_m3}",
-      "blurb": "The Feistel and sudoku layers are keyless and publicly invertible. Two design leaks recover both secret permutations, and a shared block counter exposes the spectral keystream as a degree-56 linear recurrence."
-    },
-    {
-      "slug": "shiny-sweetie-curve",
-      "name": "Shiny Sweetie Curve",
-      "category": "crypto",
-      "subtitle": "elliptic curve",
-      "points": 50,
-      "solved": "Aug 30, 03:15",
-      "flag": "kaspersky{g4mbl1ng_1s_b4d_t4k3_c4r3_0f_y0urs3lf}",
-      "blurb": "A fresh random curve every round, only x-coordinates leaked. X-only addition identities plus a resultant-and-GCD trick recover the secret prime, then `a`, `b`, and the step point."
-    },
-    {
-      "slug": "biblocker",
-      "name": "biblocker",
-      "category": "rev",
-      "subtitle": "SIGSEGV \"TPM\"",
-      "points": 50,
-      "solved": "Aug 30, 01:57",
-      "flag": "kaspersky{s1gn4l5_pr0v1d3d_tPm_k1nd4_sus}",
-      "blurb": "The \"Trusted Potato Module\" is a SIGSEGV handler that hands back AES key material derived from the fault address via XTEA. Re-implement the CRC and XTEA statically. The key is `target_key XOR mask`."
-    },
-    {
-      "slug": "censored",
-      "name": "Censored",
-      "category": "crypto",
-      "subtitle": "HNP / lattice",
-      "points": 50,
-      "solved": "Aug 29, 22:01",
-      "flag": "kaspersky{N0w_4ll_tH3_4nsW3rs_4r3_1n_y0ur_h4nds!!!!}",
-      "blurb": "Each Schnorr signature ships a \"diagnostic\" blob whose XOR masks are computable from public data. Unmask it for ~16 bits of nonce per signature, then solve the Hidden Number Problem by lattice reduction."
+      "slug": "dxt",
+      "handle": "DxT",
+      "avatar": "images/dxt_logo.png",
+      "tag": "newest member",
+      "focus": ["OSINT"],
+      "bio": "Newest member of the team. OSINT focus.",
+      "events": []
     }
   ]
 }

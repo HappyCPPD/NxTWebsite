@@ -308,6 +308,15 @@ marked.use({
       toc.push({ id, text: bare, level });
       return `<h${level} id="${id}"><a class="wu-anchor" href="#${id}" aria-hidden="true">#</a>${text}</h${level}>\n`;
     },
+    /* `![alt](src "WxH")` - the title doubles as an intrinsic-size hint so the
+     * page reserves space and doesn't shift when the image loads. A normal
+     * title string still renders as a title attribute. */
+    image(href, title, text) {
+      const dim = (title || '').match(/^(\d+)x(\d+)$/);
+      const wh = dim ? ` width="${dim[1]}" height="${dim[2]}"` : '';
+      const t = !dim && title ? ` title="${esc(title)}"` : '';
+      return `<img src="${esc(href)}" alt="${esc(text)}"${wh}${t} loading="lazy">`;
+    },
   },
 });
 

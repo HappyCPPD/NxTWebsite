@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RULES · TFC CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="The flag-format section of the site rules page uses a real flag as its example. Visiting the page marks the challenge solved." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>rules</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-misc">misc</span>
+      <span class="wu-pts">128 pts</span>
+    </div>
+    <h1>RULES <span>read the rules page</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">TFCCTF{M4ny_ch4ng3s...m0r3_3ff0rt}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>A baby misc challenge with no attachment. The title is the whole hint: the flag
+is on the competition&#39;s own rules page.</p>
+<h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
+<p>The rules page has a section on flag format. It states that flags normally look
+like <code>TFCCTF{anything_goes_here}</code> and gives a worked example, and that example
+string is itself the challenge flag:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">TFCCTF{M4ny_ch4ng3s...m0r3_3ff0rt}</code></pre>
+      
+    </figure><p>Opening the rules page was enough to flip <code>RULES</code> to solved on the dashboard; the
+account total moved from 229 points / 1 flag to 357 points / 2 flags.</p>
+<h2 id="rules-worth-remembering-for-the-rest-of-the-ctf"><a class="wu-anchor" href="#rules-worth-remembering-for-the-rest-of-the-ctf" aria-hidden="true">#</a>Rules worth remembering for the rest of the CTF</h2>
+<ul>
+<li>Flags are <code>TFCCTF{...}</code> unless a challenge says otherwise.</li>
+<li>The Open division allows unrestricted AI use.</li>
+<li>The Classic division allows only light AI assistance, no delegating the actual
+solving.</li>
+<li>Both divisions share one prize scoreboard; the per-division boards are only for
+comparison within a division.</li>
+</ul>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">TFCCTF{M4ny_ch4ng3s...m0r3_3ff0rt}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#solution">Solution</a></li><li><a href="#rules-worth-remembering-for-the-rest-of-the-ctf">Rules worth remembering for the rest of the CTF</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="math-or-meth.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">MATH OR METH?</span></a>
+    <a class="wu-pager-link wu-pager-next" href="cer-frumos.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">CER FRUMOS</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=18"></script>
+</body>
+</html>

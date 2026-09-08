@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FISHING NOT PHISHING · TFC CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="Reverse image search identifies the trawler STEAUA DE MARE 1. Global Fishing Watch gives the September 2023 voyage from Constanta, the first fishing event, and the coordinates for a haversine distance." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>fishing-not-phishing</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-osint">osint</span>
+    </div>
+    <h1>FISHING NOT PHISHING <span>vessel tracking via AIS</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">TFCCTF{264900119_constanta_21.09.2023_07:17_AM_15.6}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>A cropped photograph of a vessel. Recover its <button type="button" class="wu-gloss" data-def="Maritime Mobile Service Identity: a 9-digit number identifying a ship's radio and AIS transponder.">MMSI</button>, its departure port, the date
+and UTC time it started fishing, and the port-to-fishing-ground distance. The
+challenge ran in September 2026 and says &quot;three years ago, during this same
+month&quot;, so the window is <strong>September 2023</strong>.</p>
+<p><img src="../images/tfc-fishing-not-phishing.jpg" alt="The cropped challenge photo: a partial name board on the bow, blue hull, white superstructure, blue external stairway" width="326" height="200" loading="lazy"></p>
+<p><em>The only handholds are the partial lettering on the bow and the hull profile.</em></p>
+<h2 id="identifying-the-vessel"><a class="wu-anchor" href="#identifying-the-vessel" aria-hidden="true">#</a>Identifying the vessel</h2>
+<p>A reverse image search points to the Romanian research trawler <strong>STEAUA DE MARE
+1</strong>. Other photos confirm it on distinctive features: dark-blue hull with white
+superstructure, five wheelhouse windows, a blue external stairway, yellow deck
+cranes, matching porthole layout. The ShipSpotting entry gives:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">Name: STEAUA DE MARE 1
+IMO:  8008709
+MMSI: 264900119</code></pre>
+      
+    </figure><h2 id="reconstructing-the-voyage"><a class="wu-anchor" href="#reconstructing-the-voyage" aria-hidden="true">#</a>Reconstructing the voyage</h2>
+<p>Search MMSI <code>264900119</code> on Global Fishing Watch and filter to September 2023.
+There is one voyage: departure from <strong>Constanta, Romania</strong> on 21 September 2023.
+The first fishing event on that voyage:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">start:        2023-09-21T07:17:06Z
+event marker: 44.0637, 28.9227</code></pre>
+      
+    </figure><p>Constanta port-visit marker: <code>44.1101, 28.7383</code>.</p>
+
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <p>The first fishing event overlaps the tail of Global Fishing Watch&#39;s wide
+port-visit window for Constanta. Skip it as &quot;still in port&quot; and you take the
+next event instead, which gives the wrong time of <code>01:13 PM</code>. The correct answer
+is the earlier <code>07:17</code>.</p>
+
+    </div>
+<h2 id="distance"><a class="wu-anchor" href="#distance" aria-hidden="true">#</a>Distance</h2>
+<p>Great-circle distance between the two markers by the <button type="button" class="wu-gloss" data-def="A formula for the great-circle distance between two latitude/longitude points on a sphere.">haversine</button> formula, Earth
+radius 6371 km:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">Constanta port:  44.1101, 28.7383
+Fishing marker:  44.0637, 28.9227
+distance:        15.6056 km  -&gt;  15.6</code></pre>
+      
+    </figure><p>The timestamp is already UTC; <code>07:17</code> in 12-hour form is <code>07:17 AM</code>.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">TFCCTF{264900119_constanta_21.09.2023_07:17_AM_15.6}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#identifying-the-vessel">Identifying the vessel</a></li><li><a href="#reconstructing-the-voyage">Reconstructing the voyage</a></li><li><a href="#distance">Distance</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="mid.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">mid</span></a>
+    <a class="wu-pager-link wu-pager-next wu-pager-index" href="../writeups.html"><span class="wu-pager-dir">Index</span><span class="wu-pager-name">All writeups</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=18"></script>
+</body>
+</html>

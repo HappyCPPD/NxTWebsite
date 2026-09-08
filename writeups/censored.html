@@ -7,7 +7,7 @@
 <meta name="description" content="Each Schnorr signature ships a &quot;diagnostic&quot; blob whose XOR masks are computable from public data. Unmask it for ~16 bits of nonce per signature, then solve the Hidden Number Problem by lattice reduction." />
 <link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
 <link rel="stylesheet" href="../css/fonts.css?v=2" />
-<link rel="stylesheet" href="../css/styles.css?v=17" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -264,7 +264,7 @@ error is bounded by ±X rather than [0, 2X]).</p>
       <pre id="code-10"><code class="language-text">v = (x_0·Q, x_1·Q, ..., x_{n-1}·Q, -sk·X, X·Q)</code></pre>
       
     </figure><p>Of length: <code>sqrt(n · (X·Q)² + (sk·X)² + (X·Q)²) ≈ sqrt(n+2) · X · Q</code>.</p>
-<p>LLL finds a short vector in the lattice. Scanning rows where the last column
+<p><button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button> finds a short vector in the lattice. Scanning rows where the last column
 equals <code>X·Q</code> yields the secret key at column <code>n</code> (divided by <code>X</code>).</p>
 <hr>
 <h2 id="forging-the-signature"><a class="wu-anchor" href="#forging-the-signature" aria-hidden="true">#</a>Forging the Signature</h2>
@@ -352,6 +352,6 @@ centering observation rows around 0 so entries are bounded by X rather than Q.</
   </div>
 </footer>
 
-<script src="../js/script.js?v=17"></script>
+<script src="../js/script.js?v=18"></script>
 </body>
 </html>

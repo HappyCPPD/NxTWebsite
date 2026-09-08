@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>1+1 · TFC CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="Ten samples `x_i = p * q_i + r_i` share the secret `p` (the flag) with small noise `r_i`. A Howgrave-Graham AGCD lattice with the right scale recovers `q_0`, and `p = x_0 / q_0`." />
+<link rel="icon" href="../images/Logo-nobg.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>one-plus-one</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-crypto">crypto</span>
+    </div>
+    <h1>1+1 <span>approximate GCD</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">TFCCTF{nice_crypto_skillz_kid_you_will_be_great_one_day_af56c3}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>A SageMath generator and its output:</p>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">rbit = <span class="hljs-number">444</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">pbit = <span class="hljs-number">512</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">p = bytes_to_long(<span class="hljs-built_in">open</span>(<span class="hljs-string">&#x27;flag&#x27;</span>, <span class="hljs-string">&#x27;rb&#x27;</span>).read())</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">xs = [p * getPrime(pbit) + random.randint(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>**rbit) <span class="hljs-keyword">for</span> _ <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">10</span>)]</span></span></code></pre>
+      
+    </figure><p>So each sample is</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">x_i = p * q_i + r_i</code></pre>
+      
+    </figure><p>with a shared secret <code>p</code> (the flag as a big-endian integer, about 503 bits), a
+random 512-bit prime <code>q_i</code>, and small noise <code>r_i &lt; 2**444</code>. Ten samples, one
+secret. This is the <button type="button" class="wu-gloss" data-def="Recovering a hidden common factor p from samples p*q_i + r_i with small noise r_i, typically via a lattice.">approximate GCD</button> problem.</p>
+<h2 id="solution-howgrave-graham-agcd-lattice"><a class="wu-anchor" href="#solution-howgrave-graham-agcd-lattice" aria-hidden="true">#</a>Solution: Howgrave-Graham AGCD lattice</h2>
+<p>Build the <code>(t+1) x (t+1)</code> lattice</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">    [ K    x_1    x_2   ...   x_t ]
+    [ 0   -x_0     0    ...    0  ]
+B = [ 0     0    -x_0   ...    0  ]
+    [ ...                        ]
+    [ 0     0      0    ...  -x_0 ]</code></pre>
+      
+    </figure><p>with <code>K = 2**440</code>, slightly above the noise bound. The vector <code>(q_0, q_1, ..., q_t)</code>
+maps under <code>B</code> to</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">v = (q_0 * K,  q_0*r_1 - q_1*r_0,  ...,  q_0*r_t - q_t*r_0)</code></pre>
+      
+    </figure><p>because the <code>p * q</code> terms cancel. Each later entry has norm around
+<code>2**512 * 2**444 = 2**956</code>, far below the lattice determinant, so <button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button> finds <code>v</code>.</p>
+
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <p>The scale <code>K</code> is the whole game. Too large and LLL misses the target vector;
+too small and the target is not short enough to be first. <code>K = 2**440</code> fits this
+parameter set (<code>rbit = 444</code>, <code>pbit = 512</code>); other noise sizes need a different
+exponent.</p>
+
+    </div>
+<p>Recover <code>p</code> from the first reduced vector:</p>
+<figure class="wu-code" data-lines="12">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># SageMath</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">x0 = xs[<span class="hljs-number">0</span>]; t = <span class="hljs-number">9</span>; K = <span class="hljs-number">2</span>^<span class="hljs-number">440</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">M = matrix(ZZ, t + <span class="hljs-number">1</span>, t + <span class="hljs-number">1</span>)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">M[<span class="hljs-number">0</span>, <span class="hljs-number">0</span>] = K</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"><span class="hljs-keyword">for</span> j <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">1</span>, t + <span class="hljs-number">1</span>):</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">    M[<span class="hljs-number">0</span>, j] = xs[j]</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    M[j, j] = -x0</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">v = M.LLL()[<span class="hljs-number">0</span>]</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">q0 = <span class="hljs-built_in">abs</span>(v[<span class="hljs-number">0</span>]) // K</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">p  = x0 // q0</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"><span class="hljs-built_in">print</span>(<span class="hljs-built_in">int</span>(p).to_bytes((p.bit_length() + <span class="hljs-number">7</span>) // <span class="hljs-number">8</span>, <span class="hljs-string">&#x27;big&#x27;</span>).decode())</span></span></code></pre>
+      
+    </figure><div class="wu-session">
+      <div class="wu-session-bar">
+        <span class="wu-session-label">session</span>
+        <button type="button" class="wu-session-replay">replay</button>
+      </div>
+      <pre class="wu-session-body"><span class="wu-term-line" data-kind="cmd"><span class="wu-term-prompt">$</span><span class="wu-term-cmd">sage solve.sage</span></span>
+<span class="wu-term-line" data-kind="out">TFCCTF{nice_crypto_skillz_kid_you_will_be_great_one_day_af56c3}</span></pre>
+    </div><p>Verification: for every <code>i</code>, <code>x_i mod p</code> lies in <code>[1, 2**444)</code> and
+<code>(x_i - r_i) / p</code> is a 512-bit number.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">TFCCTF{nice_crypto_skillz_kid_you_will_be_great_one_day_af56c3}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#solution-howgrave-graham-agcd-lattice">Solution: Howgrave-Graham AGCD lattice</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="cer-frumos.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">CER FRUMOS</span></a>
+    <a class="wu-pager-link wu-pager-next" href="mid.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">mid</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/Logo-nobg.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=18"></script>
+</body>
+</html>
