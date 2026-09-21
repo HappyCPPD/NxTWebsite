@@ -272,6 +272,7 @@
       "tag": "team lead",
       "focus": ["Web", "Pwn", "Reverse"],
       "bio": "Team lead. Web, binary exploitation, and reverse engineering.",
+      "linkedin": "https://www.linkedin.com/in/andrei-yeo-qiu-shi-799b25386/",
       "events": []
     },
     {
@@ -281,6 +282,7 @@
       "tag": "newest member",
       "focus": ["OSINT"],
       "bio": "Newest member of the team. OSINT focus.",
+      "linkedin": "https://www.linkedin.com/in/sanjeev-kumar-senthil-kumar-6683023a6/",
       "events": []
     }
   ]
