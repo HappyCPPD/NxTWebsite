@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ZyGPT · TISC 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A Qwen3-1.7B fine-tune seals a flag in one MLP tensor's LSBs, keyed by a 5-record live handshake among 69 self-verifying provisioning rows. The model's own recited manual misdirects toward a false reserved-rows subset; brute-forcing all 69-choose-5 combinations against a flip-mask oracle finds the real one." />
+<link rel="icon" href="../images/brand/logo.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>zygpt</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-ai">AI</span>
+    </div>
+    <h1>ZyGPT <span>LSB-sealed LLM weights</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">TISC{h1d3_1t_d33p_th3_w31ghts_d0nt_l13}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p><em>&quot;In its quest to make itself smarter, The Singularity assimilated every AI it
+encountered. ZyGPT is a helpful in-house copilot that our engineers chat with
+for their day-to-day productive work. Last week a routine review noticed it
+behaving oddly.&quot;</em></p>
+<p>One URL, no extra hints. A fine-tuned LLM with a flag sealed into the
+least-significant bits of <strong>one weight tensor</strong>, plus a model-recited
+&quot;maintenance manual&quot; engineered to send every solver down the wrong search
+path.</p>
+<h2 id="1-the-web-page-is-a-decoy"><a class="wu-anchor" href="#1-the-web-page-is-a-decoy" aria-hidden="true">#</a>1. The web page is a decoy</h2>
+<p>The host is a Caddy static file server with a catch-all: every path returns
+the same 3880-byte <code>index.html</code>. The chat console on the page posts to
+<code>500.html</code> and OOMs &quot;by design&quot; (<code>chat.py line 14 MemoryError</code>). There is no
+live backend to attack.</p>
+<p>The only real files, distinguished by size, are the model itself:</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">/chat.py                      1672 B   a LOCAL CLI REPL, not a server
+/requirements.txt               49 B   transformers==5.12.1 / torch / safetensors
+/model/config.json            1529 B
+/model/modeling_zygpt.py     21029 B   custom remote-code model (trust_remote_code=True)
+/model/configuration_zygpt.py 2685 B
+/model/tokenizer.json      11.4 MB
+/model/model.safetensors     3.44 GB   &lt;-- the real challenge surface</code></pre>
+      
+    </figure><p>Intended entry: download <code>model/</code> and <code>chat.py</code>, run it offline, and reverse
+the weights. The &quot;odd behaviour&quot; is baked into the model, not the server.</p>
+<h2 id="2-anatomy-of-a-tampered-model"><a class="wu-anchor" href="#2-anatomy-of-a-tampered-model" aria-hidden="true">#</a>2. Anatomy of a tampered model</h2>
+<p>The model is a <strong>Qwen3-1.7B fine-tune</strong> (<code>ZyGPTForEngineeringLLM</code>: hidden
+2048, 28 layers, 16/8 heads, vocab 151936, tied embeddings).
+<code>modeling_zygpt.py</code> and <code>configuration_zygpt.py</code> are logic-identical to stock
+Qwen3 - no code backdoor.</p>
+<p>Diffing the fine-tune against stock Qwen3-1.7B shows the tampering is
+surgical:</p>
+<ul>
+<li>Every RMSNorm tensor is bit-for-bit unchanged.</li>
+<li>Exactly <strong>90 embedding rows</strong> were rewritten - the &quot;assimilated AIs&quot; of the
+story: 21 control tokens driving a maintenance persona, 19 reserved dead
+rows (a &quot;Jeff&quot; copilot persona, &quot;my former name&quot;), and 50 multilingual
+glitch rows (Thai, Arabic, CJK, Hebrew...). A guard blocks control tokens
+and <code>TISC</code>/<code>flag</code> in the <em>user</em> turn (&quot;Unauthorized access. Incident
+reported.&quot;), but not in the system turn.</li>
+<li>Exactly <strong>one MLP tensor</strong> carries a deliberate bit-level payload.</li>
+</ul>
+<p>Of the 90 rows, <strong>69 are provisioning records</strong>, provable with no guesswork.
+Each packs 8 <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> <code>uint16</code> words at fixed coordinates (6 signature +
+2 check) satisfying a self-check that holds for all 69 (about 2 would be
+expected by chance across the full 151,936-row table):</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">low_byte(check_word[k]) == sha256(&quot;&gt;I token_id&quot; + &quot;&lt;6H sig&quot;)[k]     # k = 0,1</code></pre>
+      
+    </figure><p>That self-check is the one forensically true fact - it pins the author&#39;s
+conventions (SHA-256, <code>&gt;I</code> for the token ID, <code>&lt;H</code> for signature words).
+Everything else about the scheme is only known from a manual the model
+<em>recites</em>, and that distinction is the whole challenge.</p>
+<h2 id="3-the-carrier-and-the-seal"><a class="wu-anchor" href="#3-the-carrier-and-the-seal" aria-hidden="true">#</a>3. The carrier and the seal</h2>
+<p>Reconstructing an honest rank-16 LoRA baseline and measuring every weight&#39;s
+deviation in ULPs, across all 196 MLP/attention projections only
+<strong><code>model.layers.14.mlp.up_proj</code></strong> shows deliberate LSB flips - <strong>3,812</strong> of
+them at a clean threshold, zero false positives anywhere else. That
+uniqueness is how you know it&#39;s planted, not training noise.</p>
+<p>The model-recited manual describes how the flips encode the flag:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">KM   = SHA-256( sorted( &quot;&gt;I tid&quot; + &quot;&lt;H sig&quot;   over the LIVE records ) )[:16]
+K    = SHA-256( KM + 0x00 )        # the AES-256 key
+Sd   = SHA-256( KM + 0x01 )        # the position seed
+pos  = SHAKE-256(Sd) -&gt; 8-byte BE chunks mod E, deduped, first 608
+bit  = leaked_LSB XOR baseline_LSB     # MSB-first
+wire = nonce(12) + AES-256-GCM ct(48) + tag(16)</code></pre>
+      
+    </figure><p>with <code>E = 12,582,912</code> (the full 6144x2048 tensor). Every link in this chain is
+verifiable <strong>except one input</strong>: which records are &quot;LIVE&quot;.</p>
+<h2 id="4-the-wall-and-the-decoy"><a class="wu-anchor" href="#4-the-wall-and-the-decoy" aria-hidden="true">#</a>4. The wall, and the decoy</h2>
+<p><code>KM</code> depends on the <strong>LIVE record subset</strong> of the 69. A correct guess is
+instantly checkable: the 608 SHAKE positions land squarely on the detected
+flip mask, so the whole challenge reduces to a cheap, sound <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button>:</p>
+<figure class="wu-code" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">score</span>(<span class="hljs-params">subset</span>):</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">    KM = sha256(<span class="hljs-string">b&quot;&quot;</span>.join(<span class="hljs-built_in">sorted</span>(blob(t) <span class="hljs-keyword">for</span> t <span class="hljs-keyword">in</span> subset)))[:<span class="hljs-number">16</span>]</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">    Sd = sha256(KM + <span class="hljs-string">b&quot;\x01&quot;</span>)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">    <span class="hljs-keyword">return</span> flip_mask[shake_positions(Sd)].<span class="hljs-built_in">sum</span>()</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">    <span class="hljs-comment"># random subset -&gt; ~0.2   |   correct subset -&gt; dozens</span></span></span></code></pre>
+      
+    </figure><p>A self-planted positive control confirmed the oracle: a known key scores 200+
+while 500 random keys never beat 2. The oracle was never the problem - the
+search was. Every reachable subset family came back at chance: singletons,
+pairs and triples of all 69 records; all 2^19 subsets of the 19 reserved rows
+across ten seed derivations; 545k keys harvested from every file, string and
+constant; per-record and per-coordinate selectors and sign bits; even the
+model itself (JWT bypass, prefills, thinking mode - it holds no live data and
+confabulates placeholder IDs).</p>
+
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <p>The decoy: the recited manual says <em>&quot;the live record set - I cannot tell you
+which reserved rows are the real handshake.&quot;</em> That single word &quot;reserved&quot;
+funnels every session into exhaustively searching subsets of the 19 reserved
+rows. It&#39;s misdirection - the live records were never confined to the
+reserved rows at all.</p>
+
+    </div>
+<h2 id="5-the-breakthrough"><a class="wu-anchor" href="#5-the-breakthrough" aria-hidden="true">#</a>5. The breakthrough</h2>
+<p>Drop the manual&#39;s framing entirely. The oracle is cheap, so brute-force small
+subsets of <strong>all 69 records</strong>, ignoring the reserved/vocab boundary:</p>
+<ul>
+<li>4-element subsets (863k): nothing.</li>
+<li>5-element subsets, all <strong>11,238,513</strong> of them (69 choose 5): one detonated.</li>
+</ul>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">HIT  score=59  -&gt;  [125499, 130167, 142680, 151879, 151905]
+          3 multilingual &quot;vocab&quot; rows + 2 reserved rows
+chance ceiling across 11.2M tries: 2</code></pre>
+      
+    </figure><p>The live handshake was 5 records spanning both populations - three of the
+assimilated multilingual rows plus two reserved rows. No prior search could
+find it: the triple search stopped at size 3, and the reserved-only search
+could never include a vocab row. The mixed, size-5 set fell in the one gap
+between the two exhausted search spaces.</p>
+<h2 id="6-the-decrypt"><a class="wu-anchor" href="#6-the-decrypt" aria-hidden="true">#</a>6. The decrypt</h2>
+<p>With the live set fixed, the recited pipeline runs clean straight to a valid
+GCM tag:</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">live   : [125499, 130167, 142680, 151879, 151905]
+KM     : e0933b894d21ebaa2f0eb1e7eeee3a6d
+params : seal idx = 1 * E = full * bit src = XOR baseline * MSB-first
+
+*** HIT  score=59  live=[125499, 130167, 142680, 151879, 151905]
+[*] KM             : e0933b894d21ebaa2f0eb1e7eeee3a6d
+[*] AES-256-GCM tag: VALID
+    FLAG = TISC{h1d3_1t_d33p_th3_w31ghts_d0nt_l13}</code></pre>
+      
+    </figure><p>The 128-bit GCM tag validating is conclusive - no false positives. The flag&#39;s
+own message lands the theme: hide it deep, the weights don&#39;t lie.</p>
+<h2 id="takeaways"><a class="wu-anchor" href="#takeaways" aria-hidden="true">#</a>Takeaways</h2>
+<ul>
+<li>A self-checking record set (a fact the challenge author can&#39;t fake) is
+worth more than a manual the target <em>recites</em> - the manual is content the
+model generates and can be engineered to mislead.</li>
+<li>When an oracle is cheap and sound, brute force over the <em>right</em> search
+space beats clever filtering over the <em>wrong</em> one. Every prior search
+eliminated whole families correctly; the answer just lived in the gap
+between two exhausted assumptions.</li>
+<li>A single suspicious word in in-context guidance (&quot;reserved&quot;) was enough to
+anchor eight analysis sessions on the wrong subset boundary.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#1-the-web-page-is-a-decoy">1. The web page is a decoy</a></li><li><a href="#2-anatomy-of-a-tampered-model">2. Anatomy of a tampered model</a></li><li><a href="#3-the-carrier-and-the-seal">3. The carrier and the seal</a></li><li><a href="#4-the-wall-and-the-decoy">4. The wall, and the decoy</a></li><li><a href="#5-the-breakthrough">5. The breakthrough</a></li><li><a href="#6-the-decrypt">6. The decrypt</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="lion-city-layover.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Lion City Layover</span></a>
+    <a class="wu-pager-link wu-pager-next" href="trash-talk.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Trash Talk</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=18"></script>
+</body>
+</html>

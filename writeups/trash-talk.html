@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Trash Talk · TISC 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A Nintendo GTS emulator hides messages in Pokemon nickname trash bytes across two game generations. A Gen 4 Porygon's trash reveals the XOR key for Gen 5 Porygon2 trash (recipient PIDs plus an OT-name instruction to trade a female Buizel), and performing that trade unlocks a hidden Porygon-Z whose trash XORs with its own PID into the flag." />
+<link rel="icon" href="../images/brand/logo.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>trash-talk</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-rev">rev</span>
+    </div>
+    <h1>Trash Talk <span>GTS Pokemon trash-byte stego</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">TISC{p0lyg0n4l_p1d_ch41n_4cr0ss_g3ns}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p><em>&quot;The Singularity&#39;s agents have been passing messages that we urgently need to
+intercept. We&#39;ve traced their traffic to <code>chals.tisc26.ctf.sg:31259</code>. They
+seem to be taking it chill though, seemingly playing Pokemon Platinum.&quot;</em></p>
+<p>The server is a Nintendo WFC Global Terminal Service (<button type="button" class="wu-gloss" data-def="Global Terminal Service: Nintendo's online Pokemon trading system for the DS era, built on WFC (Wi-Fi Connection).">GTS</button>) emulator seeded
+with agent Pokemon. The &quot;messages&quot; are hidden in Pokemon <strong>nickname trash
+bytes</strong> - the leftover bytes after a name&#39;s <code>FF FF</code> terminator, a classic
+Gen 4/5 GTS steganography channel. It&#39;s a three-stage PID chain that spans
+two game generations:</p>
+<ol>
+<li><strong>Gen 4 (Platinum, <code>pokemondpds</code>)</strong> Porygon trash spells the decode rule
+for the next layer.</li>
+<li><strong>Gen 5 (Black/White, <code>syachi2ds</code>)</strong> Porygon2 trash gives three
+<strong>recipient PIDs</strong>, and the trainer OT names spell the instruction
+&quot;OFFER ME BUIZEL Lv30-40&quot;.</li>
+<li>Actually <strong>performing that trade</strong> (offering a female Buizel Lv 30-40 to
+each recipient PID via <code>exchange.asp</code>) reveals a <strong>hidden Porygon-Z</strong>
+whose trash, XOR&#39;d with its own PID, is one third of the flag each.</li>
+</ol>
+<h2 id="recon"><a class="wu-anchor" href="#recon" aria-hidden="true">#</a>Recon</h2>
+<p>The root path just responds <code>ok</code> (a health check) on <code>Microsoft-IIS/6.0</code>. The
+real target is the GTS handlers, addressed by DS-console <code>Host</code> headers:</p>
+<ul>
+<li><code>Host: gamestats2.gs.nintendowifi.net</code> + path <code>/pokemondpds/...</code> -&gt; <strong>Gen 4</strong></li>
+<li><code>Host: gamestats2.gs.nintendowifi.net</code> + path <code>/syachi2ds/web/worldexchange/...</code> -&gt; <strong>Gen 5</strong></li>
+</ul>
+<h3 id="gts-request-format"><a class="wu-anchor" href="#gts-request-format" aria-hidden="true">#</a>GTS request format</h3>
+<p>Every GTS request is a two-step, lightly-authenticated HTTP GET:</p>
+<ol>
+<li><code>GET /&lt;path&gt;?pid=&lt;PID&gt;</code> returns a per-request <strong>token</strong> string.</li>
+<li><code>GET /&lt;path&gt;?pid=&lt;PID&gt;&amp;hash=&lt;h&gt;&amp;data=&lt;d&gt;</code> where <code>h = sha1(SALT + token)</code>
+(<code>SALT = &quot;HZEdGCzcGGLvguqUEKQN&quot;</code>), and <code>d = base64url(be32(sum(data3) ^ 0x2db842b2) + data3)</code>
+with <code>data3 = le32(pid) + le32(len(payload)) + payload</code>.</li>
+</ol>
+<p>Responses carry a 40-hex sha1 signature trailer, <code>sha1(SALT + b64url(status+body) + SALT)</code>:
+an integrity check over plaintext already visible, not a hidden channel.</p>
+<h3 id="pkm-record-crypto"><a class="wu-anchor" href="#pkm-record-crypto" aria-hidden="true">#</a>PKM record crypto</h3>
+<p>Each 296-byte GTS record embeds a 236-byte encrypted PKM. Decryption:
+<code>personality</code> (PID) and <code>checksum</code> seed an LCG (<code>x = x*0x41C64E6D + 0x6073</code>);
+XOR-stream-decrypt the four 32-byte blocks, then unshuffle them using
+<code>(PID &amp; 0x3E000) &gt;&gt; 13</code>. Block 2 is the nickname (22 bytes), block 3 is the OT
+name (16 bytes). Both are UTF-16LE, terminated by <code>FF FF</code> - and the bytes
+after the terminator are attacker-controllable &quot;trash&quot;.</p>
+<p><code>search.asp</code> (payload = <code>u16 species + [gender, minLv, maxLv, 0, count]</code>) is
+the only enumeration primitive; it rejects <code>species &lt; 1</code> and caps results at
+7.</p>
+<h2 id="stage-1-gen-4-the-decode-rule"><a class="wu-anchor" href="#stage-1-gen-4-the-decode-rule" aria-hidden="true">#</a>Stage 1: Gen 4, the decode rule</h2>
+<p>Searching Gen 4 for Porygon (species 137) returns 10 agent records. Their
+nickname trash, ordered by a per-record index byte (offset <code>0xF9</code>),
+concatenates to:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">G3N5_BL4CKWH1T3;P0RYG0N2_TR4SH=P1D_L3_X0R_K;K=F62ECE7B</code></pre>
+      
+    </figure><p>De-leeted: &quot;Gen 5 Black/White; Porygon2 trash = PID_LE XOR K; K = F62ECE7B&quot;.
+So the next layer lives in Gen 5, and its trash decodes to a PID via
+<button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> XOR with <code>K</code>.</p>
+
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <p><code>K</code> is <strong>hexadecimal</strong>. <code>K=F62ECE7B</code> is obviously hex, but earlier in the
+event the server rotates <code>K</code> in place - an older capture showed
+<code>K=99522249</code>, which <em>looks</em> decimal. Parsing that as decimal derives
+completely wrong PIDs. <code>K</code> rotates every so often, but the decoded PIDs are
+invariant - always re-derive <code>K</code> live.</p>
+
+    </div>
+<h2 id="stage-2-gen-5-recipient-pids-and-the-instruction"><a class="wu-anchor" href="#stage-2-gen-5-recipient-pids-and-the-instruction" aria-hidden="true">#</a>Stage 2: Gen 5, recipient PIDs and the instruction</h2>
+<p>Searching Gen 5 for Porygon2 (species 233) returns three agent records. The
+trainer OT names spell the message, and the nickname trash decodes to a
+recipient PID:</p>
+<table>
+<thead>
+<tr>
+<th>OT name</th>
+<th>de-leet</th>
+<th>nick trash (LE)</th>
+<th>XOR K -&gt; recipient PID</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>0FF3R_M</code></td>
+<td>OFFER ME</td>
+<td><code>a950b911</code></td>
+<td><code>0xE7979ED2</code></td>
+</tr>
+<tr>
+<td><code>BU1Z3L</code></td>
+<td>BUIZEL</td>
+<td><code>b4673640</code></td>
+<td><code>0xB618A9CF</code></td>
+</tr>
+<tr>
+<td><code>Lv30-40</code></td>
+<td>Lv30-40</td>
+<td><code>218ad22b</code></td>
+<td><code>0xDDFC445A</code></td>
+</tr>
+</tbody></table>
+<p>So the intercepted instruction is &quot;OFFER ME BUIZEL Lv30-40&quot;, addressed to
+three PIDs.</p>
+<figure class="wu-code" data-lines="11">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> gts5, pkm2, struct</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">K = <span class="hljs-number">0xF62ECE7B</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">body = gts5.search(<span class="hljs-number">233</span>, gender=<span class="hljs-number">3</span>, count=<span class="hljs-number">7</span>).content[<span class="hljs-number">2</span>:-<span class="hljs-number">40</span>]</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-built_in">len</span>(body)//<span class="hljs-number">296</span>):</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">    rec = body[i*<span class="hljs-number">296</span>:(i+<span class="hljs-number">1</span>)*<span class="hljs-number">296</span>]</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">    _,_,_,bl,_ = pkm2.full_decrypt(rec[:<span class="hljs-number">236</span>])</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    nick = <span class="hljs-built_in">bytes</span>(bl[<span class="hljs-number">2</span>][:<span class="hljs-number">22</span>]); t = nick.find(<span class="hljs-string">b&#x27;\xff\xff&#x27;</span>)</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    otn  = <span class="hljs-built_in">bytes</span>(bl[<span class="hljs-number">3</span>][:<span class="hljs-number">16</span>]); o = otn.find(<span class="hljs-string">b&#x27;\xff\xff&#x27;</span>)</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    trash = nick[t+<span class="hljs-number">2</span>:t+<span class="hljs-number">6</span>]</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">    pid = struct.unpack(<span class="hljs-string">&#x27;&lt;I&#x27;</span>, trash)[<span class="hljs-number">0</span>] ^ K</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">    <span class="hljs-built_in">print</span>(otn[:o].decode(<span class="hljs-string">&#x27;utf-16-le&#x27;</span>), <span class="hljs-built_in">hex</span>(pid))</span></span></code></pre>
+      
+    </figure>
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <p>The recipient PIDs are greater than 2^31. The <code>pid</code> query parameter is parsed
+as a .NET <strong>signed Int32</strong> - sending them unsigned returns <code>HTTP 400 Bad request</code>, which looks like an unsupported endpoint. Send them as <strong>negative
+decimals</strong> instead (<code>0xE7979ED2 -&gt; -409493806</code>, etc.) and <code>get</code>/<code>result</code>/
+<code>info</code>/<code>exchange</code> all work.</p>
+
+    </div>
+<h3 id="the-rabbit-holes"><a class="wu-anchor" href="#the-rabbit-holes" aria-hidden="true">#</a>The rabbit holes</h3>
+<ul>
+<li>Connecting <em>as</em> a recipient PID: <code>get.asp</code>/<code>result.asp</code> return &quot;no Pokemon&quot;
+(<code>0x05</code>). The mailboxes look empty.</li>
+<li>Depositing a matching Buizel via <code>post.asp</code>/<code>post_finish.asp</code>:
+unconditionally auto-swapped to a <code>NOT ME!</code>/<code>XCH@NG3</code> Porygon-Z decoy,
+content-, identity- and signature-blind.</li>
+<li>The message records themselves request <code>RequestedSpecies = 0</code>, so a normal
+trade against <em>them</em> is impossible, and obvious formattings of the taunt
+are all rejected.</li>
+</ul>
+<p>The instruction is meant to be <strong>followed</strong>, against the recipient PIDs, via
+the right endpoint.</p>
+<h2 id="stage-3-perform-the-trade-to-reveal-the-hidden-pokemon"><a class="wu-anchor" href="#stage-3-perform-the-trade-to-reveal-the-hidden-pokemon" aria-hidden="true">#</a>Stage 3: perform the trade to reveal the hidden Pokemon</h2>
+<p>Reading the reference source for <code>exchange.asp</code> is the key insight:</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">csharp</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-csharp">GtsRecord5 result = Database.Instance.GtsDataForUser5(pokedex, targetPid);
+DateTime? searchTime = Database.Instance.GtsGetLastSearch5(pid);
+if (result == null || searchTime == null ||
+    result.TimeDeposited &gt; searchTime || result.IsExchanged != 0) { write 0x02; break; }   // absent/traded
+if (!upload.Validate() || !upload.CanTrade(result)) { write 0x0c; return; }                // can't trade
+...
+response.Write(result.Save(), 0, 296);                                                     // returns the record!</code></pre>
+      
+    </figure><p>Unlike <code>search.asp</code> (filters by species, hides records) and <code>get.asp</code> (hides
+seeded records entirely), <code>exchange.asp</code> fetches any record by PID and
+returns its full 296 bytes - but only if your offer satisfies <code>CanTrade</code>.
+Probing the recipient PIDs returns <code>0x0c</code> (&quot;that Pokemon may not be offered
+for trade&quot;), meaning a real, seeded record is sitting there.</p>
+<p><code>GtsRecord5.CanTrade(other)</code> (<code>this</code> = the offer, <code>other</code> = the hidden
+record):</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">csharp</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-csharp">if (Species          != other.RequestedSpecies) return false;   // offer a BUIZEL (418)
+if (other.RequestedGender != Either &amp;&amp; Gender != other.RequestedGender) return false;  // gender!
+if (!CheckLevels(other.RequestedMinLevel, other.RequestedMaxLevel, Level)) return false; // Lv 30-40
+if (RequestedSpecies != other.Species)          return false;   // request its species</code></pre>
+      
+    </figure><p>The message already gave the first and third conditions: offer a Buizel,
+Lv 30-40.</p>
+
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <p>The one non-obvious condition, and the reason a naive &quot;requested-species
+sweep&quot; fails, is <strong>gender</strong>: the hidden record wants a female Buizel.
+<code>Gender = Either</code> on the offer side is not a wildcard here - it must
+literally equal the record&#39;s <code>RequestedGender</code> (Female).</p>
+
+    </div>
+<p>The winning sequence, per attacker PID <code>P</code>:</p>
+<figure class="wu-code" data-lines="15">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> struct, g5, forge5</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">P = <span class="hljs-number">1234567</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">recips = {<span class="hljs-number">0xE7979ED2</span>:<span class="hljs-string">&#x27;0FF3R_M&#x27;</span>, <span class="hljs-number">0xB618A9CF</span>:<span class="hljs-string">&#x27;BU1Z3L&#x27;</span>, <span class="hljs-number">0xDDFC445A</span>:<span class="hljs-string">&#x27;Lv30-40&#x27;</span>}</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">female_buizel</span>():</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">    blob, lvl = forge5.build_buizel(level=<span class="hljs-number">35</span>)                 <span class="hljs-comment"># legal, passes Validate()</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    rec = <span class="hljs-built_in">bytearray</span>(forge5.build_record(blob, lvl, species=<span class="hljs-number">418</span>,</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">                    req_species=<span class="hljs-number">418</span>, req_gender=<span class="hljs-number">3</span>, req_min=<span class="hljs-number">0</span>, req_max=<span class="hljs-number">0</span>))</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    rec[<span class="hljs-number">0xEE</span>] = <span class="hljs-number">1</span>                                             <span class="hljs-comment"># offered Buizel gender = FEMALE</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">    <span class="hljs-keyword">return</span> <span class="hljs-built_in">bytes</span>(rec)</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">g5.request(P, <span class="hljs-string">&#x27;search.asp&#x27;</span>, struct.pack(<span class="hljs-string">&#x27;&lt;H&#x27;</span>,<span class="hljs-number">418</span>)+<span class="hljs-built_in">bytes</span>([<span class="hljs-number">3</span>,<span class="hljs-number">0</span>,<span class="hljs-number">0</span>,<span class="hljs-number">0</span>,<span class="hljs-number">7</span>]))   <span class="hljs-comment"># set lastSearch &gt; record time</span></span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc"><span class="hljs-keyword">for</span> tgt <span class="hljs-keyword">in</span> recips:</span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">    payload = female_buizel() + struct.pack(<span class="hljs-string">&#x27;&lt;I&#x27;</span>, tgt &amp; <span class="hljs-number">0xffffffff</span>) + <span class="hljs-string">b&#x27;\x00&#x27;</span>*<span class="hljs-number">132</span></span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc">    r = g5.request(P, <span class="hljs-string">&#x27;exchange.asp&#x27;</span>, payload)               <span class="hljs-comment"># 336 bytes back = 296 record + 40 sig</span></span></span></code></pre>
+      
+    </figure><p><code>exchange.asp</code> now returns a full record for each recipient: a <strong>Porygon-Z</strong>
+(species 474, Lv 50), nickname <code>PZ</code>, OT <code>P1D_X0R</code> (&quot;PID_XOR&quot;, the stage-3
+decode hint), with a ~16-byte nickname-trash payload.</p>
+<h3 id="final-decode"><a class="wu-anchor" href="#final-decode" aria-hidden="true">#</a>Final decode</h3>
+<p>The OT hint says XOR with the <strong>PID</strong>, not <code>K</code> this time. The keystream is
+the record&#39;s own PID, little-endian, repeated:</p>
+<figure class="wu-code" data-lines="10">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">data = [                                                         <span class="hljs-comment"># message order idx 40/41/42</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"> (<span class="hljs-number">0xE7979ED2</span>, <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&#x27;86d7c4a4a9eea78babf9a789e6f2c897&#x27;</span>)),</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"> (<span class="hljs-number">0xB618A9CF</span>, <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&#x27;fecd47d5a79d29d8909d7bc4ffda6be9&#x27;</span>)),</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"> (<span class="hljs-number">0xDDFC445A</span>, <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&#x27;3d7792ae2744fcdd5a44fcdd5a44fcdd&#x27;</span>)),</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">]</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">flag = <span class="hljs-string">&#x27;&#x27;</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-keyword">for</span> pid, trash <span class="hljs-keyword">in</span> data:</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    ks = struct.pack(<span class="hljs-string">&#x27;&lt;I&#x27;</span>, pid)</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    flag += <span class="hljs-built_in">bytes</span>(trash[i] ^ ks[i % <span class="hljs-number">4</span>] <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-built_in">len</span>(trash))).rstrip(<span class="hljs-string">b&#x27;\x00&#x27;</span>).decode()</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-built_in">print</span>(flag)</span></span></code></pre>
+      
+    </figure><table>
+<thead>
+<tr>
+<th>recipient</th>
+<th>decoded piece</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>0xE7979ED2</code></td>
+<td><code>TISC{p0lyg0n4l_p</code></td>
+</tr>
+<tr>
+<td><code>0xB618A9CF</code></td>
+<td><code>1d_ch41n_4cr0ss_</code></td>
+</tr>
+<tr>
+<td><code>0xDDFC445A</code></td>
+<td><code>g3ns}</code></td>
+</tr>
+</tbody></table>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">TISC{p0lyg0n4l_p1d_ch41n_4cr0ss_g3ns}</code></pre>
+      
+    </figure><p>&quot;polygonal PID chain across gens&quot;: Porygon (a polygonal Pokemon), a PID chain
+spanning Gen 4 to Gen 5.</p>
+<h2 id="summary-of-the-chain"><a class="wu-anchor" href="#summary-of-the-chain" aria-hidden="true">#</a>Summary of the chain</h2>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">Gen4 Porygon trash  -&gt;  &quot;P0RYG0N2_TR4SH = P1D_LE_XOR_K ; K=&lt;hex&gt;&quot;
+Gen5 Porygon2 trash -&gt;  LE XOR K            = recipient PIDs  (+ OT: &quot;OFFER ME BUIZEL Lv30-40&quot;)
+exchange.asp @ PID  -&gt;  offer female Buizel Lv30-40 -&gt; hidden Porygon-Z (OT: &quot;P1D_X0R&quot;)
+Porygon-Z trash     -&gt;  XOR own PID (LE)    = flag thirds -&gt; TISC{...}</code></pre>
+      
+    </figure><h2 id="lessons"><a class="wu-anchor" href="#lessons" aria-hidden="true">#</a>Lessons</h2>
+<ul>
+<li>Trash bytes after the <code>FF FF</code> name terminator are the whole game - a
+legitimate Gen 4/5 GTS steganography channel.</li>
+<li>Radix matters: an all-digit constant in a hex context (<code>K</code>) is ambiguous -
+test both.</li>
+<li><code>pid</code> is a signed Int32; PIDs at or above 2^31 must be sent as negative
+decimals.</li>
+<li><code>exchange.asp</code> is a by-PID record <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> that only discloses on a valid
+<code>CanTrade</code> - reading the reference source, the offer&#39;s gender (Female, not
+Either) was the final gate.</li>
+<li>The instruction (&quot;OFFER ME BUIZEL Lv30-40&quot;) was meant to be executed, not
+just read.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#recon">Recon</a><ol class="wu-toc-sub"><li><a href="#gts-request-format">GTS request format</a></li><li><a href="#pkm-record-crypto">PKM record crypto</a></li></ol></li><li><a href="#stage-1-gen-4-the-decode-rule">Stage 1: Gen 4, the decode rule</a></li><li><a href="#stage-2-gen-5-recipient-pids-and-the-instruction">Stage 2: Gen 5, recipient PIDs and the instruction</a><ol class="wu-toc-sub"><li><a href="#the-rabbit-holes">The rabbit holes</a></li></ol></li><li><a href="#stage-3-perform-the-trade-to-reveal-the-hidden-pokemon">Stage 3: perform the trade to reveal the hidden Pokemon</a><ol class="wu-toc-sub"><li><a href="#final-decode">Final decode</a></li></ol></li><li><a href="#summary-of-the-chain">Summary of the chain</a></li><li><a href="#lessons">Lessons</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="zygpt.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">ZyGPT</span></a>
+    <a class="wu-pager-link wu-pager-next" href="provenance.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Provenance Expert</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=18"></script>
+</body>
+</html>

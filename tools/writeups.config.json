@@ -1,6 +1,76 @@
 {
   "events": [
     {
+      "id": "tisc-2026",
+      "event": "TISC 2026",
+      "team": "NxT",
+      "attribution": "solo",
+      "result": {
+        "placement": "78th",
+        "field": "of 1,432",
+        "solves": 7,
+        "date": "20 September 2026"
+      },
+      "challenges": [
+        {
+          "slug": "redacted",
+          "name": "REDACTED",
+          "category": "forensics",
+          "subtitle": "PDF redaction bypass",
+          "flag": "TISC{BRO!RedactPDFsProperlyLah!!!}",
+          "blurb": "A five-page PDF's black-box redactions never touched the underlying text. pdftotext -layout recovers a Base64 string hidden under a section titled The Flag, decoding straight to the flag."
+        },
+        {
+          "slug": "printer-secret",
+          "name": "My Printer Has a Secret",
+          "category": "osint",
+          "subtitle": "HCCB stego + tracking dots + OSINT",
+          "flag": "TISC{abn2263123_grey_MS-18E}",
+          "blurb": "A printed cover-sheet PNG hides an HCCB-style colour tag (a 36x36 triangle grid pointing to an archive) and a fake tracking-dot pattern (the archive password), then a passive OSINT chain across aucfan, Flickr, a hobby site and a shop finds the seller's username, pants colour, and model number."
+        },
+        {
+          "slug": "lion-city-layover",
+          "name": "Lion City Layover",
+          "category": "rev",
+          "subtitle": "fake WASM VM + Fermat RSA",
+          "flag": "TISC{w3lc0m3_70_51ng4p0r3_l4h_61}",
+          "blurb": "A Singapore-themed maze hides a fake WebAssembly VM whose validator and interpreter parse different custom sections; duplicating a wasm section bypasses the opcode blocklist to dump a Fermat-weak RSA blob, factored to recover the boarding-pass claim, all while dodging LLM prompt-injection honeypots."
+        },
+        {
+          "slug": "zygpt",
+          "name": "ZyGPT",
+          "category": "ai",
+          "subtitle": "LSB-sealed LLM weights",
+          "flag": "TISC{h1d3_1t_d33p_th3_w31ghts_d0nt_l13}",
+          "blurb": "A Qwen3-1.7B fine-tune seals a flag in one MLP tensor's LSBs, keyed by a 5-record live handshake among 69 self-verifying provisioning rows. The model's own recited manual misdirects toward a false reserved-rows subset; brute-forcing all 69-choose-5 combinations against a flip-mask oracle finds the real one."
+        },
+        {
+          "slug": "trash-talk",
+          "name": "Trash Talk",
+          "category": "rev",
+          "subtitle": "GTS Pokemon trash-byte stego",
+          "flag": "TISC{p0lyg0n4l_p1d_ch41n_4cr0ss_g3ns}",
+          "blurb": "A Nintendo GTS emulator hides messages in Pokemon nickname trash bytes across two game generations. A Gen 4 Porygon's trash reveals the XOR key for Gen 5 Porygon2 trash (recipient PIDs plus an OT-name instruction to trade a female Buizel), and performing that trade unlocks a hidden Porygon-Z whose trash XORs with its own PID into the flag."
+        },
+        {
+          "slug": "provenance",
+          "name": "Provenance Expert",
+          "category": "forensics",
+          "subtitle": "forged Rich header",
+          "flag": "TISC{r1ch_h34d3r_t0ld_a_l1e_ab0ut_1ts_b1rth}",
+          "blurb": "A PE32+ binary's Rich header and linker version were forged to claim Visual Studio 2017, but the load-config layout and COFF timestamp (Aug 2026) prove Visual Studio 2022. Repairing every Rich-header build number to the matching VS2022 17.13 build and recomputing the checksum satisfies the grader's provenance check."
+        },
+        {
+          "slug": "omnitrix",
+          "name": "Omnitrix",
+          "category": "pwn",
+          "subtitle": "race condition + dlopen pwn",
+          "flag": "TISC{6r33n_n33dl3_0r_br41n5t0rm??}",
+          "blurb": "A stripped Rust/tokio service gates a dlopen primitive behind a policy-mask bit no static code path can set. A data race in capability-cache reconcile flips the shared mask, letting a hand-crafted .so slip past content filters and get dlopen'd to run the execute-only flag binary."
+        }
+      ]
+    },
+    {
       "id": "kaspersky-ctf-2026",
       "event": "Kaspersky CTF 2026",
       "team": "NxT",
@@ -192,7 +262,8 @@
       "tag": "solo",
       "focus": ["Forensics", "OSINT", "Crypto"],
       "bio": "Forensics and OSINT by habit, crypto when a lattice is involved. Runs the occasional CTF solo under the handle NxT.",
-      "events": ["tfc-ctf-26"]
+      "linkedin": "https://www.linkedin.com/in/ashton-ang-wu-zun-846999353/",
+      "events": ["tfc-ctf-26", "tisc-2026"]
     },
     {
       "slug": "txn",

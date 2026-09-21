@@ -356,6 +356,9 @@ function buildMembers() {
   for (const m of cfg.members) {
     const events = (m.events || []).map((id) => byId.get(id)).filter(Boolean);
     const focus = (m.focus || []).map((f) => `<span class="tag">${esc(f)}</span>`).join('\n        ');
+    const linkedin = m.linkedin
+      ? `<p class="mp-links"><a href="${esc(m.linkedin)}" target="_blank" rel="noopener noreferrer">LinkedIn <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a></p>`
+      : '';
     const eventsHtml = events.length
       ? events.map(memberEventBlock).join('\n\n')
       : '    <p class="mp-empty">No solo events logged yet.</p>';
@@ -370,7 +373,7 @@ function buildMembers() {
       <div class="mp-focus">
         ${focus}
       </div>
-      ${m.bio ? `<p class="mp-bio">${esc(m.bio)}</p>` : ''}
+      ${[m.bio ? `<p class="mp-bio">${esc(m.bio)}</p>` : '', linkedin].filter(Boolean).join('\n      ')}
     </div>
   </header>
 

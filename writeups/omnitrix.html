@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Omnitrix · TISC 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A stripped Rust/tokio service gates a dlopen primitive behind a policy-mask bit no static code path can set. A data race in capability-cache reconcile flips the shared mask, letting a hand-crafted .so slip past content filters and get dlopen'd to run the execute-only flag binary." />
+<link rel="icon" href="../images/brand/logo.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>omnitrix</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-pwn">pwn</span>
+    </div>
+    <h1>Omnitrix <span>race condition + dlopen pwn</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">TISC{6r33n_n33dl3_0r_br41n5t0rm??}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>A stripped Rust/tokio TCP service (&quot;Omnitrix&quot;) running in a <code>scratch</code>
+container. The intended path is a logic/<code>dlopen</code> pwn: escalate a runtime
+policy mask, then get the server to <code>dlopen</code> an attacker-supplied shared
+object. The interesting part of this challenge isn&#39;t the exploit chain
+itself, it&#39;s that the recon instrument lied for twelve sessions and
+manufactured a false negative.</p>
+<h2 id="1-what-we39re-given"><a class="wu-anchor" href="#1-what-we39re-given" aria-hidden="true">#</a>1. What we&#39;re given</h2>
+<p>The Dockerfile is the map. The builder stage compiles the flag <em>binary</em>:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">dockerfile</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-dockerfile">RUN printf ... &gt; /flag.c \
+ &amp;&amp; gcc -O2 -static -s -DFLAG=&quot;$FLAG&quot; /flag.c -o /flag.bin \
+ &amp;&amp; chmod 0111 /flag.bin &amp;&amp; rm -f /flag.c</code></pre>
+      
+    </figure><p>The program prints <code>token: &lt;16 hex&gt;</code>, reads 16 bytes, and prints the flag
+only if you echo the token back within 30 seconds. <code>chmod 0111</code> means it&#39;s
+<strong>execute-only</strong> - you cannot read it.</p>
+<figure class="wu-code wu-code-output" data-lines="10">
+      <figcaption>
+        
+        <span class="wu-code-lang">dockerfile</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-dockerfile">FROM scratch
+ARG FLAG_FILEPATH
+ENV OMNITRIX_BIND=0.0.0.0:7878
+COPY --from=builder /lib64/ld-linux-x86-64.so.2 /lib64/
+COPY --from=builder /lib/x86_64-linux-gnu/libc.so.6 /lib/x86_64-linux-gnu/
+COPY --from=builder /lib/x86_64-linux-gnu/libgcc_s.so.1 /lib/x86_64-linux-gnu/
+COPY --from=builder /lib/x86_64-linux-gnu/libm.so.6 /lib/x86_64-linux-gnu/
+COPY --from=builder /omnitrix.bin /omnitrix
+COPY --from=builder /flag.bin $FLAG_FILEPATH
+USER 10001:10001</code></pre>
+      
+    </figure><p>Two deductions shape everything from here:</p>
+<ol>
+<li>The flag must be <strong>executed</strong>, not read.</li>
+<li><code>FLAG_FILEPATH</code> is a build <strong>ARG</strong> used as a <code>COPY</code> destination - it is
+<strong>not exported as ENV</strong>. Confirmed live: the container&#39;s <code>ENVIRON</code> is
+<code>PATH=... | HOSTNAME=pwn-omnitrix | OMNITRIX_BIND=0.0.0.0:7878 | KUBERNETES_* | HOME=/</code> - no <code>FLAG*</code> variable anywhere. The flag&#39;s location
+is not discoverable from the environment; the filesystem has to be
+enumerated.</li>
+</ol>
+<h2 id="2-the-service"><a class="wu-anchor" href="#2-the-service" aria-hidden="true">#</a>2. The service</h2>
+<p>A 16-byte header, strings length-prefixed big-endian:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">&quot;OMNI&quot; | version=1 | kind | opcode(u16 BE) | id(u32) | body_len(u32 BE) | body</code></pre>
+      
+    </figure><p>Auth is op <code>0x0010</code> with hardcoded credentials: <code>ben.tennyson</code> /
+<code>its-hero-time</code>. A full u16 scan confirms exactly eight opcodes exist:</p>
+<table>
+<thead>
+<tr>
+<th>op</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>0x10</code></td>
+<td>login</td>
+</tr>
+<tr>
+<td><code>0x20</code></td>
+<td>issue lease (<code>str(cap)+u64 duration</code>)</td>
+</tr>
+<tr>
+<td><code>0x21</code></td>
+<td>recall/commit lease</td>
+</tr>
+<tr>
+<td><code>0x41</code></td>
+<td>worker dispatch, runs the transform dispatcher</td>
+</tr>
+<tr>
+<td><code>0x50</code></td>
+<td>runtime mode change (needs a <code>matrix.configure</code> lease)</td>
+</tr>
+<tr>
+<td><code>0x51</code></td>
+<td>diag, no auth - pure decoy</td>
+</tr>
+<tr>
+<td><code>0x52</code></td>
+<td>&quot;master-control voucher&quot;</td>
+</tr>
+<tr>
+<td><code>0x53</code></td>
+<td>privileged playback / codon recall</td>
+</tr>
+</tbody></table>
+<p>Leasable capabilities: <code>omnitrix.scan</code>, <code>dna.shift</code>, <code>matrix.configure</code>.</p>
+<h2 id="3-the-escalation-geometry-looks-provably-closed"><a class="wu-anchor" href="#3-the-escalation-geometry-looks-provably-closed" aria-hidden="true">#</a>3. The escalation geometry (looks provably closed)</h2>
+<p>Everything gates on one global runtime policy mask:</p>
+<ul>
+<li><code>codon.stream.inject</code> (the <code>dlopen</code> path): permitted iff <code>mask &amp; 0x150 == 0x150</code> at mode 2</li>
+<li>op <code>0x53</code> recall: <code>not ebp; test ebp,0x150; jne error</code> - needs all of <code>0x150</code></li>
+<li><code>omnitrix.master_control.prepare</code>: permitted iff <code>mask == 0xffffffff</code></li>
+</ul>
+<p>The only code that produces a <code>0x150</code>-bearing mask is the op-<code>0x50</code> apply:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">base        = table[0x1e014][mode]            # mode 0/1/2 -&gt; 0x0 / 0x4 / 0x2a4
+flags       = entry_flags | 0x4(epoch advanced) | 0x8(resolve ok)
+merged_mask = (mode==2 &amp;&amp; (flags &amp; 0xf)==0xf) ? (base | 0x150) : base   # 0x2a4|0x150 = 0x3f4</code></pre>
+      
+    </figure><p>Quiescently <code>entry_flags == 0x2001</code>, so the nibble is <code>1</code>, <code>flags</code> maxes out
+at <code>0xd</code> (1|4|8), and the gate never fires. The alternative route, op <code>0x52</code>
+installing an attacker-chosen mask, needs a registered voucher, which is only
+created by <code>prepare</code>, which needs <code>mask == 0xffffffff</code>. A closed triangle -
+every static and black-box avenue is mapped and shut.</p>
+<h2 id="4-the-bug-a-data-race-in-capability-cache-reconcile"><a class="wu-anchor" href="#4-the-bug-a-data-race-in-capability-cache-reconcile" aria-hidden="true">#</a>4. The bug: a data race in capability-cache reconcile</h2>
+<p>The triangle has a concurrency crack. Under load, the mode-change apply
+sometimes reads <code>entry_flags</code> with bit 1 already set (<code>0x2003</code>), a genuine
+race on the cache entry&#39;s flags dword, sometimes torn. Then nibble <code>= 0xf</code>,
+<code>flags = 0xf</code>, and <code>merged_mask = 0x2a4 | 0x150 = 0x3f4</code> gets written to the
+global, shared mask.</p>
+<p>Reproduced two independent ways:</p>
+<ul>
+<li><strong>Black-box:</strong> op <code>0x53</code> with an <code>omnitrix.scan</code> lease discriminates the
+gate by its error string. In 25 s: control = 1656 closed / 0 open; under
+load = 1280 closed / 357 open.</li>
+<li><strong>Trace (<code>RUST_LOG</code>):</strong> the reconcile line over 25 s of load shows
+<code>flags=15</code> and <code>merged_mask=0x000003f4</code> thousands of times; neither ever
+occurs quiescently.</li>
+</ul>
+
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <p>The trace output is ANSI-coloured, so <code>grep &#39;flags=15&#39;</code> finds nothing - strip
+<code>\x1b\[[0-9;]*m</code> before parsing.</p>
+
+    </div>
+<p>So: churn enough mode-changes and the shared mask flips <code>0x2a4 &lt;-&gt; 0x3f4</code>
+many times per second, and <code>inject</code> plus <code>recall</code> open with it.</p>
+<h2 id="5-from-mask-to-code-execution"><a class="wu-anchor" href="#5-from-mask-to-code-execution" aria-hidden="true">#</a>5. From mask to code execution</h2>
+<p><strong><code>inject</code></strong> writes a file into the codon vault
+(<code>/tmp/omnitrix/codon/&lt;name&gt;</code>). The name may contain <code>/</code> but not <code>..</code>, so
+<code>name=&quot;replay/w.so&quot;</code> lands exactly where recall reads.</p>
+<p><strong><code>content_filter</code></strong> vets the blob: rejects embedded ELF magic in non-ELF
+blobs, denies a list of libc imports (<code>execve</code>, <code>system</code>, <code>fork</code>,
+<code>posix_spawn</code>, <code>dlopen</code>, <code>socket</code>, <code>connect</code>, ...), denies denylisted ASCII
+anywhere in the file, and requires a well-formed <code>ET_DYN</code> with <code>DT_NEEDED libc</code>, non-stripped section headers, and no RWX <code>PT_LOAD</code>. A hand-written
+<code>.so</code> that performs every action with <strong>inline <code>syscall</code> instructions</strong> and
+imports essentially nothing sails straight through.</p>
+<p><strong><code>recall</code></strong> reads <code>/tmp/omnitrix/codon/replay/&lt;action&gt;</code>, validates an
+&quot;OREP&quot; container:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">&quot;OREP&quot; | u16 BE version=1 | str form | str template | u16 BE count | count * (str key, str val)</code></pre>
+      
+    </figure><p>For <code>form=&quot;scan&quot;</code> with <code>band=&quot;engage&quot;</code>, it takes <code>map[&quot;payload&quot;]</code> as a module
+path, joins it to the vault, and <code>dlopen</code>s it, <code>dlsym</code>s <code>omnitrix_probe</code>, and
+calls it - in-process, as uid 10001.</p>
+<p>Kill chain:</p>
+<ol>
+<li><code>0x10</code> login.</li>
+<li>Race the mask open (40 churn threads driving <code>0x50</code> mode-2 + <code>0x21</code>).</li>
+<li>During a window, inject the weaponized <code>.so</code> as <code>replay/w.so</code>.</li>
+<li>Inject the container as <code>replay/go</code> with <code>band=engage</code>, <code>payload=replay/w.so</code>.</li>
+<li>Recall <code>go</code> -&gt; <code>dlopen</code> -&gt; <code>omnitrix_probe</code> -&gt; flag.</li>
+</ol>
+<h2 id="6-making-it-reliable-detect-freeze-exploit"><a class="wu-anchor" href="#6-making-it-reliable-detect-freeze-exploit" aria-hidden="true">#</a>6. Making it reliable: detect, freeze, exploit</h2>
+<p>The window is short and rare, and a 20 KB <code>.so</code> loses the race against the
+worker&#39;s processing of the task. The fix exploits a property of the mask: it
+is only rewritten by a mode-change apply.</p>
+<ol>
+<li>Churn hard until a tiny-inject detector (a 1-byte payload) sees <code>imported ...</code> - the gate is open.</li>
+<li><strong>Stop all churn.</strong> If the last apply landed mid-window, the mask is now
+stuck at <code>0x3f4</code>.</li>
+<li>Confirm with a few more tiny injects (<code>sticky=True</code>).</li>
+<li>Now inject the big <code>.so</code> and the container leisurely, and hammer <code>recall</code>.</li>
+</ol>
+<p>The weaponized <code>omnitrix_probe</code>: inline syscalls only; <code>getenv</code> retained
+purely to keep <code>DT_NEEDED libc.so.6</code>. It forks
+<code>/congratulationsyougottheflag</code> over two pipes, echoes the 16-hex token back,
+and relays the captured output to every connected socket
+(<code>getpeername() == 0</code>), so the flag arrives on whichever recall connection
+triggered the load.</p>
+<h2 id="7-the-actual-hard-part-the-instrument-was-lying"><a class="wu-anchor" href="#7-the-actual-hard-part-the-instrument-was-lying" aria-hidden="true">#</a>7. The actual hard part: the instrument was lying</h2>
+<p>The chain above worked locally, repeatedly, on the unpatched binary. Live, it
+produced nothing, and the in-container recon reported: <em>&quot;the flag artifact is
+very likely a shared object to <button type="button" class="wu-gloss" data-def="A libc call that loads a shared object into the calling process at runtime and resolves its symbols.">dlopen</button>... no top-level file name contains
+&#39;flag&#39;... <code>/</code> entries observed: <code>lib64</code> and little else.&quot;</em></p>
+
+<div class="wu-admon wu-admon-insight">
+      <p class="wu-admon-h">Insight</p>
+      <p>All of that was false, for three mundane reasons - three bugs in the
+enumeration probe:</p>
+<ol>
+<li><strong><code>list_dir()</code> used a <code>static</code> <code>getdents64</code> buffer while recursing.</strong> The
+recursive call clobbered the parent&#39;s buffer mid-iteration, producing
+truncated, garbled listings. This is the true origin of &quot;<code>/</code> has lib64 and
+little else&quot;.</li>
+<li><strong><code>wait4</code> was called through a 3-argument syscall helper.</strong> <code>wait4(pid, status, options, rusage)</code> needs <code>r10</code> set; it held garbage, so the kernel
+wrote a 144-byte <code>rusage</code> struct through a garbage pointer - memory
+corruption that turned the relayed output into binary garbage.</li>
+<li><strong>Deliberate blind spots.</strong> The walk skipped <code>/lib</code>, <code>/lib64</code>, <code>/usr/lib</code>,
+<code>/proc</code>, <code>/sys</code>, <code>/dev</code>, skipped any <code>*.so*</code> name, and recursed exactly
+one level deep - three more ways to lose a <code>FLAG_FILEPATH</code>.</li>
+</ol>
+
+    </div>
+<p>The probe&#39;s own <code>has_flag_word()</code> would have matched the flag&#39;s filename all
+along; the flag was reachable from session one, the tool reporting on the
+world was broken.</p>
+<p>The fixed probe uses a per-invocation <code>getdents</code> buffer, a correct 4-arg
+syscall wrapper for <code>wait4</code>, <code>lstat</code> so symlinks aren&#39;t followed, and a full
+depth-4 walk with no path or name skips, printing every entry it finds and
+testing every exec-bit regular file. The exhaustive walk finally returned:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">E /congratulationsyougottheflag m111 s682696 d8</code></pre>
+      
+    </figure><p>Execute it, echo the token, read the flag.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">TISC{6r33n_n33dl3_0r_br41n5t0rm??}</code></pre>
+      
+    </figure><p>Captured on two separate live instances, identical both times.</p>
+<h2 id="lessons"><a class="wu-anchor" href="#lessons" aria-hidden="true">#</a>Lessons</h2>
+<ul>
+<li><strong>Verify the enumerator.</strong> When a long investigation concludes &quot;I
+enumerated X and saw nothing&quot;, the tool is as much a suspect as the
+target. Two independent implementation bugs in a recon helper produced a
+false negative that survived twelve sessions and one confident, wrong
+root-cause hypothesis.</li>
+<li><strong>&quot;Provably closed&quot; must account for concurrency.</strong> The gate arithmetic was
+verified byte-for-byte and dynamically; it was still wrong, because a
+quiescent aligned read of a raced dword is not the only read that happens.</li>
+<li><strong>Execute-only files are still files.</strong> <code>chmod 0111</code> forces execute, not
+read, and a token-echo dance is a perfectly good exfiltration channel once
+there&#39;s code running in the process.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#1-what-we39re-given">1. What we&#39;re given</a></li><li><a href="#2-the-service">2. The service</a></li><li><a href="#3-the-escalation-geometry-looks-provably-closed">3. The escalation geometry (looks provably closed)</a></li><li><a href="#4-the-bug-a-data-race-in-capability-cache-reconcile">4. The bug: a data race in capability-cache reconcile</a></li><li><a href="#5-from-mask-to-code-execution">5. From mask to code execution</a></li><li><a href="#6-making-it-reliable-detect-freeze-exploit">6. Making it reliable: detect, freeze, exploit</a></li><li><a href="#7-the-actual-hard-part-the-instrument-was-lying">7. The actual hard part: the instrument was lying</a></li><li><a href="#lessons">Lessons</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="provenance.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Provenance Expert</span></a>
+    <a class="wu-pager-link wu-pager-next wu-pager-index" href="../writeups.html"><span class="wu-pager-dir">Index</span><span class="wu-pager-name">All writeups</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=18"></script>
+</body>
+</html>

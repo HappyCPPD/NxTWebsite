@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Provenance Expert · TISC 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A PE32+ binary's Rich header and linker version were forged to claim Visual Studio 2017, but the load-config layout and COFF timestamp (Aug 2026) prove Visual Studio 2022. Repairing every Rich-header build number to the matching VS2022 17.13 build and recomputing the checksum satisfies the grader's provenance check." />
+<link rel="icon" href="../images/brand/logo.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>provenance</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-forensics">forensics</span>
+    </div>
+    <h1>Provenance Expert <span>forged Rich header</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">TISC{r1ch_h34d3r_t0ld_a_l1e_ab0ut_1ts_b1rth}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>TISC 2026&#39;s &quot;Provenance - Expert&quot; hands over one 415 KB Windows binary,
+<code>challenge.exe</code> - a PE32+ x86-64 console app built with native MSVC C++.
+Running it prints only a taunting decoy:
+<code>TISC{r3m3mb3r_th3_fl4g_c0m3s_0nly_fr0m_subm1tt1ng_th3_c0rr3ct_b1n4ry}</code>.</p>
+<p>The brief sets the tone: <em>&quot;This build tries to hide something about itself.
+Everything the program does is a performance; look instead at what it can&#39;t
+help admitting. Make the binary honest about where it came from. Change
+nothing but the provenance record. Submit the binary you were given,
+repaired, not rebuilt.&quot;</em></p>
+<p>So the runtime is theater. The task is forensic surgery on the PE headers:
+something about where the binary <em>came from</em> was forged, and the fix is to
+repair exactly that record, then POST the fixed file to the grader, which
+returns the real flag only once the provenance is honest.</p>
+<p>The grader gives three verdicts: <em>not internally honest</em>, <em>only the
+provenance record may change - you altered other bytes</em>, or success and the
+flag.</p>
+<h2 id="the-provenance-record-the-rich-header"><a class="wu-anchor" href="#the-provenance-record-the-rich-header" aria-hidden="true">#</a>The provenance record: the Rich header</h2>
+<p>Every MSVC-linked PE carries an undocumented <strong><button type="button" class="wu-gloss" data-def="An undocumented, XOR-masked block in MSVC-linked PE files recording which toolchain built each object file - a de facto build fingerprint.">Rich header</button></strong> between the DOS
+stub and the PE signature. It&#39;s a XOR-masked histogram of the toolchain that
+built the file: one entry per <code>(product id, build number)</code> pair, with a count
+of how many object files came from that tool. It&#39;s effectively the binary&#39;s
+birth certificate - a fingerprint the linker stamps automatically.</p>
+<p>Decoding <code>challenge.exe</code>&#39;s Rich header shows the forgery immediately - every
+entry&#39;s build number is <code>25017</code> (0x61b9 = Visual Studio 2017 15.0):</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>tool</th>
+<th>build</th>
+<th>count</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td>C++</td>
+<td>25017</td>
+<td>158</td>
+</tr>
+<tr>
+<td>1</td>
+<td>C</td>
+<td>25017</td>
+<td>18</td>
+</tr>
+<tr>
+<td>2</td>
+<td>ASM</td>
+<td>25017</td>
+<td>7</td>
+</tr>
+<tr>
+<td>3</td>
+<td>IMP</td>
+<td>25017</td>
+<td>3</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Unmarked</td>
+<td>0</td>
+<td>119</td>
+</tr>
+<tr>
+<td>5-9</td>
+<td>ASM/C/C++/C++/LNK</td>
+<td>25017</td>
+<td>10/16/80/1/1</td>
+</tr>
+</tbody></table>
+<p>A real linker never unifies every component to one build number - import
+libs, the CRT and app code come from different tool builds. All-<code>25017</code> is
+synthetic: the forger overwrote the build field on every entry.</p>
+<p><strong>The editable region</strong>, proven by single-byte flips against the grader: only
+three spans may differ from the original, or the response is <em>you altered
+other bytes</em>:</p>
+<ul>
+<li>Rich header <code>0x80-0xE7</code></li>
+<li>OptionalHeader linker version <code>0x11A</code> (major) / <code>0x11B</code> (minor)</li>
+<li>PE checksum <code>0x158-0x15B</code></li>
+</ul>
+<p>Everything else - <button type="button" class="wu-gloss" data-def="Common Object File Format: the header structure Windows PE files build on, including the linker's TimeDateStamp.">COFF</button> timestamp, load config, debug directory, code - is
+locked. And the grader is a static <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> with no progress signal; it only
+ever answers &quot;not honest&quot; or &quot;you changed other bytes&quot;. There is nothing to
+hill-climb toward.</p>
+<h2 id="what-it-can39t-help-admitting"><a class="wu-anchor" href="#what-it-can39t-help-admitting" aria-hidden="true">#</a>What it can&#39;t help admitting</h2>
+<p>The Rich header and linker version both claim VS2017 15.0 (build 25017,
+linker 14.10), and they agree with each other, so the file looks internally
+consistent. The lie only shows when checking a structure the linker <em>cannot</em>
+fake, and that sits in the locked region: the <strong>load config directory</strong>.</p>
+<p><code>challenge.exe</code>&#39;s load config is <code>0x140</code> bytes and carries the modern Control
+Flow Guard / CET / CastGuard / GuardMemcpy fields. That layout only exists in
+Visual Studio 2022 (17.7+); VS2017 emits a much smaller load config. So the
+<em>code</em> is unmistakably VS2022, while the <em>recorded provenance</em> says VS2017.</p>
+<p>That&#39;s the whole challenge in one line: make the recorded provenance match
+the contents. The performance says 2017; the thing it can&#39;t help admitting
+says 2022. Honesty means rewriting the Rich builds and linker version to the
+true VS2022 toolchain.</p>
+<h2 id="the-rabbit-hole-2000-wasted-submissions"><a class="wu-anchor" href="#the-rabbit-hole-2000-wasted-submissions" aria-hidden="true">#</a>The rabbit hole (~2000 wasted submissions)</h2>
+<p>Knowing it&#39;s &quot;VS2022&quot; isn&#39;t enough - the grader wants the exact build
+numbers, and two wrong assumptions kept the answer out of reach:</p>
+
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <p><strong>Wrong version.</strong> The load config looked byte-similar to Python 3.12.7&#39;s,
+which is VS2022 17.11 (build 34120, linker 14.41). Every attempt anchored on
+34120: downloading the Python embeddable and mining the real VS2022 build set
+(33731, 33808, 33813, 33923, 34120, ...) and sweeping them hard.</p>
+
+    </div>
+
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <p><strong>Over-thinking the structure.</strong> A real Rich header can&#39;t have duplicate
+<code>(prodid, build)</code> entries, and the forged one has C++ three times. So the
+assumption was that the honest header must be a <em>valid de-duplicated
+histogram</em> with distinct builds per entry - ~1,300 submissions on grouped
+multi-toolchain models, plus splitmix64 derivations from the <code>.ctfid</code> token,
+plus every simple consistency fix.</p>
+
+    </div>
+<p>Everything came back &quot;not internally honest&quot;. The decisive datapoint: 1,320
+structurally-valid VS2022 histograms all failed. That proved the check
+doesn&#39;t want &quot;any plausible VS2022 header&quot; - it wants specific build numbers.</p>
+<h2 id="the-breakthrough-read-the-timestamp"><a class="wu-anchor" href="#the-breakthrough-read-the-timestamp" aria-hidden="true">#</a>The breakthrough: read the timestamp</h2>
+<p>The clue was in a locked field that had been ignored precisely because it
+couldn&#39;t be edited: the COFF <code>TimeDateStamp = 0x6A878990</code> = 2026-08-20.</p>
+
+<div class="wu-admon wu-admon-insight">
+      <p class="wu-admon-h">Insight</p>
+      <p>That date is ~2 years <em>after</em> VS2022 17.11 shipped. The load config&#39;s <code>0x140</code>
+layout doesn&#39;t pin an exact version - it spans 17.7 through the latest - so
+anchoring on 17.11 was never justified. A build stamped August 2026 would use
+a much newer toolchain.</p>
+
+    </div>
+<p>So instead of chasing exotic multi-build histograms, the simplest possible
+header - every entry at one single build <code>V</code>, linker version matching <code>V</code> -
+was swept across the <em>latest</em> VS2022 releases:</p>
+<table>
+<thead>
+<tr>
+<th>build V</th>
+<th>linker</th>
+<th>VS version</th>
+<th>verdict</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>34120</td>
+<td>14.41</td>
+<td>17.11</td>
+<td>not honest</td>
+</tr>
+<tr>
+<td>34435</td>
+<td>14.42</td>
+<td>17.12</td>
+<td>not honest</td>
+</tr>
+<tr>
+<td><strong>34808</strong></td>
+<td><strong>14.43</strong></td>
+<td><strong>17.13</strong></td>
+<td><strong>FLAG</strong></td>
+</tr>
+</tbody></table>
+<p>Build 34808 (VS2022 17.13, linker 14.43) was the honest birth date all along.
+The COFF timestamp had been pointing at it the whole time.</p>
+<h2 id="the-repair"><a class="wu-anchor" href="#the-repair" aria-hidden="true">#</a>The repair</h2>
+<p>The fix keeps the forged Rich header&#39;s structure exactly - same product ids,
+same counts, same order, duplicates and all - and only corrects the build
+number and linker version:</p>
+<ol>
+<li><strong>Rich header:</strong> set every entry&#39;s build field from <code>25017</code> to <code>34808</code>
+(Unmarked stays <code>0</code>). Recompute the Rich XOR checksum key over the DOS
+stub plus entries.</li>
+<li><strong>Linker version:</strong> set OptionalHeader <code>0x11A</code>/<code>0x11B</code> to <code>14</code>/<code>43</code>.</li>
+<li><strong>PE checksum:</strong> zero <code>0x158-0x15B</code>, then write the correct checksum.</li>
+</ol>
+<p>Result: 104 bytes changed, all inside the provenance region - the grader&#39;s
+&quot;only provenance may change&quot; check passes, and the honesty check passes.
+Core of the generator:</p>
+<figure class="wu-code is-collapsible" data-lines="27">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> struct, pefile</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">orig = <span class="hljs-built_in">bytearray</span>(<span class="hljs-built_in">open</span>(<span class="hljs-string">&#x27;challenge.exe&#x27;</span>,<span class="hljs-string">&#x27;rb&#x27;</span>).read())</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">rol</span>(<span class="hljs-params">v,n</span>): n&amp;=<span class="hljs-number">31</span>; <span class="hljs-keyword">return</span> ((v&lt;&lt;n)|(v&gt;&gt;(<span class="hljs-number">32</span>-n)))&amp;<span class="hljs-number">0xffffffff</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-comment"># forged entries: (prodid, count); build -&gt; 34808 for all non-Unmarked</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">entries = [(<span class="hljs-number">0x0105</span>,<span class="hljs-number">158</span>),(<span class="hljs-number">0x0104</span>,<span class="hljs-number">18</span>),(<span class="hljs-number">0x0103</span>,<span class="hljs-number">7</span>),(<span class="hljs-number">0x0101</span>,<span class="hljs-number">3</span>),(<span class="hljs-number">0x0001</span>,<span class="hljs-number">119</span>),</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">           (<span class="hljs-number">0x0103</span>,<span class="hljs-number">10</span>),(<span class="hljs-number">0x0104</span>,<span class="hljs-number">16</span>),(<span class="hljs-number">0x0105</span>,<span class="hljs-number">80</span>),(<span class="hljs-number">0x0105</span>,<span class="hljs-number">1</span>),(<span class="hljs-number">0x0102</span>,<span class="hljs-number">1</span>)]</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">d = <span class="hljs-built_in">bytearray</span>(orig)</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"><span class="hljs-comment"># Rich checksum key over DOS stub (skip e_lfanew 0x3c..0x40) + masked entries</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">cs = <span class="hljs-number">0x80</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">0x80</span>):</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">    <span class="hljs-keyword">if</span> <span class="hljs-number">0x3c</span> &lt;= i &lt; <span class="hljs-number">0x40</span>: <span class="hljs-keyword">continue</span></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">    cs = (cs + rol(orig[i], i)) &amp; <span class="hljs-number">0xffffffff</span></span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc"><span class="hljs-keyword">for</span> prod,cnt <span class="hljs-keyword">in</span> entries:</span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">    build = <span class="hljs-number">0</span> <span class="hljs-keyword">if</span> prod==<span class="hljs-number">0x0001</span> <span class="hljs-keyword">else</span> <span class="hljs-number">34808</span></span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc">    cs = (cs + rol((prod&lt;&lt;<span class="hljs-number">16</span>)|build, cnt &amp; <span class="hljs-number">0x1f</span>)) &amp; <span class="hljs-number">0xffffffff</span></span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc">k = cs</span></span>
+<span class="wu-line" data-line="17"><span class="wu-ln">17</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">put</span>(<span class="hljs-params">o,v</span>): struct.pack_into(<span class="hljs-string">&#x27;&lt;I&#x27;</span>, d, o, v ^ k)</span></span>
+<span class="wu-line" data-line="18"><span class="wu-ln">18</span><span class="wu-lc">put(<span class="hljs-number">0x80</span>,<span class="hljs-number">0x536e6144</span>); put(<span class="hljs-number">0x84</span>,<span class="hljs-number">0</span>); put(<span class="hljs-number">0x88</span>,<span class="hljs-number">0</span>); put(<span class="hljs-number">0x8c</span>,<span class="hljs-number">0</span>)   <span class="hljs-comment"># DanS + pad</span></span></span>
+<span class="wu-line" data-line="19"><span class="wu-ln">19</span><span class="wu-lc">o = <span class="hljs-number">0x90</span></span></span>
+<span class="wu-line" data-line="20"><span class="wu-ln">20</span><span class="wu-lc"><span class="hljs-keyword">for</span> prod,cnt <span class="hljs-keyword">in</span> entries:</span></span>
+<span class="wu-line" data-line="21"><span class="wu-ln">21</span><span class="wu-lc">    build = <span class="hljs-number">0</span> <span class="hljs-keyword">if</span> prod==<span class="hljs-number">0x0001</span> <span class="hljs-keyword">else</span> <span class="hljs-number">34808</span></span></span>
+<span class="wu-line" data-line="22"><span class="wu-ln">22</span><span class="wu-lc">    put(o,(prod&lt;&lt;<span class="hljs-number">16</span>)|build); put(o+<span class="hljs-number">4</span>,cnt); o += <span class="hljs-number">8</span></span></span>
+<span class="wu-line" data-line="23"><span class="wu-ln">23</span><span class="wu-lc">d[<span class="hljs-number">0xe0</span>:<span class="hljs-number">0xe4</span>] = <span class="hljs-string">b&#x27;Rich&#x27;</span>; struct.pack_into(<span class="hljs-string">&#x27;&lt;I&#x27;</span>, d, <span class="hljs-number">0xe4</span>, k)</span></span>
+<span class="wu-line" data-line="24"><span class="wu-ln">24</span><span class="wu-lc">d[<span class="hljs-number">0x11a</span>], d[<span class="hljs-number">0x11b</span>] = <span class="hljs-number">14</span>, <span class="hljs-number">43</span>                                    <span class="hljs-comment"># linker 14.43</span></span></span>
+<span class="wu-line" data-line="25"><span class="wu-ln">25</span><span class="wu-lc">struct.pack_into(<span class="hljs-string">&#x27;&lt;I&#x27;</span>, d, <span class="hljs-number">0x158</span>, <span class="hljs-number">0</span>); <span class="hljs-built_in">open</span>(<span class="hljs-string">&#x27;_t.exe&#x27;</span>,<span class="hljs-string">&#x27;wb&#x27;</span>).write(d)</span></span>
+<span class="wu-line" data-line="26"><span class="wu-ln">26</span><span class="wu-lc">struct.pack_into(<span class="hljs-string">&#x27;&lt;I&#x27;</span>, d, <span class="hljs-number">0x158</span>, pefile.PE(<span class="hljs-string">&#x27;_t.exe&#x27;</span>).generate_checksum())</span></span>
+<span class="wu-line" data-line="27"><span class="wu-ln">27</span><span class="wu-lc"><span class="hljs-built_in">open</span>(<span class="hljs-string">&#x27;challenge_repaired.exe&#x27;</span>,<span class="hljs-string">&#x27;wb&#x27;</span>).write(d)</span></span></code></pre>
+      <button type="button" class="wu-code-more" aria-expanded="false" data-more="+15 lines" data-less="show less">+15 lines</button>
+    </figure><figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">curl -s -X POST http://chals.tisc26.ctf.sg:53219/submit -F <span class="hljs-string">&quot;file=@challenge_repaired.exe&quot;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># {&quot;status&quot;:&quot;correct&quot;,&quot;message&quot;:&quot;Provenance restored. Flag captured.&quot;,&quot;flag&quot;:&quot;TISC{...}&quot;}</span></span></span></code></pre>
+      
+    </figure><figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">TISC{r1ch_h34d3r_t0ld_a_l1e_ab0ut_1ts_b1rth}</code></pre>
+      
+    </figure><h2 id="takeaways"><a class="wu-anchor" href="#takeaways" aria-hidden="true">#</a>Takeaways</h2>
+<ol>
+<li><strong>Structural PE evidence beats metadata.</strong> The Rich header and linker
+version are easy to forge and agreed with each other; the load config and
+timestamp are not, and they told the truth. When two records disagree,
+trust the one the toolchain can&#39;t fake.</li>
+<li><strong>Read the timestamp.</strong> The COFF TimeDateStamp (August 2026) pinned the
+toolchain era and directly named the version - it was ignored for hours
+because it sat in the <em>locked</em> region, but locked bytes are still
+evidence, not just obstacles.</li>
+<li><strong>Don&#39;t over-engineer the check.</strong> &quot;A real Rich header has unique
+entries&quot; was true but irrelevant; the grader only compared build numbers.
+~2000 submissions built valid histograms when the answer was one
+substitution on the existing structure.</li>
+<li><strong>A dead end is data.</strong> 1,320 valid-but-rejected headers weren&#39;t wasted -
+they proved the check wanted a specific number, which is exactly what
+pushed the search from &quot;construct a plausible header&quot; to &quot;find the one
+right version&quot;.</li>
+</ol>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#the-provenance-record-the-rich-header">The provenance record: the Rich header</a></li><li><a href="#what-it-can39t-help-admitting">What it can&#39;t help admitting</a></li><li><a href="#the-rabbit-hole-2000-wasted-submissions">The rabbit hole (~2000 wasted submissions)</a></li><li><a href="#the-breakthrough-read-the-timestamp">The breakthrough: read the timestamp</a></li><li><a href="#the-repair">The repair</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="trash-talk.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Trash Talk</span></a>
+    <a class="wu-pager-link wu-pager-next" href="omnitrix.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Omnitrix</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=18"></script>
+</body>
+</html>

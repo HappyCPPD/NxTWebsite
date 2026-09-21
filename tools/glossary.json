@@ -20,5 +20,11 @@
   { "term": "approximate GCD", "def": "Recovering a hidden common factor p from samples p*q_i + r_i with small noise r_i, typically via a lattice." },
   { "term": "haversine", "def": "A formula for the great-circle distance between two latitude/longitude points on a sphere." },
   { "term": "MMSI", "def": "Maritime Mobile Service Identity: a 9-digit number identifying a ship's radio and AIS transponder." },
-  { "term": "acrostic", "def": "A hidden message spelled by the first letter or word of each line or sentence." }
+  { "term": "acrostic", "def": "A hidden message spelled by the first letter or word of each line or sentence." },
+  { "term": "Rich header", "def": "An undocumented, XOR-masked block in MSVC-linked PE files recording which toolchain built each object file - a de facto build fingerprint." },
+  { "term": "COFF", "def": "Common Object File Format: the header structure Windows PE files build on, including the linker's TimeDateStamp." },
+  { "term": "dlopen", "def": "A libc call that loads a shared object into the calling process at runtime and resolves its symbols." },
+  { "term": "Fermat factorization", "def": "A method for factoring n = p*q that succeeds fast when p and q are close together, by searching for a square a^2 - n." },
+  { "term": "HCCB", "def": "High Capacity Color Barcode: a Microsoft format encoding data as a grid of coloured triangles instead of black-and-white cells." },
+  { "term": "GTS", "def": "Global Terminal Service: Nintendo's online Pokemon trading system for the DS era, built on WFC (Wi-Fi Connection)." }
 ]
