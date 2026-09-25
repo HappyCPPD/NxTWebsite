@@ -1,6 +1,64 @@
 {
   "events": [
     {
+      "id": "skillbit-flash-ctf-2026-09",
+      "event": "September 2026 SkillBit Flash CTF",
+      "team": "NxT",
+      "attribution": "solo",
+      "cert": "images/events/skillbit-flash-ctf-2026-09.png",
+      "certW": 1238,
+      "certH": 956,
+      "certAlt": "September 2026 SkillBit Flash CTF certificate of participation for Ashton Ang, 2 hours, presented September 24, 2026",
+      "result": {
+        "placement": "Participant",
+        "field": "2-hour flash CTF",
+        "solves": 5,
+        "date": "24 September 2026"
+      },
+      "challenges": [
+        {
+          "slug": "coilvm",
+          "name": "CoilVM",
+          "category": "rev",
+          "subtitle": "SIGTRAP-driven VM",
+          "flag": "SkillBit{n4nom1tes_eat_y0ur_symb0lic_execut0r}",
+          "blurb": "A stripped x86-64 binary runs its checks entirely inside a SIGTRAP handler, one int3 per input byte, with self-modifying XOR blocks and an rdtsc anti-debug gate. The FNV-1a verification chain inverts cleanly step by step, recovering the input and the decryption key in one forward pass."
+        },
+        {
+          "slug": "gitsleuth",
+          "name": "Git Sleuth",
+          "category": "misc",
+          "subtitle": "git-only shell, 501 haystack files",
+          "flag": "SkillBit{R3m3mb3r_t0_4lw4ys_3sc4p3_G1t_C0mm4nds}",
+          "blurb": "A restricted shell only runs git, with `flag`, `grep`, `diff` and `:` all blocklisted. Committing the haystack and diffing blob hashes finds the one odd file among 500 decoys, and `git cat-file -p <hash>` reads it straight by SHA with no blocked syntax."
+        },
+        {
+          "slug": "trackme",
+          "name": "TrackMe",
+          "category": "web",
+          "subtitle": "log poisoning via User-Agent",
+          "flag": "SkillBit{...}",
+          "blurb": "A PHP log viewer `include`s the access log instead of reading it, and the User-Agent header is logged unsanitized. Poisoning the log with a PHP snippet in the User-Agent, then viewing it through the include, executes it and dumps the runtime-generated flag file."
+        },
+        {
+          "slug": "carry-on",
+          "name": "Carry On",
+          "category": "forensics",
+          "subtitle": "ZIP appended after PNG IEND",
+          "flag": "SkillBit{0n3_f1l3_c4n_c4rry_4n0th3r}",
+          "blurb": "A checkpoint-layout PNG carries a ZIP archive appended after its IEND chunk, invisible to image viewers but readable by unzip. The extracted memo hides the flag in plain sight, labeled as a diagnostic recovery key."
+        },
+        {
+          "slug": "careless-talk",
+          "name": "Careless Talk",
+          "category": "rev",
+          "subtitle": "plaintext flag in decoy noise",
+          "flag": "SkillBit{c4r3l355_t4lk_c05t5_l1v35}",
+          "blurb": "A watchword-prompt binary never needs to be run or reversed: the flag sits split across two plaintext strings in the data section, buried under dozens of decoy lines that a targeted grep cuts straight through."
+        }
+      ]
+    },
+    {
       "id": "tisc-2026",
       "event": "TISC 2026",
       "team": "NxT",
@@ -263,7 +321,7 @@
       "focus": ["Forensics", "OSINT", "Crypto"],
       "bio": "Forensics and OSINT by habit, crypto when a lattice is involved. Runs the occasional CTF solo under the handle NxT.",
       "linkedin": "https://www.linkedin.com/in/ashton-ang-wu-zun-846999353/",
-      "events": ["tfc-ctf-26", "tisc-2026"]
+      "events": ["skillbit-flash-ctf-2026-09", "tfc-ctf-26", "tisc-2026"]
     },
     {
       "slug": "txn",

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Git Sleuth · September 2026 SkillBit Flash CTF writeup · NXT_CTFS</title>
+<meta name="description" content="A restricted shell only runs git, with `flag`, `grep`, `diff` and `:` all blocklisted. Committing the haystack and diffing blob hashes finds the one odd file among 500 decoys, and `git cat-file -p &lt;hash&gt;` reads it straight by SHA with no blocked syntax." />
+<link rel="icon" href="../images/brand/logo.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>gitsleuth</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-misc">misc</span>
+    </div>
+    <h1>Git Sleuth <span>git-only shell, 501 haystack files</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">SkillBit{R3m3mb3r_t0_4lw4ys_3sc4p3_G1t_C0mm4nds}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>A TCP service, source included, drops you into a shell that only runs <code>git</code>
+commands. Somewhere under <code>/tmp</code> sit 501 randomly-named <code>.txt</code> files: 500
+contain a copy-pasted fake flag, and exactly one is the real thing, copied
+from <code>/flag.txt</code>.</p>
+<h2 id="the-filter"><a class="wu-anchor" href="#the-filter" aria-hidden="true">#</a>The filter</h2>
+<p><code>challenge.py</code> splits each input line on spaces and rejects any token
+containing a blocked character or word:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">chars:  | &quot; ' ; $ \ # * ( ) &amp; ^ @ ! &lt; &gt; % : , ? { } `
+words:  diff grep flag patch ./ push alias remote
+        Fake Flag For Testing work update-ref lfs-remote /dev/null</code></pre>
+      
+    </figure><p>That kills most of the obvious moves in one pass: no <code>grep</code>, no <code>diff</code>, no
+<code>*</code> globbing, no <code>:</code> (so <code>git show HEAD:file</code> is dead on arrival), and the
+literal word <code>flag</code> blocks any path that mentions <code>/flag.txt</code> directly.</p>
+<h2 id="building-a-repo-out-of-the-haystack"><a class="wu-anchor" href="#building-a-repo-out-of-the-haystack" aria-hidden="true">#</a>Building a repo out of the haystack</h2>
+<p>None of these hit the blocklist:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">init /tmp
+-C /tmp add -A
+-C /tmp commit -m x
+-C /tmp ls-tree -r HEAD</code></pre>
+      
+    </figure><p>That initializes a repo over <code>/tmp</code>, stages and commits all 501 files, and
+dumps the tree: one line per file, each with its blob SHA.</p>
+<h2 id="finding-the-odd-one-out"><a class="wu-anchor" href="#finding-the-odd-one-out" aria-hidden="true">#</a>Finding the odd one out</h2>
+<p>Locally, hash the known fake flag content the same way git would:</p>
+<div class="wu-session">
+      <div class="wu-session-bar">
+        <span class="wu-session-label">session</span>
+        <button type="button" class="wu-session-replay">replay</button>
+      </div>
+      <pre class="wu-session-body"><span class="wu-term-line" data-kind="cmd"><span class="wu-term-prompt">$</span><span class="wu-term-cmd">echo 'SkillBit{This_Is_A_Fake_Flag}' | git hash-object --stdin</span></span>
+<span class="wu-term-line" data-kind="out">937fc2f3a9653a549fe41c35f4e3102c02a3cad9</span></pre>
+    </div><p>In the <code>ls-tree</code> output, 500 files share exactly that hash. One file has a
+different hash — that&#39;s the real flag, and git just told us which one
+without us ever reading a single file&#39;s contents.</p>
+<h2 id="reading-a-blob-without-"><a class="wu-anchor" href="#reading-a-blob-without-" aria-hidden="true">#</a>Reading a blob without <code>:</code></h2>
+<p><code>git show HEAD:filename</code> is off the table, but <code>git cat-file -p &lt;hash&gt;</code>
+reads any object straight by its SHA and needs no <code>ref:path</code> syntax at all:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">-C /tmp cat-file -p 35ab8c9e8787383f759aae2db4ee654c73080548</code></pre>
+      
+    </figure><p>That prints the flag.</p>
+
+<div class="wu-admon wu-admon-insight">
+      <p class="wu-admon-h">Insight</p>
+      <p>The filter only ever looks at what you type in, never at what git prints
+back out. <code>ls-tree</code> and <code>cat-file -p</code> are both read-only, blob-level
+plumbing commands, so nothing about &quot;diff&quot; or &quot;grep&quot; or &quot;flag&quot; needs to
+appear in the command line for them to do exactly that job.</p>
+
+    </div>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">SkillBit{R3m3mb3r_t0_4lw4ys_3sc4p3_G1t_C0mm4nds}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#the-filter">The filter</a></li><li><a href="#building-a-repo-out-of-the-haystack">Building a repo out of the haystack</a></li><li><a href="#finding-the-odd-one-out">Finding the odd one out</a></li><li><a href="#reading-a-blob-without-">Reading a blob without :</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="coilvm.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">CoilVM</span></a>
+    <a class="wu-pager-link wu-pager-next" href="trackme.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">TrackMe</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=18"></script>
+</body>
+</html>

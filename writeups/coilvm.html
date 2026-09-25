@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CoilVM · September 2026 SkillBit Flash CTF writeup · NXT_CTFS</title>
+<meta name="description" content="A stripped x86-64 binary runs its checks entirely inside a SIGTRAP handler, one int3 per input byte, with self-modifying XOR blocks and an rdtsc anti-debug gate. The FNV-1a verification chain inverts cleanly step by step, recovering the input and the decryption key in one forward pass." />
+<link rel="icon" href="../images/brand/logo.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>coilvm</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-rev">rev</span>
+    </div>
+    <h1>CoilVM <span>SIGTRAP-driven VM</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">SkillBit{n4nom1tes_eat_y0ur_symb0lic_execut0r}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<blockquote>
+<p>Something inside the coil watches every choice you feed it, tightening or
+slackening in response before it lets the next test through. Rush it and it
+forgets nothing kindly. Wind it just right, all the way to the end, and it
+finally lets go of what it&#39;s been holding.</p>
+</blockquote>
+<p>A single stripped x86-64 ELF, <code>coilvm</code>. It reads 36 bytes from stdin and
+prints either <code>nope</code> or a flag.</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">$ file coilvm
+coilvm: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, stripped
+
+$ strings coilvm | grep -i c01l
+C01L_VM_d3c0y_d0_n0t_b3l13v3_th15_str1ng
+
+$ echo test | ./coilvm
+nope</code></pre>
+      
+    </figure><p>The decoy string names itself as a decoy, which is its own small joke. The
+real check lives somewhere strings can&#39;t reach.</p>
+<h2 id="architecture-a-vm-built-out-of-faults"><a class="wu-anchor" href="#architecture-a-vm-built-out-of-faults" aria-hidden="true">#</a>Architecture: a VM built out of faults</h2>
+<p>The binary implements a custom VM using <button type="button" class="wu-gloss" data-def="A signal raised on a trap instruction (like int3); catching it lets a program treat its own breakpoints as a dispatch mechanism.">SIGTRAP</button> as its instruction dispatch.
+The &quot;coil&quot; is a chain of 36 <code>int3</code> (<code>0xCC</code>) bytes interleaved with
+self-modifying XOR blocks. Each <code>int3</code> traps into a SIGSEGV/SIGTRAP handler
+that processes exactly one input byte before returning control to the next
+link in the chain.</p>
+<p><code>main</code> (<code>0x401631</code>) does four things:</p>
+<ol>
+<li><strong><code>mprotect</code>s its own code RWX</strong> so the coil can rewrite itself later.</li>
+<li><strong>Init phase</strong> — runs the <button type="button" class="wu-gloss" data-def="The x86 one-byte breakpoint instruction (0xCC); executing it raises SIGTRAP and hands control to a debugger or signal handler.">int3</button> chain once, doing nothing but recording all
+36 fault addresses into an array. This is how the handler later knows
+<em>which</em> step it&#39;s on without any explicit state passed in.</li>
+<li><strong>Reads 36 bytes</strong> of input into a fixed buffer.</li>
+<li><strong>Verify phase</strong> — seeds an <button type="button" class="wu-gloss" data-def="A simple, fast non-cryptographic hash: XOR each input byte into a running value, then multiply by a fixed prime.">FNV-1a</button> hash at <code>0x811c9dc5</code>, clears a fail
+flag, and runs the chain again, this time for real.</li>
+</ol>
+<p>If every step passed and the fail flag never got set, it decrypts and prints
+the flag. Otherwise, <code>nope</code>.</p>
+<h2 id="the-trap-handler"><a class="wu-anchor" href="#the-trap-handler" aria-hidden="true">#</a>The trap handler</h2>
+<p>The handler (<code>0x401196</code>) pulls the faulting RIP out of the <code>ucontext_t</code> and
+branches on which phase it&#39;s in.</p>
+<p><strong>Init mode</strong> just stores the RIP into the 36-entry step table.</p>
+<p><strong>Verify mode</strong> is where the checking happens:</p>
+
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <p>An <code>rdtsc</code> delta since the last trap over <code>0x4000000</code> (~67M cycles) —
+i.e. someone single-stepping in a debugger — silently XORs the running hash
+with <code>0xa5a5a5a5</code> before continuing. Nothing crashes, nothing prints early.
+The check just becomes impossible to pass, and you&#39;d only notice because the
+math stops adding up. This is the &quot;rush it and it forgets nothing kindly&quot;
+line from the prompt.</p>
+
+    </div>
+<p>Past the anti-debug gate, for step <code>i</code> with current hash <code>h</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">expected = (h &amp; 0xFF) ^ verify_table[i]
+check:    rol8((h &amp; 0xFF) ^ input[i], (h &gt;&gt; 5) &amp; 7) == expected</code></pre>
+      
+    </figure><p>A failed check sets the fail flag but does <strong>not</strong> stop execution — every
+byte is still processed regardless, so timing and control flow give away
+nothing about which byte was wrong. The hash then updates with plain
+FNV-1a: <code>h = (h ^ input[i]) * 0x1000193</code>, and a derived byte
+<code>(h &amp; 0x7F) ^ 0x90</code> gets written back into the XOR blocks between traps,
+mutating the coil&#39;s own bytes for the next run. That self-modification
+doesn&#39;t affect verification at all — it exists purely to make a static
+disassembly stale the moment the program runs.</p>
+<h2 id="decryption"><a class="wu-anchor" href="#decryption" aria-hidden="true">#</a>Decryption</h2>
+<p>Once all 36 bytes pass, the final hash seeds a 47-byte output loop
+(<code>0x401797</code>). For output position <code>d</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">idx1 = d % 36
+h    = (h ^ input[idx1]) * FNV_PRIME          # FNV-1a continues
+
+idx2 = (1 + 5*d) % 36                          # stride-5 permutation
+rot  = rol8(input[idx2], (h &gt;&gt; 7) &amp; 7)
+
+out[d] = ((h &gt;&gt; 11) &amp; 0xFF) ^ decrypt_table[d] ^ (d &amp; 0xFF) ^ rot</code></pre>
+      
+    </figure><p>The output is longer than the input because the 36 input bytes get reused
+cyclically, the FNV state keeps accumulating fresh entropy each step, and the
+stride-5 index scrambles which byte feeds the rotation at each position.</p>
+<h2 id="solving-it-forward"><a class="wu-anchor" href="#solving-it-forward" aria-hidden="true">#</a>Solving it forward</h2>
+<p>The hash is deterministic and each byte is checked in order, so there&#39;s no
+need to search anything: at step <code>i</code> the hash going in is already fixed by
+the previous 0..i-1 bytes, so the verification equation inverts cleanly for
+<code>input[i]</code>.</p>
+<figure class="wu-code" data-lines="22">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">ror8</span>(<span class="hljs-params">val, n</span>):</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">    n &amp;= <span class="hljs-number">7</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">    <span class="hljs-keyword">return</span> ((val &gt;&gt; n) | (val &lt;&lt; (<span class="hljs-number">8</span> - n))) &amp; <span class="hljs-number">0xff</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">verify_table = <span class="hljs-built_in">bytes</span>([</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">    <span class="hljs-number">0x2f</span>, <span class="hljs-number">0x3b</span>, <span class="hljs-number">0xb3</span>, <span class="hljs-number">0x3a</span>, <span class="hljs-number">0xb6</span>, <span class="hljs-number">0x86</span>, <span class="hljs-number">0x9a</span>, <span class="hljs-number">0xd7</span>,</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    <span class="hljs-number">0xbf</span>, <span class="hljs-number">0xa0</span>, <span class="hljs-number">0x74</span>, <span class="hljs-number">0x61</span>, <span class="hljs-number">0x1b</span>, <span class="hljs-number">0x0f</span>, <span class="hljs-number">0xa2</span>, <span class="hljs-number">0x06</span>,</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    <span class="hljs-number">0xec</span>, <span class="hljs-number">0xe4</span>, <span class="hljs-number">0xc3</span>, <span class="hljs-number">0x8f</span>, <span class="hljs-number">0x79</span>, <span class="hljs-number">0x38</span>, <span class="hljs-number">0x40</span>, <span class="hljs-number">0xcf</span>,</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    <span class="hljs-number">0x9c</span>, <span class="hljs-number">0x0f</span>, <span class="hljs-number">0xb7</span>, <span class="hljs-number">0x14</span>, <span class="hljs-number">0x95</span>, <span class="hljs-number">0xb4</span>, <span class="hljs-number">0x65</span>, <span class="hljs-number">0xee</span>,</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">    <span class="hljs-number">0x9e</span>, <span class="hljs-number">0x74</span>, <span class="hljs-number">0x0c</span>, <span class="hljs-number">0x35</span>,</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">])</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">hash_val = <span class="hljs-number">0x811c9dc5</span></span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">input_bytes = []</span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc"><span class="hljs-keyword">for</span> step <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">36</span>):</span></span>
+<span class="wu-line" data-line="17"><span class="wu-ln">17</span><span class="wu-lc">    h_lo = hash_val &amp; <span class="hljs-number">0xff</span></span></span>
+<span class="wu-line" data-line="18"><span class="wu-ln">18</span><span class="wu-lc">    rot = (hash_val &gt;&gt; <span class="hljs-number">5</span>) &amp; <span class="hljs-number">7</span></span></span>
+<span class="wu-line" data-line="19"><span class="wu-ln">19</span><span class="wu-lc">    expected = h_lo ^ verify_table[step]</span></span>
+<span class="wu-line" data-line="20"><span class="wu-ln">20</span><span class="wu-lc">    input_byte = h_lo ^ ror8(expected, rot)</span></span>
+<span class="wu-line" data-line="21"><span class="wu-ln">21</span><span class="wu-lc">    input_bytes.append(input_byte)</span></span>
+<span class="wu-line" data-line="22"><span class="wu-ln">22</span><span class="wu-lc">    hash_val = ((hash_val ^ input_byte) * <span class="hljs-number">0x1000193</span>) &amp; <span class="hljs-number">0xFFFFFFFF</span></span></span></code></pre>
+      
+    </figure><div class="wu-session">
+      <div class="wu-session-bar">
+        <span class="wu-session-label">session</span>
+        <button type="button" class="wu-session-replay">replay</button>
+      </div>
+      <pre class="wu-session-body"><span class="wu-term-line" data-kind="cmd"><span class="wu-term-prompt">$</span><span class="wu-term-cmd">printf 'n4nom1tes_eat_y0ur_symb0lic_execut0r' | ./coilvm</span></span>
+<span class="wu-term-line" data-kind="out">SkillBit{n4nom1tes_eat_y0ur_symb0lic_execut0r}</span></pre>
+    </div><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">SkillBit{n4nom1tes_eat_y0ur_symb0lic_execut0r}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#architecture-a-vm-built-out-of-faults">Architecture: a VM built out of faults</a></li><li><a href="#the-trap-handler">The trap handler</a></li><li><a href="#decryption">Decryption</a></li><li><a href="#solving-it-forward">Solving it forward</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev wu-pager-index" href="../writeups.html"><span class="wu-pager-dir">Index</span><span class="wu-pager-name">All writeups</span></a>
+    <a class="wu-pager-link wu-pager-next" href="gitsleuth.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Git Sleuth</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=18"></script>
+</body>
+</html>

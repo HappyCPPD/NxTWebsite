@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Carry On · September 2026 SkillBit Flash CTF writeup · NXT_CTFS</title>
+<meta name="description" content="A checkpoint-layout PNG carries a ZIP archive appended after its IEND chunk, invisible to image viewers but readable by unzip. The extracted memo hides the flag in plain sight, labeled as a diagnostic recovery key." />
+<link rel="icon" href="../images/brand/logo.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>carry-on</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-forensics">forensics</span>
+    </div>
+    <h1>Carry On <span>ZIP appended after PNG IEND</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">SkillBit{0n3_f1l3_c4n_c4rry_4n0th3r}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>One PNG, <code>checkpoint-plan.png</code>, showing a security screening hall layout.
+The flavor text says the file is &quot;heavier than the picture it shows&quot; — a
+straight hint that there&#39;s more appended after the image data than the
+image needs.</p>
+<h2 id="spotting-the-append"><a class="wu-anchor" href="#spotting-the-append" aria-hidden="true">#</a>Spotting the append</h2>
+<p>A PNG stream ends at its <code>IEND</code> chunk. Anything after that byte is
+invisible to an image viewer but not to a tool that reads from the end of
+the file:</p>
+<div class="wu-session">
+      <div class="wu-session-bar">
+        <span class="wu-session-label">session</span>
+        <button type="button" class="wu-session-replay">replay</button>
+      </div>
+      <pre class="wu-session-body"><span class="wu-term-line" data-kind="cmd"><span class="wu-term-prompt">$</span><span class="wu-term-cmd">xxd checkpoint-plan.png | tail -5</span></span>
+<span class="wu-term-line" data-kind="out">...</span>
+<span class="wu-term-line" data-kind="out">0000fe40: 4b01 0214 0314 0000 0008 0000 bd37 5d3b  K............7];</span>
+<span class="wu-term-line" data-kind="out">...</span>
+<span class="wu-term-line" data-kind="out">0000fe70: 652e 7478 7450 4b05 0600 0000 0001 0001  e.txtPK.........</span></pre>
+    </div><p><code>PK</code> — the ZIP local-file-header magic — and a legible <code>note.txt</code> filename
+sit right there in the tail of the file.</p>
+
+<div class="wu-admon wu-admon-insight">
+      <p class="wu-admon-h">Insight</p>
+      <p>ZIP readers locate the archive by scanning backward from the end of the
+file for the End of Central Directory record, not forward from byte zero.
+PNG viewers stop at <code>IEND</code>. Same file, two formats, both perfectly happy to
+read it, because each one only looks where its own format expects to find
+its own ending.</p>
+
+    </div>
+<h2 id="extracting-it"><a class="wu-anchor" href="#extracting-it" aria-hidden="true">#</a>Extracting it</h2>
+<div class="wu-session">
+      <div class="wu-session-bar">
+        <span class="wu-session-label">session</span>
+        <button type="button" class="wu-session-replay">replay</button>
+      </div>
+      <pre class="wu-session-body"><span class="wu-term-line" data-kind="cmd"><span class="wu-term-prompt">$</span><span class="wu-term-cmd">unzip checkpoint-plan.png</span></span>
+<span class="wu-term-line" data-kind="out">Archive:  checkpoint-plan.png</span>
+<span class="wu-term-line" data-kind="out">  inflating: note.txt</span></pre>
+    </div><p><code>note.txt</code> turns out to be a shift-handover memo for the checkpoint. Buried
+in otherwise mundane operational notes is the flag, dressed up as a
+diagnostic recovery key:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">The recovery key is SkillBit{0n3_f1l3_c4n_c4rry_4n0th3r}</code></pre>
+      
+    </figure><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">SkillBit{0n3_f1l3_c4n_c4rry_4n0th3r}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#spotting-the-append">Spotting the append</a></li><li><a href="#extracting-it">Extracting it</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="trackme.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">TrackMe</span></a>
+    <a class="wu-pager-link wu-pager-next" href="careless-talk.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Careless Talk</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=18"></script>
+</body>
+</html>

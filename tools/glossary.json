@@ -26,5 +26,13 @@
   { "term": "dlopen", "def": "A libc call that loads a shared object into the calling process at runtime and resolves its symbols." },
   { "term": "Fermat factorization", "def": "A method for factoring n = p*q that succeeds fast when p and q are close together, by searching for a square a^2 - n." },
   { "term": "HCCB", "def": "High Capacity Color Barcode: a Microsoft format encoding data as a grid of coloured triangles instead of black-and-white cells." },
-  { "term": "GTS", "def": "Global Terminal Service: Nintendo's online Pokemon trading system for the DS era, built on WFC (Wi-Fi Connection)." }
+  { "term": "GTS", "def": "Global Terminal Service: Nintendo's online Pokemon trading system for the DS era, built on WFC (Wi-Fi Connection)." },
+  { "term": "SIGTRAP", "def": "A signal raised on a trap instruction (like int3); catching it lets a program treat its own breakpoints as a dispatch mechanism." },
+  { "term": "int3", "def": "The x86 one-byte breakpoint instruction (0xCC); executing it raises SIGTRAP and hands control to a debugger or signal handler." },
+  { "term": "FNV-1a", "def": "A simple, fast non-cryptographic hash: XOR each input byte into a running value, then multiply by a fixed prime." },
+  { "term": "rdtsc", "def": "An x86 instruction reading the CPU's cycle counter; comparing deltas between calls is a common anti-debugging timing check." },
+  { "term": "mprotect", "def": "A syscall that changes the read/write/execute permissions of a memory page, e.g. making code writable for self-modification." },
+  { "term": "log poisoning", "def": "Injecting attacker-controlled code into a log file, then triggering the application to execute or interpret that log as code." },
+  { "term": "blob (git)", "def": "Git's object type for raw file contents, addressed by the SHA-1 hash of its content - identical content always hashes the same." },
+  { "term": "IEND chunk", "def": "The final chunk of a PNG file, marking the end of image data; anything appended after it is ignored by image viewers." }
 ]

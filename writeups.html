@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Writeups · NXT_CTFS</title>
-<meta name="description" content="NXT_CTFS challenge writeups for TISC 2026 and Kaspersky CTF 2026 and TFC CTF 26." />
+<meta name="description" content="NXT_CTFS challenge writeups for September 2026 SkillBit Flash CTF and TISC 2026 and Kaspersky CTF 2026 and TFC CTF 26." />
 <link rel="icon" href="images/brand/logo.png" type="image/png" />
 <link rel="stylesheet" href="css/fonts.css?v=2" />
 <link rel="stylesheet" href="css/styles.css?v=18" />
@@ -64,6 +64,89 @@
   </section>
 
   <section class="section container" style="border-top:none;padding-top:0">
+    <div class="wu-eventgroup">
+      <div class="wu-eventgroup-head">
+        <h2>September 2026 SkillBit Flash CTF</h2>
+        <div class="wu-scoreline">
+      <span><b>Participant</b> 2-hour flash CTF</span>
+      <span><b>5</b> solves</span>
+      <span><b>NxT</b> &middot; solo</span>
+        </div>
+      </div>
+      <ul class="wu-grid">
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/coilvm.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-rev">rev</span>
+              
+            </div>
+            <h3 class="wu-card-name">CoilVM<span class="wu-card-sub">SIGTRAP-driven VM</span></h3>
+            <p class="wu-card-blurb">A stripped x86-64 binary runs its checks entirely inside a SIGTRAP handler, one int3 per input byte, with self-modifying XOR blocks and an rdtsc anti-debug gate. The FNV-1a verification chain inverts cleanly step by step, recovering the input and the decryption key in one forward pass.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">SkillBit{n4nom1tes_eat_y0ur_symb0lic_execut0r}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/gitsleuth.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-misc">misc</span>
+              
+            </div>
+            <h3 class="wu-card-name">Git Sleuth<span class="wu-card-sub">git-only shell, 501 haystack files</span></h3>
+            <p class="wu-card-blurb">A restricted shell only runs git, with `flag`, `grep`, `diff` and `:` all blocklisted. Committing the haystack and diffing blob hashes finds the one odd file among 500 decoys, and `git cat-file -p &lt;hash&gt;` reads it straight by SHA with no blocked syntax.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">SkillBit{R3m3mb3r_t0_4lw4ys_3sc4p3_G1t_C0mm4nds}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/trackme.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-web">web</span>
+              
+            </div>
+            <h3 class="wu-card-name">TrackMe<span class="wu-card-sub">log poisoning via User-Agent</span></h3>
+            <p class="wu-card-blurb">A PHP log viewer `include`s the access log instead of reading it, and the User-Agent header is logged unsanitized. Poisoning the log with a PHP snippet in the User-Agent, then viewing it through the include, executes it and dumps the runtime-generated flag file.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">SkillBit{...}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/carry-on.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-forensics">forensics</span>
+              
+            </div>
+            <h3 class="wu-card-name">Carry On<span class="wu-card-sub">ZIP appended after PNG IEND</span></h3>
+            <p class="wu-card-blurb">A checkpoint-layout PNG carries a ZIP archive appended after its IEND chunk, invisible to image viewers but readable by unzip. The extracted memo hides the flag in plain sight, labeled as a diagnostic recovery key.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">SkillBit{0n3_f1l3_c4n_c4rry_4n0th3r}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+        <li class="wu-card">
+          <a class="wu-card-link" href="writeups/careless-talk.html">
+            <div class="wu-card-top">
+              <span class="wu-cat wu-cat-rev">rev</span>
+              
+            </div>
+            <h3 class="wu-card-name">Careless Talk<span class="wu-card-sub">plaintext flag in decoy noise</span></h3>
+            <p class="wu-card-blurb">A watchword-prompt binary never needs to be run or reversed: the flag sits split across two plaintext strings in the data section, buried under dozens of decoy lines that a targeted grep cuts straight through.</p>
+            <div class="wu-card-foot">
+              <code class="wu-flag">SkillBit{c4r3l355_t4lk_c05t5_l1v35}</code>
+              <span class="wu-go">read <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+            </div>
+          </a>
+        </li>
+      </ul>
+    </div>
+
     <div class="wu-eventgroup">
       <div class="wu-eventgroup-head">
         <h2>TISC 2026</h2>

