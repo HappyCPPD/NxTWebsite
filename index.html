@@ -8,21 +8,21 @@
 <link rel="icon" href="images/brand/logo.png" type="image/png" />
 
 
-<link rel="stylesheet" href="css/fonts.css?v=2" />
-<link rel="stylesheet" href="css/styles.css?v=18" />
+<!-- build:css -->
+<link rel="stylesheet" href="css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="css/pages.css?v=8dc67e7f" />
+<!-- /build:css -->
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
 
 <!-- Reading the source already? Good instinct. There is a flag on this page. -->
 
-<div class="backdrop" aria-hidden="true"></div>
-<div class="gutters" aria-hidden="true"></div>
-
 <nav class="nav" id="nav">
   <div class="container nav-inner">
     <div class="nav-id">
-      <span class="nav-ws">[0]</span>
       <a href="#top" class="brand">
         <img src="images/brand/logo.png" alt="NXT_CTFS logo" />
         <span class="brand-name">NXT_CTFS</span>
@@ -30,17 +30,13 @@
     </div>
 
     <div class="nav-links">
-      <a href="#about">about</a>
-      <a href="#focus">categories</a>
-      <a href="#results">results</a>
       <a href="writeups.html">writeups</a>
       <a href="#team">team</a>
-      <a href="#shell">challenge</a>
+      <a href="#shell">try a box</a>
       <a href="#join">join</a>
     </div>
 
     <div class="nav-cta">
-      <span class="nav-clock" id="navClock" aria-hidden="true">00:00:00</span>
       <a href="#join" class="btn btn-secondary">Join us</a>
       <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -53,12 +49,9 @@
   </div>
 
   <div class="mobile-panel" id="mobilePanel">
-    <a href="#about">about</a>
-    <a href="#focus">categories</a>
-    <a href="#results">results</a>
     <a href="writeups.html">writeups</a>
     <a href="#team">team</a>
-    <a href="#shell">challenge</a>
+    <a href="#shell">try a box</a>
     <a href="#join">join</a>
   </div>
 </nav>
@@ -78,11 +71,9 @@
       </div>
 
       <div class="hero-visual">
-        <div class="term" id="term" data-x="bnh0e3YxM3dfNTB1cmMzXzE1XzRfNWsxbGx9">
+        <div class="term term-quiet" id="term" data-x="bnh0e3YxM3dfNTB1cmMzXzE1XzRfNWsxbGx9">
           <div class="term-bar">
-            <img src="images/brand/logo.png" alt="" />
             <span class="term-title">nxt@ctf: ~</span>
-            <span class="term-dots"><i></i><i></i><i></i></span>
           </div>
           <div class="term-body">
             <p class="term-line"><span class="prompt">$</span><span class="cmd">whoami</span></p>
@@ -96,6 +87,46 @@
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="section container" id="events">
+    <div class="section-head">
+      <p class="eyebrow">Events</p>
+      <h2>Latest events</h2>
+      <p>Where the team has competed recently, with a writeup for every solve.</p>
+    </div>
+    <!-- build:events -->
+    <ul class="event-grid">
+      <li class="event-card">
+        <a class="card-link" href="writeups.html#skillbit-flash-ctf-2026-09">
+          <p class="event-date">24 September 2026</p>
+          <h3 class="event-name">September 2026 SkillBit Flash CTF</h3>
+          <p class="event-place"><b>Participant</b> 2-hour flash CTF</p>
+          <p class="event-meta">5 solves &middot; Solo &middot; NxT</p>
+          <span class="card-go">Read writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+        </a>
+      </li>
+      <li class="event-card">
+        <a class="card-link" href="writeups.html#tisc-2026">
+          <p class="event-date">20 September 2026</p>
+          <h3 class="event-name">TISC 2026</h3>
+          <p class="event-place"><b>78th</b> of 1,432</p>
+          <p class="event-meta">7 solves &middot; Solo &middot; NxT</p>
+          <span class="card-go">Read writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+        </a>
+      </li>
+      <li class="event-card">
+        <a class="card-link" href="writeups.html#tfc-ctf-26">
+          <p class="event-date">6 September 2026</p>
+          <h3 class="event-name">TFC CTF 26</h3>
+          <p class="event-place"><b>162nd</b> of 1,027 teams</p>
+          <p class="event-meta">7 solves &middot; Solo &middot; NxT</p>
+          <span class="card-go">Read writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+        </a>
+      </li>
+    </ul>
+    <p class="section-more"><a href="writeups.html">All writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a></p>
+    <!-- /build:events -->
   </section>
 
   <section class="section section-narrow container" id="about">
@@ -114,7 +145,7 @@
       <p>Six core disciplines, one team. Pick a lane or work across all of them.</p>
     </div>
     <div class="table-scroll">
-      <table class="cat-table">
+      <table class="data-table cat-table">
         <caption class="sr-only">Categories the team competes in</caption>
         <thead>
           <tr>
@@ -159,147 +190,90 @@
     </div>
   </section>
 
-  <section class="section container" id="results">
-    <div class="results-head">
-      <div class="results-head-copy">
-        <p class="eyebrow">Results</p>
-        <h2>Kaspersky CTF 2026</h2>
-        <p>Nine challenges down across pwn, reverse, crypto, misc, and AI. Full writeups are on the <a href="writeups.html">writeups page</a>, root cause first and then the exploit.</p>
-        <div class="results-scoreline">
-          <span class="is-place"><b>69th</b> Asia regional league</span>
-          <span><b>736</b> points</span>
-          <span><b>9</b> challenges solved</span>
-          <span><b>NxT</b> · ITE College West</span>
-        </div>
-      </div>
-
-      <figure class="cert">
-        <img src="images/events/kaspersky-ctf-2026.jpg" width="1600" height="1131" alt="Kaspersky{CTF} certificate of participation for NxT, ITE College West, dated 30 August 2026" loading="lazy" />
-        <figcaption>Kaspersky{CTF} 2026 · certificate of participation</figcaption>
-      </figure>
-    </div>
-
-    <div class="table-scroll">
-      <table class="solve-table">
-        <caption class="sr-only">Challenges solved at Kaspersky CTF 2026</caption>
-        <thead>
-          <tr>
-            <th scope="col">Challenge</th>
-            <th scope="col">Category</th>
-            <th scope="col" style="text-align:right">Points</th>
-            <th scope="col">Solved</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th scope="row" class="solve-chal"><a href="writeups/slopgate.html">SlopGate</a></th>
-            <td class="solve-cat"><span class="wu-cat wu-cat-pwn">pwn</span></td>
-            <td class="solve-pts">182</td>
-            <td class="solve-when">Aug 30, 06:14</td>
-          </tr>
-          <tr>
-            <th scope="row" class="solve-chal"><a href="writeups/lumberjack.html">Lumberjack</a></th>
-            <td class="solve-cat"><span class="wu-cat wu-cat-ai">AI</span></td>
-            <td class="solve-pts">89</td>
-            <td class="solve-when">Aug 30, 19:35</td>
-          </tr>
-          <tr>
-            <th scope="row" class="solve-chal"><a href="writeups/chroot-bronze.html">chroot-bronze</a></th>
-            <td class="solve-cat"><span class="wu-cat wu-cat-misc">misc</span></td>
-            <td class="solve-pts">77</td>
-            <td class="solve-when">Aug 29, 20:45</td>
-          </tr>
-          <tr>
-            <th scope="row" class="solve-chal"><a href="writeups/awasmsafe.html">awasmsafe</a></th>
-            <td class="solve-cat"><span class="wu-cat wu-cat-rev">rev</span></td>
-            <td class="solve-pts">74</td>
-            <td class="solve-when">Aug 30, 04:28</td>
-          </tr>
-          <tr>
-            <th scope="row" class="solve-chal"><a href="writeups/chroot-silver.html">chroot-silver</a></th>
-            <td class="solve-cat"><span class="wu-cat wu-cat-misc">misc</span></td>
-            <td class="solve-pts">64</td>
-            <td class="solve-when">Aug 30, 03:14</td>
-          </tr>
-          <tr>
-            <th scope="row" class="solve-chal"><a href="writeups/sudokrypt.html">Sudokrypt</a></th>
-            <td class="solve-cat"><span class="wu-cat wu-cat-crypto">crypto</span></td>
-            <td class="solve-pts">50</td>
-            <td class="solve-when">Aug 30, 03:49</td>
-          </tr>
-          <tr>
-            <th scope="row" class="solve-chal"><a href="writeups/shiny-sweetie-curve.html">Shiny Sweetie Curve</a></th>
-            <td class="solve-cat"><span class="wu-cat wu-cat-crypto">crypto</span></td>
-            <td class="solve-pts">50</td>
-            <td class="solve-when">Aug 30, 03:15</td>
-          </tr>
-          <tr>
-            <th scope="row" class="solve-chal"><a href="writeups/biblocker.html">biblocker</a></th>
-            <td class="solve-cat"><span class="wu-cat wu-cat-rev">rev</span></td>
-            <td class="solve-pts">50</td>
-            <td class="solve-when">Aug 30, 01:57</td>
-          </tr>
-          <tr>
-            <th scope="row" class="solve-chal"><a href="writeups/censored.html">Censored</a></th>
-            <td class="solve-cat"><span class="wu-cat wu-cat-crypto">crypto</span></td>
-            <td class="solve-pts">50</td>
-            <td class="solve-when">Aug 29, 22:01</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
   <section class="section container" id="team">
     <div class="section-head">
       <p class="eyebrow">Team</p>
       <h2>Who you will be working with</h2>
       <p>The people behind the handles. Each keeps a solo page for the events they run alone.</p>
     </div>
-    <div class="table-scroll">
-      <table class="who-list">
-        <caption class="sr-only">Team members, status, and specialties</caption>
-        <thead>
-          <tr>
-            <th scope="col" class="sr-only">Photo</th>
-            <th scope="col">Member</th>
-            <th scope="col">Status</th>
-            <th scope="col">Focus areas</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr class="who-row">
-            <td class="who-avatar"><img src="images/avatars/txn.jpg" alt="TxN" /></td>
-            <th scope="row" class="who-user"><a class="who-user-link" href="members/txn.html">TxN</a></th>
-            <td class="who-status"><span class="status-dot is-on"></span>Active</td>
-            <td class="who-tags">
-              <span class="tag">Web</span>
-              <span class="tag">Pwn</span>
-              <span class="tag">Reverse</span>
-              <span class="tag">Team lead</span>
-            </td>
-          </tr>
-          <tr class="who-row">
-            <td class="who-avatar"><img src="images/avatars/nxt.png" alt="NxT" /></td>
-            <th scope="row" class="who-user"><a class="who-user-link" href="members/nxt.html">NxT</a></th>
-            <td class="who-status"><span class="status-dot is-on"></span>Active</td>
-            <td class="who-tags">
-              <span class="tag">Forensics</span>
-              <span class="tag">OSINT</span>
-              <span class="tag">Crypto</span>
-            </td>
-          </tr>
-          <tr class="who-row">
-            <td class="who-avatar"><img src="images/avatars/dxt.png" alt="DxT" /></td>
-            <th scope="row" class="who-user"><a class="who-user-link" href="members/dxt.html">DxT</a></th>
-            <td class="who-status"><span class="status-dot is-on"></span>Active</td>
-            <td class="who-tags">
-              <span class="tag tag-ghost">Newest member</span>
-              <span class="tag">OSINT</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- build:team -->
+    <ul class="member-grid">
+      <li class="member-card">
+        <a class="card-link" href="members/txn.html">
+          <div class="member-top">
+            <img class="member-avatar" src="images/avatars/txn.jpg" alt="" width="56" height="56" loading="lazy" />
+            <div>
+              <h3 class="member-name">TxN</h3>
+              <span class="member-status"><span class="status-dot is-on"></span>Active</span>
+            </div>
+          </div>
+          <div class="member-tags">
+            <span class="tag tag-ghost">Team lead</span>
+            <span class="tag">Web</span>
+            <span class="tag">Pwn</span>
+            <span class="tag">Reverse</span>
+          </div>
+          <span class="card-go">View page <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+        </a>
+      </li>
+      <li class="member-card">
+        <a class="card-link" href="members/nxt.html">
+          <div class="member-top">
+            <img class="member-avatar" src="images/avatars/nxt.png" alt="" width="56" height="56" loading="lazy" />
+            <div>
+              <h3 class="member-name">NxT</h3>
+              <span class="member-status"><span class="status-dot is-on"></span>Active</span>
+            </div>
+          </div>
+          <div class="member-tags">
+            <span class="tag">Forensics</span>
+            <span class="tag">OSINT</span>
+            <span class="tag">Crypto</span>
+          </div>
+          <span class="card-go">View page <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+        </a>
+      </li>
+      <li class="member-card">
+        <a class="card-link" href="members/dxt.html">
+          <div class="member-top">
+            <img class="member-avatar" src="images/avatars/dxt.png" alt="" width="56" height="56" loading="lazy" />
+            <div>
+              <h3 class="member-name">DxT</h3>
+              <span class="member-status"><span class="status-dot is-on"></span>Active</span>
+            </div>
+          </div>
+          <div class="member-tags">
+            <span class="tag tag-ghost">Newest member</span>
+            <span class="tag">OSINT</span>
+          </div>
+          <span class="card-go">View page <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></span>
+        </a>
+      </li>
+    </ul>
+    <!-- /build:team -->
+  </section>
+
+  <section class="section container" id="shell">
+    <div class="section-head">
+      <p class="eyebrow eyebrow-shell"><span>nxt@ctf:~$</span> ssh guest@sandbox</p>
+      <h2>Try a box</h2>
+      <p>A two-hop privilege escalation, running in the page. You land as <code>guest</code> with no privileges. Find the flag and read it. No hints past this line.</p>
+    </div>
+
+    <div class="term term-game" id="game">
+      <div class="term-bar">
+        <img src="images/brand/logo.png" alt="" />
+        <span class="term-title" id="gameTitle">guest@sandbox: ~</span>
+        <button type="button" class="game-reset" id="gameReset">reset</button>
+      </div>
+
+      <div class="term-body game-body" id="gameOut" role="log" aria-live="polite" aria-label="Terminal output"></div>
+
+      <form class="game-form" id="gameForm" autocomplete="off">
+        <label class="sr-only" for="gameCmd">Enter a command</label>
+        <span class="game-prompt" id="gamePrompt">guest@sandbox:~$</span>
+        <input id="gameCmd" name="cmd" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+      </form>
     </div>
   </section>
 
@@ -315,13 +289,7 @@
           <li>Reply usually lands in your inbox within a week.</li>
         </ul>
       </div>
-      <div class="term term-form">
-        <div class="term-bar">
-          <img src="images/brand/logo.png" alt="" />
-          <span class="term-title">apply.sh</span>
-          <span class="term-dots"><i></i><i></i><i></i></span>
-        </div>
-
+      <div class="join-form">
         <form id="joinForm" action="https://formspree.io/f/mjybbnrk" method="POST" novalidate>
           <div class="field">
             <label for="name">Name</label>
@@ -358,50 +326,17 @@
     </div>
   </section>
 
-  <section class="section container" id="shell">
-    <div class="section-head">
-      <p class="eyebrow eyebrow-shell"><span>nxt@ctf:~$</span> ssh guest@sandbox</p>
-      <h2>Try a box</h2>
-      <p>A two-hop privilege escalation, running in the page. You land as <code>guest</code> with no privileges. Find the flag and read it. No hints past this line.</p>
-    </div>
-
-    <div class="term term-game" id="game">
-      <div class="term-bar">
-        <img src="images/brand/logo.png" alt="" />
-        <span class="term-title" id="gameTitle">guest@sandbox: ~</span>
-        <button type="button" class="game-reset" id="gameReset">reset</button>
-      </div>
-
-      <div class="term-body game-body" id="gameOut" role="log" aria-live="polite" aria-label="Terminal output"></div>
-
-      <form class="game-form" id="gameForm" autocomplete="off">
-        <label class="sr-only" for="gameCmd">Enter a command</label>
-        <span class="game-prompt" id="gamePrompt">guest@sandbox:~$</span>
-        <input id="gameCmd" name="cmd" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
-      </form>
-    </div>
-  </section>
-
 </main>
 
-<footer class="footer container">
+<!-- build:footer -->
+    <footer class="footer container">
   <div class="footer-grid">
     <div>
-      <a href="#top" class="footer-brand">
+      <a href="index.html#top" class="footer-brand">
         <img src="images/brand/logo.png" alt="NXT_CTFS logo" />
         <span>NXT_CTFS</span>
       </a>
       <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
-    </div>
-    <div class="footer-col">
-      <h4>Navigate</h4>
-      <a href="#about">About</a>
-      <a href="#focus">Categories</a>
-      <a href="#results">Results</a>
-      <a href="writeups.html">Writeups</a>
-      <a href="#team">Team</a>
-      <a href="#shell">Challenge</a>
-      <a href="#join">Join</a>
     </div>
     <div class="footer-col">
       <h4>Connect</h4>
@@ -411,11 +346,14 @@
     </div>
   </div>
   <div class="footer-bottom">
-    <span>© 2026 NXT_CTFS. All rights reserved.</span>
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
     <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
   </div>
 </footer>
+    <!-- /build:footer -->
 
-<script src="js/script.js?v=18"></script>
+<!-- build:js -->
+<script src="js/script.js?v=4dd8bec6"></script>
+<!-- /build:js -->
 </body>
 </html>

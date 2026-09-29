@@ -22,11 +22,11 @@ onScroll();
 
 const navLinks = Array.from(document.querySelectorAll('.nav-links a'))
   .filter((link) => (link.getAttribute('href') || '').startsWith('#'));
-const sections = navLinks
-  .map((link) => document.querySelector(link.getAttribute('href')))
-  .filter(Boolean);
+/* Watch every id'd section, not just the ones in the nav, so a nav link is
+ * only highlighted while its own section is in view. */
+const sections = Array.from(document.querySelectorAll('main section[id]'));
 
-if ('IntersectionObserver' in window && sections.length) {
+if ('IntersectionObserver' in window && navLinks.length) {
   const spy = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
@@ -39,18 +39,6 @@ if ('IntersectionObserver' in window && sections.length) {
     { rootMargin: '-45% 0px -50% 0px' }
   );
   sections.forEach((section) => spy.observe(section));
-}
-
-const navClock = document.getElementById('navClock');
-
-if (navClock) {
-  const pad = (n) => String(n).padStart(2, '0');
-  const tick = () => {
-    const now = new Date();
-    navClock.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-  };
-  tick();
-  setInterval(tick, 1000);
 }
 
 const joinForm = document.getElementById('joinForm');
@@ -870,3 +858,80 @@ document.querySelectorAll('.wu-gloss').forEach((term) => {
 document.addEventListener('click', () => {
   document.querySelectorAll('.wu-gloss[data-open="true"]').forEach((el) => el.removeAttribute('data-open'));
 });
+
+/* ---------- Writeups index: category + event filters ---------- */
+const wuGroups = document.getElementById('wuGroups');
+
+if (wuGroups) {
+  const groups = Array.from(wuGroups.querySelectorAll('.wu-eventgroup'));
+  const chips = Array.from(document.querySelectorAll('.wu-filters .chip'));
+  const countEl = document.getElementById('wuCount');
+  const emptyEl = document.getElementById('wuEmpty');
+  const state = { cat: 'all', event: 'all' };
+  const plural = (n) => `${n} ${n === 1 ? 'writeup' : 'writeups'}`;
+
+  const apply = () => {
+    let total = 0;
+    groups.forEach((group) => {
+      const eventOk = state.event === 'all' || group.dataset.event === state.event;
+      let shown = 0;
+      group.querySelectorAll('.wu-row').forEach((row) => {
+        const ok = eventOk && (state.cat === 'all' || row.dataset.cat === state.cat);
+        row.hidden = !ok;
+        if (ok) shown += 1;
+      });
+      group.hidden = shown === 0;
+      const count = group.querySelector('[data-count]');
+      if (count) count.textContent = plural(shown);
+      total += shown;
+    });
+    if (countEl) countEl.textContent = plural(total);
+    if (emptyEl) emptyEl.hidden = total > 0;
+    chips.forEach((chip) => {
+      const key = chip.dataset.cat !== undefined ? 'cat' : 'event';
+      chip.setAttribute('aria-pressed', String(chip.dataset[key] === state[key]));
+    });
+  };
+
+  chips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      if (chip.dataset.cat !== undefined) state.cat = chip.dataset.cat;
+      else state.event = chip.dataset.event;
+      apply();
+    });
+  });
+
+  /* optional deep link: writeups.html?cat=crypto&event=tisc-2026 */
+  const params = new URLSearchParams(window.location.search);
+  const known = (key) => chips.some((c) => c.dataset[key] === params.get(key));
+  if (known('cat')) state.cat = params.get('cat');
+  if (known('event')) state.event = params.get('event');
+  apply();
+}
+
+/* ---------- Member pages: certificate lightbox (native <dialog>) ---------- */
+const lightbox = document.getElementById('lightbox');
+
+if (lightbox && typeof lightbox.showModal === 'function') {
+  const lightboxImg = lightbox.querySelector('.lightbox-img');
+  let opener = null;
+
+  document.querySelectorAll('a[data-lightbox]').forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      opener = link;
+      const thumb = link.querySelector('img');
+      lightboxImg.src = link.getAttribute('href');
+      lightboxImg.alt = thumb ? thumb.alt : '';
+      lightbox.showModal();
+    });
+  });
+
+  lightbox.querySelector('.lightbox-close').addEventListener('click', () => lightbox.close());
+  lightbox.addEventListener('click', (e) => {
+    if (e.target === lightbox) lightbox.close();
+  });
+  lightbox.addEventListener('close', () => {
+    if (opener) opener.focus();
+  });
+}
