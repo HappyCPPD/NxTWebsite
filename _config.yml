@@ -1,0 +1,7 @@
+# The site is pre-built static HTML (tools/build-writeups.mjs). Keep Jekyll
+# away from the markdown sources: they contain {{ }} / {% %} from code samples.
+exclude:
+  - writeups/src
+  - tools
+  - challenges
+  - "*.md"
