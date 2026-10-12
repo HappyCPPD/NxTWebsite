@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Invisible Signal · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="A matplotlib scatter plot hides 40 double-size markers among hundreds of noise points. Calibrating the axes from the gridlines and reading each y-value as an ASCII code spells a leetspeak sentence." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>invisible-signal</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Invisible Signal <span class="page-sub">a message drawn as a scatter plot</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span>
+      <span>200 pts</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{Sou15_c4nt_b3_533n_bY_n0rm41_3y3s}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Artefact: <code>flag.txt</code></p>
+<h2 id="summary"><a class="wu-anchor" href="#summary" aria-hidden="true">#</a>Summary</h2>
+<p>The only attachment is a single PNG - a matplotlib scatter plot titled
+<strong>&quot;SOUL STONE - SIGNAL RESIDUAL ANALYSIS&quot;</strong>.</p>
+<ul>
+<li>x-axis: <em>Observation Index</em> (0-40)  → <strong>character position</strong></li>
+<li>y-axis: <em>Residual Magnitude</em> (~35-130) → <strong>ASCII value</strong></li>
+</ul>
+<p>Two populations of markers are overlaid:</p>
+<ol>
+<li><strong>Noise</strong> - hundreds of <em>single</em> markers (connected-component area ≈ 61
+px).</li>
+<li><strong>The message</strong> - exactly <strong>40 markers</strong>, one per integer x = 0…39, each
+drawn <strong>double size</strong> (area ≈ 121 px) with <code>y = ord(character)</code>.</li>
+</ol>
+<p>Read the 40 special markers left-to-right and cast each y-value to a
+character:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">x=0..39  y=79 87 65 83 80 123 83 111 117 49 53 95 99 52 110 116 95 98 51 95
+           53 51 51 110 95 98 89 95 110 48 114 109 52 49 95 51 121 51 115 125
+
+O W A S P { S o u 1 5 _ c 4 n t _ b 3 _ 5 3 3 n _ b Y _ n 0 r m 4 1 _ 3 y 3 s }</code></pre>
+      
+    </figure><p>Plaintext intent (leetspeak): <em>&quot;Souls can&#39;t be seen by normal eyes.&quot;</em></p>
+<h2 id="how-it-works-step-by-step"><a class="wu-anchor" href="#how-it-works-step-by-step" aria-hidden="true">#</a>How it works (step by step)</h2>
+<h3 id="1-find-that-the-plot-is-scatter-two-faint-line-families"><a class="wu-anchor" href="#1-find-that-the-plot-is-scatter-two-faint-line-families" aria-hidden="true">#</a>1. Find that the plot is scatter + two faint line families</h3>
+<p>The graph contains smooth sine-like curves (a decoy &quot;signal&quot;/noise field) and
+hundreds of dots. Contrast boosting (<code>v&#39; = clip((v-8)*255/10)</code>) reveals the
+sine curves; they are not the payload.</p>
+<h3 id="2-calibrate-the-axes-from-the-gridlines"><a class="wu-anchor" href="#2-calibrate-the-axes-from-the-gridlines" aria-hidden="true">#</a>2. Calibrate the axes from the gridlines</h3>
+<p>Gridline pixel positions (this exact render):</p>
+<ul>
+<li>Vertical (x = 0,5,10,…,40): px <strong>372, 869, 1366, 1864, 2361, 2858, 3356,
+3853, 4351</strong> → spacing 497.25 px per 5 data units.</li>
+<li>Horizontal (y = 120,100,80,60,40): px <strong>445, 842, 1240, 1638, 2036</strong> →
+spacing 397.75 px per 20 data units.</li>
+</ul>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">x_data = (px - 372) * 5 / 497.25
+y_data = 120 - (py - 445) * 20 / 397.75</code></pre>
+      
+    </figure><p>Calibration sanity check: a marker measured at y_data = 125.03 decodes to <code>}</code>
+(ASCII 125) and y_data = 123.02 to <code>{</code> - exact.</p>
+<h3 id="3-separate-the-message-markers-from-the-noise"><a class="wu-anchor" href="#3-separate-the-message-markers-from-the-noise" aria-hidden="true">#</a>3. Separate the message markers from the noise</h3>
+<p>Threshold the image at grey ≥ 45 (grid is ≤ 25, background = 8). Run a
+connected-component labelling (8-connected) on that binary mask. The marker
+<strong>area is the discriminator</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>population</th>
+<th>area (px)</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>noise</td>
+<td>≈ 61</td>
+<td>single scatter marker</td>
+</tr>
+<tr>
+<td><strong>message</strong></td>
+<td>≈ 121</td>
+<td>double-size marker (or drawn twice)</td>
+</tr>
+</tbody></table>
+<p>For each integer position <code>p = 0…40</code>, look in a ±0.45-unit column window,
+keep only blobs with <code>area ≥ 100</code> whose centroid x is within 0.08 of <code>p</code>, and
+read <code>round(y_data)</code> as the ASCII code.</p>
+<blockquote>
+<p>Why area and not brightness? The plain noise markers peak at grey ≈ 62
+(white marker, alpha ≈ 0.22). Two markers overlapping coincidentally reach
+≈ 103-104, so brightness alone gives false positives. The <em>size</em> of the
+connected component isolates the payload markers (area 121 ± 2).</p>
+</blockquote>
+<blockquote>
+<p>Caveat (found during independent verification): the area separator is not
+perfectly clean. Two coincidental <em>double-noise</em> overlaps reach area ≈ 106
+and land at x = 25.01 and 37.01 - i.e. above the 100 threshold on
+grid-adjacent columns. The decoder rejects them by requiring the blob&#39;s
+centroid x to be the <em>closest to the integer position</em> (payload sits at
+|x-int| ≤ 0.02, the false positives at ~0.01 off-grid but with a nearer
+true payload neighbour in the same column window). Column-count and
+per-column tie-break, not area alone, is what makes the extraction exact.</p>
+</blockquote>
+<h3 id="4-result"><a class="wu-anchor" href="#4-result" aria-hidden="true">#</a>4. Result</h3>
+<p><code>decode.py</code> prints all 40 (position, ascii, area) rows and the final flag.
+<code>decode_overlay.png</code> draws a red circle on every detected marker as visual
+proof (40 circles, one per integer column, all visibly larger than
+surrounding noise).</p>
+<h2 id="reproduce"><a class="wu-anchor" href="#reproduce" aria-hidden="true">#</a>Reproduce</h2>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 decode.py signal.png</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># -&gt; FLAG: OWASP{Sou15_c4nt_b3_533n_bY_n0rm41_3y3s}</span></span></span></code></pre>
+      
+    </figure><p>Requires: <code>numpy</code>, <code>Pillow</code>, <code>scipy</code>.</p>
+<h2 id="notes-pitfalls"><a class="wu-anchor" href="#notes-pitfalls" aria-hidden="true">#</a>Notes / pitfalls</h2>
+<ul>
+<li>The two characters just above the y=120 gridline (<code>{</code> at 123 and <code>}</code> at<ol start="125">
+<li>are plotted <strong>outside</strong> the gridline band - a mask limited to the
+gridline rectangle will miss them. Include the full plot area.</li>
+</ol>
+</li>
+<li>Column windows centred on x = 5,10,… must not be excluded even though
+gridlines live there; grid greys (16/25) fall below the ≥45 threshold
+anyway.</li>
+<li>Position 40 is empty - the flag is exactly 40 characters (0…39).</li>
+<li><code>bY</code> is literal (lowercase <code>b</code>, uppercase <code>Y</code>); the extraction is exact
+(both centroids are integer-aligned, area 121).</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#summary">Summary</a></li><li><a href="#how-it-works-step-by-step">How it works (step by step)</a><ol class="wu-toc-sub"><li><a href="#1-find-that-the-plot-is-scatter-two-faint-line-families">1. Find that the plot is scatter + two faint line families</a></li><li><a href="#2-calibrate-the-axes-from-the-gridlines">2. Calibrate the axes from the gridlines</a></li><li><a href="#3-separate-the-message-markers-from-the-noise">3. Separate the message markers from the noise</a></li><li><a href="#4-result">4. Result</a></li></ol></li><li><a href="#reproduce">Reproduce</a></li><li><a href="#notes-pitfalls">Notes / pitfalls</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="soul-in-the-shadows.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Soul in the Shadows</span></a>
+    <a class="wu-pager-link wu-pager-next" href="broken-soul-vault.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Broken Soul Vault</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

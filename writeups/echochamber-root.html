@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>echochamber-root · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The sentinel process holds CAP_DAC_READ_SEARCH and passes it to anything it spawns. Running a command through its socket reads the root flag with no classic privesc needed." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>echochamber-root</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>echochamber-root <span class="page-sub">inherited CAP_DAC_READ_SEARCH</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-pwn">pwn</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{t0_w1n_th3_g4me_pl4y_a_d1ff3r3nt_g4me}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Root half of ECHOCHAMBER, building on the User-stage foothold (default creds → Jinja2 SSTI → RCE as <code>analyst</code> → sentinel socket nonce computed from leaked source).</p>
+<p>The sentinel process holds <code>CAP_DAC_READ_SEARCH</code>; any child process it spawns <strong>inherits that capability</strong>, and the <code>exec_shell</code> handler lets us spawn an arbitrary command as <code>sentinel</code>. So <code>/root/root.txt</code> is readable directly through the same socket - no classic privesc technique (<button type="button" class="wu-gloss" data-def="Set-user-ID: a file permission bit that runs a program as its owner (often root) instead of the invoking user.">SUID</button> binaries, sudo misconfig, kernel exploit) is needed at all.</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">cmd = base64.b64encode(<span class="hljs-string">b&quot;cat /root/root.txt&quot;</span>).decode()</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># same socket call as the User stage</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">isfcr{t0_w1n_th3_g4me_pl4y_a_d1ff3r3nt_g4me}</span></span></code></pre>
+      
+    </figure><p>Decoys again at <code>/var/lib/warden/decoy/root.txt</code> (<code>isfcr{s0_cl0se_but_s0_f4r}</code>). Takeaway: &quot;to win the game, play a different game&quot; - instead of fighting file permissions, abuse the capability a reachable service already holds and passes to its children. The sentinel socket was the intended root path all along.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="echochamber-user.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">echochamber-user</span></a>
+    <a class="wu-pager-link wu-pager-next" href="keystone-user.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">KeyStone-User</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OUROBOROS · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The binary synthesises its own checker at runtime, one block per 8 input bytes. The fixed function prologue is free known plaintext against the keystream, so each block's seed and word follow with no 2^64 search." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>ouroboros</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>OUROBOROS <span class="page-sub">JIT code with a self-referential key</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{c0d3_th4t_3ats_1ts_t41l!!}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A stripped ELF64 reads exactly 32 bytes; <code>mmap</code>+<code>mprotect</code>+<code>memcmp</code> is the classic JIT fingerprint - the program manufactures machine code at runtime, executes it, and <code>memcmp</code>s a buffer. No flag string in the binary.</p>
+<p><strong>What the checker does:</strong> four JIT blocks run in sequence. Each packs 8 input bytes into a 64-bit <code>word</code>, computes <code>seed = word ^ state</code> (state starts at a fixed constant), and <strong>synthesises a function</strong>: <code>code[i] = TEMPLATE[b][i] ^ byte_lane(splitmix64(seed + (g+1)*GOLDEN))</code>. The code is guarded by a splitmix64 chain hash that must match a stored 64-bit constant <code>E[b]</code>, then <code>mprotect</code>+called with the working buffer. After each block, <code>state</code> updates from a chain hash of the generated code - each block eats the previous block&#39;s tail, hence <em>Ouroboros</em>. After all four, <code>memcmp</code> against a 32-byte target.</p>
+<p><strong>Why the guard looks unbreakable (and isn&#39;t):</strong> the guard is a 64-bit preimage - brute force is <code>2^64</code> per block. <strong>The way in is to recover the CODE, not the word.</strong> Since <code>code = template XOR keystream</code>, and the first 8 bytes of every generated function are the fixed prologue <code>endbr64; push rbp; mov rbp,rsp</code>, that&#39;s free known-plaintext against the keystream: <code>K0 = code[0:8] XOR template[b][0:8]</code>, <code>seed = mixinv(V0) - GOLDEN</code> (splitmix64 finalizer is a bijection). From <code>seed</code> the entire keystream - hence the entire generated program, hence <code>word[b] = seed ^ state</code> - follows with no search.</p>
+<p><strong>The four generated programs</strong> turn out to be a fixed invertible byte mixing of the 32-byte buffer: XOR with <code>7*(i-13)</code>, in-place forward addition with neighbor, rotate-left-3, XOR with <code>31*i+0x3c</code>.</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">block 0  isfcr{c0
+block 1  d3_th4t_
+block 2  3ats_1ts
+block 3  _t41l!!}</code></pre>
+      
+    </figure><p>Concatenated: <code>isfcr{c0d3_th4t_3ats_1ts_t41l!!}</code> - &quot;code that eats its tail!!&quot;. Verified two ways: all four JIT guard hashes match the stored constants, and the original binary prints <code>CORRECT</code>. JIT + <code>mprotect</code> + <code>memcmp</code> is a code-generation challenge, and generated code almost always has a fixed prologue - free known-plaintext against any <code>template XOR keystream</code> scheme.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="palimpest.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Palimpest</span></a>
+    <a class="wu-pager-link wu-pager-next" href="the-ledger.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">The Ledger</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

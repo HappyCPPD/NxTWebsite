@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>the-shape-of-silence · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Clustered probe points fit exact integer affine pieces, so the model is a ReLU net. Four captures belong to a different model version, and dropping them resolves nine units that predict the targets." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>the-shape-of-silence</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>the-shape-of-silence <span class="page-sub">hidden ReLU network and a version trap</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-ai">AI</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{577027585a0778773aa949d9}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A black-box model <code>f: R^6 -&gt; R</code> returning exact rational outputs. Given 16 labelled anchors, 22 &quot;captures&quot; (each with two 7-point clusters), and 24 unlabelled targets to predict.</p>
+<p><strong>Step 1 - the model is piecewise-linear with integer weights.</strong> Seven points in R^6 determine an affine fit uniquely. The signal is that <strong>all 44 clouds fit with exact integer coefficients</strong> - a smooth/polynomial model would need non-integer rationals for random tight clusters. Confirmed independently: a global degree-2 polynomial fit leaves residual ~11, degree-4 ~0.28 - no smooth low-degree fit exists, and every cloud&#39;s 7 points sit strictly on one side of every recovered hyperplane. Conclusion: <code>f</code> is a ReLU network with integer weights.</p>
+<p><strong>Step 2 - recovering ReLU units, and the version trap.</strong> Each capture&#39;s two clouds straddle one kink; for a unit <code>ReLU(w·x+t)</code>, the gradient jump <code>Δg = v·w</code> and intercept jump <code>Δb = v·t</code> give the offset <code>t = Δb/v</code>. Across the 22 captures, the recovered offsets <code>t</code> were identical for every capture sharing a direction - a strong ReLU signature - but the base term was <strong>not constant</strong> across clouds. The resolution: <strong><code>model_version</code> is a deliberate trap</strong> - 4 of the 22 captures are tagged a <em>different</em> model version (<code>v-41e59d</code> vs. <code>v-8fb4ff</code>) and simply belong to a different function entirely. Restricting to the 18 same-version captures resolves cleanly to <strong>9 distinct ReLU units</strong> with a consistent activation-side choice (found by a <code>2^9</code> search) giving a constant base term.</p>
+<p><strong>Step 3 - assembling and verifying.</strong> <code>f(x) = c·x + d + Σ_j [active_j(x)]·(inc_j·x + s_j)</code>. Solving the resulting linear systems for <code>inc_j</code>, <code>s_j</code>, <code>d</code> gives exact integers (float residual ~1e-13). <strong>Verification: the reconstructed net reproduces all 252 same-version cloud points AND all 16 anchors exactly (268/268)</strong> - critically, the anchors were never used for fitting, so exact reproduction on them licenses extrapolating to the 24 targets.</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">python3 final.py
+python3 unlock.py '[&quot;5441/64&quot;, ...]'
+# isfcr{577027585a0778773aa949d9}</code></pre>
+      
+    </figure><p>Key lessons: 7 points in R^6 is a minimal affine probe, and clean integer fits signal piecewise-linearity; paired clusters straddling a kink reveal ReLU units via <code>(Δg, Δb)</code>; always split by <code>model_version</code> when a dataset field hints at provenance - two models were deliberately mixed; anchors are the generalisation check that licenses trusting extrapolated predictions.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="the-aggregate-remembers.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">the-aggregate-remembers</span></a>
+    <a class="wu-pager-link wu-pager-next" href="the-deletion-echo.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">The Deletion Echo</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

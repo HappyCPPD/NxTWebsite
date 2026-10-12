@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FlaGuard · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A shadow dex is meant to swap in a second flag checker, but the buffer is never flipped before loading, so the loader sees zero bytes. The visible checker is the real one, and it inverts byte by byte." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>flaguard</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>FlaGuard <span class="page-sub">shadow dex decoy and a missing flip()</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{sh4d0w_cl455l04d3r_tr1ckery}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A tiny Android app pitched as &quot;the strictest flag-format validator around.&quot; The prompt&#39;s wording (&quot;which flag it <strong>actually</strong> accepts&quot;) signals two candidate flags, decided by true runtime behaviour.</p>
+<p><strong>Candidate 1 - the visible checker:</strong> <code>FlagChecker.check()</code> runs a deterministic affine recurrence <code>i = ((i*131) + byte + P[k%6]) &amp; 0xFFFF</code> checked against a 34-entry constant table - every term except the input byte is known, so each byte inverts directly, giving <code>isfcr{sh4d0w_cl455l04d3r_tr1ckery}</code> (34 bytes, validates against the visible checker).</p>
+<p><strong>The intended (but broken) shadow mechanism:</strong> <code>App.bind()</code> decrypts a second dex (<code>theme.pack</code>, AES-256-CBC, key/IV derived from a 128-byte key-shard carved out of <code>palette.webp</code> plus the app&#39;s own classes.dex hash) and attempts to splice it into the ClassLoader chain via <code>dalvik.system.InMemoryDexClassLoader</code>, replacing the app ClassLoader&#39;s <code>parent</code> so parent-first lookup would find a <em>hidden</em> <code>FlagChecker</code> before the real one.</p>
+<p><strong>The deciding bug:</strong> <code>App.bind()</code> does <code>bb = ByteBuffer.allocateDirect(dex.length); bb.put(dex);</code> and hands <code>bb</code> straight to the <code>InMemoryDexClassLoader</code> constructor - <strong>without ever calling <code>bb.flip()</code></strong>. After <code>put()</code>, <code>position == limit == capacity</code>, so <code>remaining() == 0</code>; the loader sees an empty slice and contributes no classes at all. <code>bind()</code> still &quot;succeeds&quot; (no exception), but parent-first lookup misses on the inert shadow loader and falls through to the app&#39;s own <code>classes.dex</code> - the <strong>visible</strong> checker is what actually runs.</p>
+<p>Reproducing the shadow dex&#39;s decryption for completeness recovers a decoy class with the <em>same fully-qualified name</em>, whose own inverted recurrence yields <code>isfcr{p4r3nt_f1rst_d3x_1s_s0_m34n}</code> - narrating the trick the author wanted you to fall for. Because the buffer is never prepared for reading, this class is never registered and this flag is never accepted.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">isfcr{sh4d0w_cl455l04d3r_tr1ckery}</code></pre>
+      
+    </figure>
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="fluxgate-g3.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Fluxgate G3</span></a>
+    <a class="wu-pager-link wu-pager-next" href="mirror-garden.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Mirror Garden</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

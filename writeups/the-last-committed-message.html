@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>the last committed message · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The target operation was overwritten in the final database but survives in an older WAL generation. Replaying generations commit by commit and snapshotting at each boundary recovers the note and its attachment record." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>the-last-committed-message</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>the last committed message <span class="page-sub">SQLite WAL multi-generation replay</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{a03a410f1b87dbc115dd1ef6}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Recover a note and its attachment record as they stood when export <code>export-07abca69cd99</code> was acknowledged. Rule: a note replacement, its attachment-record upsert, and its operation record commit together; an acknowledged export describes the state immediately after its operation committed.</p>
+<p>The export log has two entries for the export id: one <code>timeout</code>, one <code>acknowledged</code> with <code>operation_id = op-09e0d79b4b14</code>. The handout (<code>case.db</code> + <code>case.db-wal</code>) contains a 824,400-byte WAL with 1,538 frames split into <strong>three generations</strong> distinguished by salt values (0: frames 1-108/6 commits; 1: frames 109-725/30 commits; 2: frames 726-1538/41 commits). SQLite only reads frames matching the WAL header&#39;s current salt (generation 0); the target operation does not exist in the final database state - it was overwritten by later operations and must be recovered by replaying earlier generations.</p>
+<p><strong>Replay:</strong> apply generation 0 on top of the base database, then replay generation 1 transaction-by-transaction. The target operation first appears at commit 18 of generation 1, where <code>note-7211098c21a6</code> has <code>operation_id = op-09e0d79b4b14</code>. At each commit boundary (<code>commit_size &gt; 0</code>), snapshot the database and query it.</p>
+<p><strong>Evidence extracted:</strong> <code>note_id = note-7211098c21a6</code>, <code>revision = 5</code>, an SFTP destination URL, and the attachment&#39;s SHA-256.</p>
+<figure class="wu-code" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">evidence = [note_id, <span class="hljs-string">&quot;5&quot;</span>, destination, sha256]</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">E = json.dumps(evidence, ensure_ascii=<span class="hljs-literal">True</span>, separators=(<span class="hljs-string">&quot;,&quot;</span>, <span class="hljs-string">&quot;:&quot;</span>)).encode(<span class="hljs-string">&quot;ascii&quot;</span>)</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">key = hashlib.scrypt(<span class="hljs-string">b&quot;isfcr-forensics\x00&quot;</span> + E, salt=..., n=<span class="hljs-number">131072</span>, r=<span class="hljs-number">8</span>, p=<span class="hljs-number">1</span>, maxmem=<span class="hljs-number">2</span>**<span class="hljs-number">28</span>, dklen=<span class="hljs-number">32</span>)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">flag = AESGCM(key).decrypt(nonce, ct, <span class="hljs-string">b&quot;the-last-committed-message&quot;</span>)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">isfcr{a03a410f1b87dbc115dd1ef6}</span></span></code></pre>
+      
+    </figure><p>Key techniques: SQLite WAL frames preserve historical database states across checkpoint generations; replaying frames in order and stopping at the right commit boundary reconstructs any intermediate state; WAL frame-header salt values identify which generation a frame belongs to; frames with <code>commit_size &gt; 0</code> mark atomic transaction boundaries.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="the-image-that-forgot.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">The Image That Forgot</span></a>
+    <a class="wu-pager-link wu-pager-next" href="last-packet.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">last packet</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

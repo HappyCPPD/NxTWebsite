@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>the-aggregate-remembers · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Per-round weight updates from a federated linear-regression client leak its data. Rank analysis across six reused checkpoints shows a batch of two, and the raw 16-byte records are recovered from the gradients." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>the-aggregate-remembers</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>the-aggregate-remembers <span class="page-sub">federated gradient inversion</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-ai">AI</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{9b1aa6a53205a859c14cc5e4}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A federated linear-regression client leaked its per-round weight updates: <code>delta = -lr * (weighted_mean_gradient + weight_decay * weights)</code>. The task is to invert that to recover the target client&#39;s <em>raw training records</em>.</p>
+<p><strong>Data model:</strong> 16-byte records map through a permutation/center/scale feature transform to a 17-D feature vector (16 features + bias); all labels are <code>1</code>; 3 clients mix per round with integer weights; 6 distinct weight checkpoints are reused across 61 rounds.</p>
+<p><strong>Step 1 - per-checkpoint gradient recovery.</strong> Expanding the round-update equation, <code>g_r[i]</code> (a component of the un-scaled gradient) depends only on row <code>i</code> of each client&#39;s second-moment matrix <code>S_c</code> and <code>t_c[i]</code>. Because only 6 distinct checkpoints appear across 60 rounds, the per-component observation matrix has rank exactly <code>3 clients × 6 checkpoints = 18</code> - the <em>only</em> identifiable quantity is <code>h_c(w) = S_c w - t_c</code> at each of the 6 checkpoints per client. A 60-equation least-squares per component recovers all 18 unknowns with residual &lt; 0.011 (confirmed exactly rank 18; using <em>unnormalized</em> mixing weights instead of <code>mix/sum(mix)</code> breaks this to rank 5 with huge residuals, confirming the normalization convention).</p>
+<p><strong>Step 2 - batch size is 2, and the record subspace is 2-D.</strong> <code>h_c(w_k) - h_c(w_0) = S_c(w_k - w_0)</code>; for a 2-record batch <code>S_c</code> is rank-2 in outer-product terms, so the matrix of these differences has rank ≤ 2. Singular values confirm exactly two large values then noise for all three clients - each client&#39;s batch is exactly <strong>two records</strong>, and their span is the 2-D record subspace.</p>
+<p><strong>Step 3 - solve for the two records.</strong> A small nonlinear least-squares over the 2 unknown feature vectors (with the known bias constraint <code>x[16]=1</code>), initialized by projecting into the recovered 2-D subspace, converges instantly against the 6 checkpoint equations. Un-scaling (<code>raw = x*scale + center</code>, un-permuted) lands within 0.2 of integers.</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">[&quot;07841f68cb73fe5aac5cbf66f113f992&quot;, &quot;ff1247cd40f11a77f9495f7ba9648a20&quot;]
+python
+python3 unlock.py '[&quot;07841f68cb73fe5aac5cbf66f113f992&quot;,&quot;ff1247cd40f11a77f9495f7ba9648a20&quot;]'
+isfcr{9b1aa6a53205a859c14cc5e4}</code></pre>
+      
+    </figure><p><code>unlock.py</code> derives the AES-GCM key as <code>sha256(b&#39;isfcr-ml\0&#39; + json(answer))</code> - a hard correctness check requiring the exact ASCII-sorted list. The attack hinges on checkpoint reuse: with only 6 distinct weight vectors, per-component identifiability caps at 18, exactly enough to pin <code>S_c w - t_c</code> at those points, and the rank-2 signature of a 2-record batch turns 6 points into an exactly solvable system. The one <code>acquisition-B</code> round present in the data is an unused decoy.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="oatmeal.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Oatmeal</span></a>
+    <a class="wu-pager-link wu-pager-next" href="the-shape-of-silence.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">the-shape-of-silence</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

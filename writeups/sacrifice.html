@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sacrifice · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="A PCAP's FTP streams carry a JPEG whose comment holds a password and whose embedded ZIP holds comms.bin. Peeling gzip, bzip2 and gzip off to a tar leaves one oversized log with a base64 flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>sacrifice</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Sacrifice <span class="page-sub">PCAP, FTP files and nested archives</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{4_50u1_f0r_4_50u1_v0rm1r}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>The only artifact is a PCAP. The Vormir theme and the flag format point at a layered extraction challenge, and the order in which the layers come apart is the whole puzzle.</p>
+<h2 id="1-triage-the-capture"><a class="wu-anchor" href="#1-triage-the-capture" aria-hidden="true">#</a>1. Triage the capture</h2>
+<p>Opening the PCAP in Wireshark, the first thing that stands out is a run of ICMP requests. Scrolling further down there is FTP traffic, so following the TCP stream is the natural next move. Several files move between <code>127.0.0.1</code> and <code>127.0.0.1</code>: manifest files, fuel requests and sensor dump files.</p>
+<p>Wireshark&#39;s <strong>Download FTP data</strong> option on those streams saves each transferred file out as raw bytes. Everything the FTP session carried was recovered this way.</p>
+<h2 id="2-the-jpeg"><a class="wu-anchor" href="#2-the-jpeg" aria-hidden="true">#</a>2. The JPEG</h2>
+<p>Among the exported files is a JPEG. Running <code>exiftool</code> on it shows a <strong>password hidden in the comment field</strong>:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">exiftool image.jpg</span></span></code></pre>
+      
+    </figure><p>Checking the same file with <code>binwalk</code> shows an embedded ZIP archive after the image data:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">binwalk image.jpg</span></span></code></pre>
+      
+    </figure><h2 id="3-the-dead-end"><a class="wu-anchor" href="#3-the-dead-end" aria-hidden="true">#</a>3. The dead end</h2>
+<p>At first the embedded archive was ignored. The sensor dump files are numbered <code>.bin</code> parts, so the assumption was that they had to be concatenated into one unified file and then unzipped. That did not produce anything usable.</p>
+<p>The <code>.bin</code> files are decoys. The archive inside the JPEG is the real path, and the password from the comment is what opens it.</p>
+<h2 id="4-peeling-the-layers"><a class="wu-anchor" href="#4-peeling-the-layers" aria-hidden="true">#</a>4. Peeling the layers</h2>
+<p>Carving the ZIP out of the JPEG (<code>binwalk -e</code>, or cut from the offset binwalk reports) and extracting it with the password from the image comment yields a single file, <code>comms.bin</code>. Each layer is identified with <code>file</code> and unwrapped in turn:</p>
+<figure class="wu-code" data-lines="9">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">unzip -P <span class="hljs-string">&#x27;&lt;password from the JPEG comment&gt;&#x27;</span> embedded.zip</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">file comms.bin        <span class="hljs-comment"># gzip compressed data</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">gunzip -c comms.bin &gt; layer1</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">file layer1           <span class="hljs-comment"># bzip2 compressed data</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">bunzip2 -c layer1 &gt; layer2</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">file layer2           <span class="hljs-comment"># gzip compressed data</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">gunzip -c layer2 &gt; layer3</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">file layer3           <span class="hljs-comment"># POSIX tar archive</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">tar xf layer3</span></span></code></pre>
+      
+    </figure><p>The layer order is gzip, then bzip2, then gzip, then tar. Trusting <code>file</code> at each step matters, because the extension never changes.</p>
+<h2 id="5-finding-the-flag"><a class="wu-anchor" href="#5-finding-the-flag" aria-hidden="true">#</a>5. Finding the flag</h2>
+<p>The tar extracts to a <code>comms</code> folder with one subfolder per Avenger, each holding a small <code>comm.log</code>: Natasha Romanoff, Bruce Banner, Tony Stark, Nebula, Rhodey, Clint Barton, Steve Rogers and Scott Lang. A README hints at &quot;a soul for a soul&quot; and tells you to find the one who did not come back.</p>
+<p>That points straight at Natasha, who is the one who went over the edge on Vormir. Her log is the outlier in two ways:</p>
+<ul>
+<li>It is misnamed <code>comn.log</code> instead of <code>comm.log</code>.</li>
+<li>It is roughly ten times larger than every other log.</li>
+</ul>
+<p>Buried in the middle of the Vormir dialogue is a long base64 string. Decoding it gives the flag directly:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">echo</span> <span class="hljs-string">&#x27;&lt;base64 string from comn.log&gt;&#x27;</span> | <span class="hljs-built_in">base64</span> -d</span></span></code></pre>
+      
+    </figure><figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">OWASP{4_50u1_f0r_4_50u1_v0rm1r}</code></pre>
+      
+    </figure><h2 id="takeaways"><a class="wu-anchor" href="#takeaways" aria-hidden="true">#</a>Takeaways</h2>
+<ul>
+<li>A PCAP full of FTP is a file-carving problem. Download every stream first and triage each file on its own.</li>
+<li>Metadata and embedded archives beat guessing at how loose parts fit together. Run <code>exiftool</code> and <code>binwalk</code> on every image before building theories about the other files.</li>
+<li>When an outlier exists (a misnamed file, a file ten times the size of its siblings), it is almost always the intended target.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-triage-the-capture">1. Triage the capture</a></li><li><a href="#2-the-jpeg">2. The JPEG</a></li><li><a href="#3-the-dead-end">3. The dead end</a></li><li><a href="#4-peeling-the-layers">4. Peeling the layers</a></li><li><a href="#5-finding-the-flag">5. Finding the flag</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="last-memory-of-vormir.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">The Last Memory of Vormir</span></a>
+    <a class="wu-pager-link wu-pager-next" href="soul-forge.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Soul Forge</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

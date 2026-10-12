@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>half-truths · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="512 Shamir shares with only 185 honest, far past what any unique decoder can fix. Sudan-style list decoding with a carefully chosen degree bound recovers the polynomial, and a de-branched root finder pulls out the coefficients." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>half-truths</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>half-truths <span class="page-sub">Reed-Solomon list decoding</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{l1st_d3c0d1ng_p4st_th3_r4d1us}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><code>chall.py</code> samples a random degree-39 polynomial <code>f</code> over GF(p), p = 2³¹−1, and hands out <code>n = 512</code> Shamir shares <code>(i, f(i))</code> for i = 1..512. On return, exactly <code>t = 185</code> are honest and <code>327</code> have been replaced by uniform random values. Nothing records which are which. The flag key is <code>sha256(&quot;,&quot;.join(f&#39;s coefficients))</code>, AES-GCM.</p>
+<p>The docstring taunts that Berlekamp-Welch/Gao/every classical decoder corrects up to <code>(N−K)/2</code> errors, needing <code>T ≥ (N+K)/2 = 276 &gt; 185</code>. But &quot;no unique-decoding argument reaches it&quot; invites <strong>list decoding</strong>.</p>
+<p><strong>Why it is solvable:</strong> RS list decoding (Sudan 1997, Guruswami-Sudan 1999) decodes beyond half the minimum distance up to the Johnson bound. With <code>n = 512, k = 40</code>: unique-decoding radius <code>236</code> errors (need <code>t ≥ 276</code>); Johnson bound tolerates <code>t ≳ 144</code>. We have 327 errors, comfortably inside the Johnson bound.</p>
+<p><strong>Sudan interpolation (multiplicity 1):</strong> find <code>Q(x, y) = Σ q_j(x) y^j</code> vanishing at every received point. Two requirements pick <code>D</code>: existence (monomial count <code>&gt; 512</code>) and correctness (<code>D &lt; t=185</code>). For <code>k = 40</code>, <code>D = 180</code> gives 515 monomials (<code>&gt;512</code>) and <code>180 &lt; 185</code> - the unique sweet spot, <code>ℓ = 5</code>. Built the 512×515 matrix and solved by RREF over GF(2³¹−1); kernel dimension <strong>7</strong>. Every nonzero kernel element is divisible by <code>(y − f(x))</code>.</p>
+<p><strong>Root finding - Roth-Ruckenstein, de-branched:</strong> recover <code>f</code> one coefficient at a time via <code>y ← a_d + x·y</code>, requiring the lowest-order x-term to vanish. Naive single-<code>Q</code> branches on all roots of a degree-≤4 polynomial <code>S(a)</code> and blows up (7 minutes CPU, unfinished). <strong>Fix:</strong> run RR on <strong>four independent kernel polynomials simultaneously</strong> and intersect root sets at each step - the true <code>f</code> is a root of every kernel element, so branching collapsed to exactly 1 candidate at every one of the 40 steps. Modular root extraction via <code>gcd(S, x^p − x)</code> + Cantor-Zassenhaus.</p>
+<p>Two implementation bugs cost time: (1) building <code>(x+r)^((p−1)/2) − 1</code> by prepending <code>−1</code> instead of subtracting from coefficient 0 → infinite loop; (2) using polynomial remainder instead of quotient when dividing out a known factor → roots silently discarded.</p>
+<p><strong>Result:</strong> after 40 RR steps exactly one candidate <code>f</code> remained, agreeing with 185 of 512 shares exactly matching <code>t</code>.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">FLAG: isfcr{l1st_d3c0d1ng_p4st_th3_r4d1us}</code></pre>
+      
+    </figure><p><strong>Takeaways:</strong> &quot;past the unique-decoding radius&quot; ≠ unsolvable - check the Johnson/list-decoding radius. The Sudan parameter <code>D</code> is chosen by a tight discrete count, not the asymptotic formula. Multiplicity-1 Sudan sufficed because <code>k−1</code> is small. Running root-finding across several independent kernel polynomials and intersecting roots is a cheap, general way to suppress RR branching.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="implicit-twins.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">implicit-twins</span></a>
+    <a class="wu-pager-link wu-pager-next" href="toxic-waste.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">toxic-waste</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

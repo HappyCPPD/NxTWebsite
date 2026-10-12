@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Level 1: Shattered Memories · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="Sixteen binary tiles are shuffled and rotated. Edge-signature matching with backtracking, validated by a QR decoder, assembles the code." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>level-1-shattered-memories</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Level 1: Shattered Memories <span class="page-sub">rotated 4x4 QR tiles</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span>
+      <span>100 pts</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{Sh4tt3r3d_m3m0r13s}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Challenge Description</strong></p>
+<blockquote>
+<p>The fragments carry memories distorted by the collapse of Vormir. Sixteen
+pieces remain, but each has been twisted from its original orientation.
+Restore the memories and reveal what the Stone is trying to tell you.</p>
+</blockquote>
+<p>A Google Drive link provides a file: <code>pieces_1.zip</code>.</p>
+<h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
+<h3 id="step-1-extract-the-archive"><a class="wu-anchor" href="#step-1-extract-the-archive" aria-hidden="true">#</a>Step 1 - Extract the archive</h3>
+<p>The zip is password-protected (PK v5.1, requires 7zip). The password is
+<code>OWASP</code>.</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">7z x pieces_1.zip -pOWASP</span></span></code></pre>
+      
+    </figure><p>This produces 16 grayscale PNG files (<code>piece_001.png</code> through
+<code>piece_016.png</code>), each 300x300 pixels with strictly binary pixel values (0
+or 255).</p>
+<h3 id="step-2-identify-the-puzzle"><a class="wu-anchor" href="#step-2-identify-the-puzzle" aria-hidden="true">#</a>Step 2 - Identify the puzzle</h3>
+<p>Sixteen 300x300 tiles forming a 1200x1200 image - this is a QR code split
+into a 4x4 grid. The challenge says each piece has been &quot;twisted from its
+original orientation,&quot; meaning:</p>
+<ul>
+<li>Each piece is <strong>rotated</strong> by some multiple of 90 degrees</li>
+<li>The pieces are also <strong>shuffled</strong> out of their correct grid positions</li>
+</ul>
+<h3 id="step-3-solve-with-edge-matching-qr-validation"><a class="wu-anchor" href="#step-3-solve-with-edge-matching-qr-validation" aria-hidden="true">#</a>Step 3 - Solve with edge-matching + QR validation</h3>
+<p>Since the images are strictly black-and-white, adjacent tiles must share
+identical pixel values along their shared edge. This gives an exact
+constraint for backtracking.</p>
+<p>The solver:</p>
+<ol>
+<li>Precomputes all 4 rotations of each piece and their edge signatures
+(top/right/bottom/left pixel rows)</li>
+<li>Builds a compatibility graph - for each (piece, rotation), which other
+(piece, rotation) pairs can sit to its right or below</li>
+<li>Backtracks through all 16 grid positions, placing pieces that match their
+left and top neighbors exactly</li>
+<li>When all 16 positions are filled, tests the assembled image with
+OpenCV&#39;s QR decoder</li>
+<li>Stops on the first assembly that decodes successfully</li>
+</ol>
+<figure class="wu-code is-collapsible" data-lines="60">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">from</span> PIL <span class="hljs-keyword">import</span> Image</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">import</span> numpy <span class="hljs-keyword">as</span> np</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">import</span> cv2</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">pieces = [np.array(Image.<span class="hljs-built_in">open</span>(<span class="hljs-string">f&#x27;pieces_1/piece_<span class="hljs-subst">{i:03d}</span>.png&#x27;</span>)) <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">1</span>, <span class="hljs-number">17</span>)]</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">rotated = [[np.rot90(p, r) <span class="hljs-keyword">for</span> r <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">4</span>)] <span class="hljs-keyword">for</span> p <span class="hljs-keyword">in</span> pieces]</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">get_edges</span>(<span class="hljs-params">arr</span>):</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    <span class="hljs-keyword">return</span> (<span class="hljs-built_in">tuple</span>(arr[<span class="hljs-number">0</span>,:]), <span class="hljs-built_in">tuple</span>(arr[:,-<span class="hljs-number">1</span>]), <span class="hljs-built_in">tuple</span>(arr[-<span class="hljs-number">1</span>,:]), <span class="hljs-built_in">tuple</span>(arr[:,<span class="hljs-number">0</span>]))</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">edges = [[get_edges(rotated[pi][r]) <span class="hljs-keyword">for</span> r <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">4</span>)] <span class="hljs-keyword">for</span> pi <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">16</span>)]</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc"><span class="hljs-comment"># Build compatibility sets</span></span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">right_compat, below_compat = {}, {}</span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc"><span class="hljs-keyword">for</span> pi <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">16</span>):</span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc">    <span class="hljs-keyword">for</span> ri <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">4</span>):</span></span>
+<span class="wu-line" data-line="17"><span class="wu-ln">17</span><span class="wu-lc">        right_compat[(pi,ri)] = <span class="hljs-built_in">set</span>()</span></span>
+<span class="wu-line" data-line="18"><span class="wu-ln">18</span><span class="wu-lc">        below_compat[(pi,ri)] = <span class="hljs-built_in">set</span>()</span></span>
+<span class="wu-line" data-line="19"><span class="wu-ln">19</span><span class="wu-lc">        <span class="hljs-keyword">for</span> pj <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">16</span>):</span></span>
+<span class="wu-line" data-line="20"><span class="wu-ln">20</span><span class="wu-lc">            <span class="hljs-keyword">if</span> pj == pi: <span class="hljs-keyword">continue</span></span></span>
+<span class="wu-line" data-line="21"><span class="wu-ln">21</span><span class="wu-lc">            <span class="hljs-keyword">for</span> rj <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">4</span>):</span></span>
+<span class="wu-line" data-line="22"><span class="wu-ln">22</span><span class="wu-lc">                <span class="hljs-keyword">if</span> edges[pj][rj][<span class="hljs-number">3</span>] == edges[pi][ri][<span class="hljs-number">1</span>]:</span></span>
+<span class="wu-line" data-line="23"><span class="wu-ln">23</span><span class="wu-lc">                    right_compat[(pi,ri)].add((pj,rj))</span></span>
+<span class="wu-line" data-line="24"><span class="wu-ln">24</span><span class="wu-lc">                <span class="hljs-keyword">if</span> edges[pj][rj][<span class="hljs-number">0</span>] == edges[pi][ri][<span class="hljs-number">2</span>]:</span></span>
+<span class="wu-line" data-line="25"><span class="wu-ln">25</span><span class="wu-lc">                    below_compat[(pi,ri)].add((pj,rj))</span></span>
+<span class="wu-line" data-line="26"><span class="wu-ln">26</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="27"><span class="wu-ln">27</span><span class="wu-lc">detector = cv2.QRCodeDetector()</span></span>
+<span class="wu-line" data-line="28"><span class="wu-ln">28</span><span class="wu-lc">solution = [<span class="hljs-literal">None</span>]*<span class="hljs-number">16</span></span></span>
+<span class="wu-line" data-line="29"><span class="wu-ln">29</span><span class="wu-lc">used = [<span class="hljs-literal">False</span>]*<span class="hljs-number">16</span></span></span>
+<span class="wu-line" data-line="30"><span class="wu-ln">30</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="31"><span class="wu-ln">31</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">solve</span>(<span class="hljs-params">pos</span>):</span></span>
+<span class="wu-line" data-line="32"><span class="wu-ln">32</span><span class="wu-lc">    <span class="hljs-keyword">if</span> pos == <span class="hljs-number">16</span>:</span></span>
+<span class="wu-line" data-line="33"><span class="wu-ln">33</span><span class="wu-lc">        grid = np.zeros((<span class="hljs-number">1200</span>,<span class="hljs-number">1200</span>), dtype=np.uint8)</span></span>
+<span class="wu-line" data-line="34"><span class="wu-ln">34</span><span class="wu-lc">        <span class="hljs-keyword">for</span> idx <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">16</span>):</span></span>
+<span class="wu-line" data-line="35"><span class="wu-ln">35</span><span class="wu-lc">            r,c = idx//<span class="hljs-number">4</span>, idx%<span class="hljs-number">4</span></span></span>
+<span class="wu-line" data-line="36"><span class="wu-ln">36</span><span class="wu-lc">            pi,ri = solution[idx]</span></span>
+<span class="wu-line" data-line="37"><span class="wu-ln">37</span><span class="wu-lc">            grid[r*<span class="hljs-number">300</span>:(r+<span class="hljs-number">1</span>)*<span class="hljs-number">300</span>, c*<span class="hljs-number">300</span>:(c+<span class="hljs-number">1</span>)*<span class="hljs-number">300</span>] = rotated[pi][ri]</span></span>
+<span class="wu-line" data-line="38"><span class="wu-ln">38</span><span class="wu-lc">        data, _, _ = detector.detectAndDecode(grid)</span></span>
+<span class="wu-line" data-line="39"><span class="wu-ln">39</span><span class="wu-lc">        <span class="hljs-keyword">if</span> data:</span></span>
+<span class="wu-line" data-line="40"><span class="wu-ln">40</span><span class="wu-lc">            <span class="hljs-built_in">print</span>(<span class="hljs-string">f&quot;DECODED: <span class="hljs-subst">{data}</span>&quot;</span>)</span></span>
+<span class="wu-line" data-line="41"><span class="wu-ln">41</span><span class="wu-lc">            Image.fromarray(grid).save(<span class="hljs-string">&#x27;solved.png&#x27;</span>)</span></span>
+<span class="wu-line" data-line="42"><span class="wu-ln">42</span><span class="wu-lc">            <span class="hljs-keyword">return</span> <span class="hljs-literal">True</span></span></span>
+<span class="wu-line" data-line="43"><span class="wu-ln">43</span><span class="wu-lc">        <span class="hljs-keyword">return</span> <span class="hljs-literal">False</span></span></span>
+<span class="wu-line" data-line="44"><span class="wu-ln">44</span><span class="wu-lc">    r, c = pos//<span class="hljs-number">4</span>, pos%<span class="hljs-number">4</span></span></span>
+<span class="wu-line" data-line="45"><span class="wu-ln">45</span><span class="wu-lc">    <span class="hljs-keyword">for</span> pi <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">16</span>):</span></span>
+<span class="wu-line" data-line="46"><span class="wu-ln">46</span><span class="wu-lc">        <span class="hljs-keyword">if</span> used[pi]: <span class="hljs-keyword">continue</span></span></span>
+<span class="wu-line" data-line="47"><span class="wu-ln">47</span><span class="wu-lc">        <span class="hljs-keyword">for</span> ri <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">4</span>):</span></span>
+<span class="wu-line" data-line="48"><span class="wu-ln">48</span><span class="wu-lc">            ok = <span class="hljs-literal">True</span></span></span>
+<span class="wu-line" data-line="49"><span class="wu-ln">49</span><span class="wu-lc">            <span class="hljs-keyword">if</span> c &gt; <span class="hljs-number">0</span> <span class="hljs-keyword">and</span> (pi,ri) <span class="hljs-keyword">not</span> <span class="hljs-keyword">in</span> right_compat[solution[pos-<span class="hljs-number">1</span>]]:</span></span>
+<span class="wu-line" data-line="50"><span class="wu-ln">50</span><span class="wu-lc">                ok = <span class="hljs-literal">False</span></span></span>
+<span class="wu-line" data-line="51"><span class="wu-ln">51</span><span class="wu-lc">            <span class="hljs-keyword">if</span> ok <span class="hljs-keyword">and</span> r &gt; <span class="hljs-number">0</span> <span class="hljs-keyword">and</span> (pi,ri) <span class="hljs-keyword">not</span> <span class="hljs-keyword">in</span> below_compat[solution[pos-<span class="hljs-number">4</span>]]:</span></span>
+<span class="wu-line" data-line="52"><span class="wu-ln">52</span><span class="wu-lc">                ok = <span class="hljs-literal">False</span></span></span>
+<span class="wu-line" data-line="53"><span class="wu-ln">53</span><span class="wu-lc">            <span class="hljs-keyword">if</span> ok:</span></span>
+<span class="wu-line" data-line="54"><span class="wu-ln">54</span><span class="wu-lc">                solution[pos] = (pi,ri)</span></span>
+<span class="wu-line" data-line="55"><span class="wu-ln">55</span><span class="wu-lc">                used[pi] = <span class="hljs-literal">True</span></span></span>
+<span class="wu-line" data-line="56"><span class="wu-ln">56</span><span class="wu-lc">                <span class="hljs-keyword">if</span> solve(pos+<span class="hljs-number">1</span>): <span class="hljs-keyword">return</span> <span class="hljs-literal">True</span></span></span>
+<span class="wu-line" data-line="57"><span class="wu-ln">57</span><span class="wu-lc">                used[pi] = <span class="hljs-literal">False</span></span></span>
+<span class="wu-line" data-line="58"><span class="wu-ln">58</span><span class="wu-lc">    <span class="hljs-keyword">return</span> <span class="hljs-literal">False</span></span></span>
+<span class="wu-line" data-line="59"><span class="wu-ln">59</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="60"><span class="wu-ln">60</span><span class="wu-lc">solve(<span class="hljs-number">0</span>)</span></span></code></pre>
+      <button type="button" class="wu-code-more" aria-expanded="false" data-more="+48 lines" data-less="show less">+48 lines</button>
+    </figure><h2 id="result"><a class="wu-anchor" href="#result" aria-hidden="true">#</a>Result</h2>
+<p>The decoded QR code reads:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">SOUL STONE // SHATTERED MEMORIES // OWASP{Sh4tt3r3d_m3m0r13s}</code></pre>
+      
+    </figure><h2 id="key-takeaways"><a class="wu-anchor" href="#key-takeaways" aria-hidden="true">#</a>Key Takeaways</h2>
+<ul>
+<li>Password-protected zips in CTFs often use the competition name or a
+previous flag as the password</li>
+<li>Binary (black/white) image edges enable exact matching - no tolerance
+needed</li>
+<li>Edge-matching alone produces multiple valid assemblies (trivial matches on
+all-white/all-black edges), so QR decoder validation is needed to find the
+correct one</li>
+<li>Backtracking with pruning makes the search space tractable despite
+16! x 4^16 theoretical combinations</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#solution">Solution</a><ol class="wu-toc-sub"><li><a href="#step-1-extract-the-archive">Step 1 - Extract the archive</a></li><li><a href="#step-2-identify-the-puzzle">Step 2 - Identify the puzzle</a></li><li><a href="#step-3-solve-with-edge-matching-qr-validation">Step 3 - Solve with edge-matching + QR validation</a></li></ol></li><li><a href="#result">Result</a></li><li><a href="#key-takeaways">Key Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="level-0-first-fragment.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Level 0: First Fragment</span></a>
+    <a class="wu-pager-link wu-pager-next wu-pager-index" href="../writeups.html"><span class="wu-pager-dir">Index</span><span class="wu-pager-name">All writeups</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

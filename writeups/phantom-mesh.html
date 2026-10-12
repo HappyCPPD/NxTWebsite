@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Phantom Mesh · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The rogue node's AES current draw modulates its transmitter bias, so the I/Q envelope is a power trace. Correlation power analysis recovers the fleet-wide link key, which unwraps the network key and the diagnostic report." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>phantom-mesh</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Phantom Mesh <span class="page-sub">CPA on a software-AES mesh</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{ph4nt0m_m3sh_h4rm0n1cs_un14sk_th3_tc_l1nk_k3y}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>An office smart-lighting mesh (proprietary &quot;Lumeta Mesh Protocol&quot; over 802.15.4 MAC payloads) has a rogue node broadcasting a diagnostics report once a day. Given: <code>mesh.pcap</code>, <code>traces/iq.npz</code> (2500 raw I/Q records, 4 Ms/s, each triggered at a KEY_CONFIRM transmission), <code>traces/nonces.csv</code> (the exact nonce on-air for each I/Q record), and vendor docs.</p>
+<p><strong>Protocol crypto:</strong> every protected PDU is AES-CCM* (key 128, nonce 13, MIC 4). A single fleet-wide <strong>TC Link Key</strong> protects <code>TRANSPORT_KEY</code> (which carries a per-site NWK key) and the <code>KEY_CONFIRM</code> check tag.</p>
+<p><strong>The side channel:</strong> the SDR lab notebook hints that the PA bias feed lacks a recommended decoupling cap, and the LMP crypto runs in software (no hardware AES peripheral) - software AES current draw modulates the PA bias, AM-modulating the transmitted carrier. Since the I/Q captures are aligned to KEY_CONFIRM <code>tx_start</code> with known plaintext (the nonce), this is textbook <strong>Correlation Power Analysis</strong>: each record&#39;s envelope magnitude <code>|iq|</code> is a power trace of the AES that computed that frame&#39;s tag.</p>
+<p><strong>CPA on round 1:</strong> model <code>HW(Sbox(nonce_j XOR g))</code>, correlated against every sample of the magnitude traces. The recovered TC Link Key is <code>7cf8b0b78be9f36a225c1e70692e1e1c</code>, corroborated by per-byte leak peaks spaced ~48 samples apart moving monotonically with byte index (sequential software AES byte processing), and by reproducing all 8 on-air KEY_CONFIRM tags.</p>
+<p><strong>The trap:</strong> <code>hw @ X.T</code> is silently wrong on a square trace matrix (2500×2500) because both orientations have the same shape - the correlation computes against the transposed axis and returns plausible-looking noise-floor z-scores (~4). The fix is <code>hw @ X</code> (no transpose); a positive control (inject a known-key correlation at a known sample) is essential to catch this - after the fix the injected key jumps to z≈50.</p>
+<p><strong>Decrypting the chain:</strong> <code>TRANSPORT_KEY</code> decrypts under the TC Link Key to reveal the NWK key (<code>ffa0be732cd8f56eae8caa21359baf06</code>). Decrypting all <code>SECURE_REPORT</code> frames under the NWK key, one frame comes from a node not in the mesh inventory (EUI pattern mismatch), reporting a vendor-specific cluster/attribute:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">isfcr{ph4nt0m_m3sh_h4rm0n1cs_un14sk_th3_tc_l1nk_k3y}</code></pre>
+      
+    </figure>
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="journal-necromancy.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Journal Necromancy</span></a>
+    <a class="wu-pager-link wu-pager-next" href="end-mark.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">end-mark</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

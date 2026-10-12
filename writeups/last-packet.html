@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>last packet · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A developer left X-Debug-Mode on against an internal API, and the verbose reply carried an internal_key. It decodes through hex, base64 and a single-byte XOR whose key the known flag prefix gives away." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>last-packet</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>last packet <span class="page-sub">debug header leak in a pcap</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{l33t_c0d3_tw0_sum_f0und}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Given <code>challenge2.pcap</code> (13 KB, 112 packets): DNS lookups, benign HTTP browsing, and two internal microservices. The interesting conversation is a developer hitting an internal <code>twosum-api.internal.corp:9090</code> service&#39;s <code>/api/v1/twosum/solve</code> endpoint with <code>X-Debug-Mode: enabled</code> and <code>X-Developer: raj.kumar</code> headers set.</p>
+<p>The response came back <code>X-Debug-Level: VERBOSE</code> with a JSON body containing far more than the algorithm&#39;s answer - a <code>debug</code> object with <code>internal_key</code> (hex string) and <code>enc: &quot;xor&quot;</code>, plus assorted build/perf metadata. The <code>enc: &quot;xor&quot;</code> field is practically a how-to.</p>
+<p><strong>Decoding:</strong> hex-decode <code>internal_key</code> → ASCII base64 string → base64-decode → raw bytes. Since the flag format <code>isfcr{</code> is known, the single-byte XOR key is derived from the first bytes: every byte of <code>(decoded[i] ^ expected_char[i])</code> comes out to the same value, <code>0x42</code>, confirming a single-byte key.</p>
+<figure class="wu-code" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> base64</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">key_hex = <span class="hljs-string">&quot;4b7a456b495441354c6e467...&quot;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">data = base64.b64decode(<span class="hljs-built_in">bytes</span>.fromhex(key_hex) + <span class="hljs-string">b&quot;=&quot;</span>)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">flag = <span class="hljs-built_in">bytes</span>(b ^ <span class="hljs-number">0x42</span> <span class="hljs-keyword">for</span> b <span class="hljs-keyword">in</span> data).decode()</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">isfcr{l33t_c0d3_tw0_sum_f0und}</span></span></code></pre>
+      
+    </figure><p>The vulnerability: a debug endpoint accessible on an internal network returned sensitive cryptographic material in its verbose response, &quot;encrypted&quot; with a trivially reversible single-byte XOR. A textbook case for stripping debug fields behind a build flag rather than a request header a developer can toggle at will.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="the-last-committed-message.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">the last committed message</span></a>
+    <a class="wu-pager-link wu-pager-next" href="write-hole.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Write-Hole</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

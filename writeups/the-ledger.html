@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Ledger · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The check is an exact integer subset sum over 128 entries of 400 bits, a density of about 0.32. BKZ with block size 20 on the standard low-density lattice yields the 128-bit selector, which is the input." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>the-ledger</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>The Ledger <span class="page-sub">subset-sum via lattice reduction</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{lll_dense}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A stripped x86-64 ELF reads 16 bytes and compares a derived 512-bit accumulator against a hard-coded target. The check: zero a 64-byte accumulator <code>R</code>; for each of 128 bits of the 16-byte input, if bit <code>i</code> is set, add a 512-bit table entry <code>T[i]</code> into <code>R</code> with carry propagation; then <code>memcmp(R, TARGET, 64)</code>. This is a <strong>128-variable subset-sum / knapsack</strong>: the 16-byte input is exactly the 128-bit selector vector.</p>
+<p>Extraction shows every <code>T[i]</code> is a 400-bit integer, <code>TARGET</code> is 406 bits, <code>sum(T)</code> is 407 bits - no modular wraparound ever happens, so the check is an exact integer subset sum. Density <code>d = 128/400 ≈ 0.32</code>, far below the Lagarias-Odlyzko threshold (0.9408), so <button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button>/BKZ recovers the (essentially unique) subset.</p>
+<p><strong>Lattice:</strong> standard low-density subset-sum lattice, dimension 129: <code>B[i][i]=2</code>, <code>B[i][n]=T[i]*W</code>, <code>B[n][j]=1</code>, <code>B[n][n]=TARGET*W</code> with <code>W=2^12</code>. A solution <code>x ∈ {0,1}^n</code> yields a short lattice vector <code>(±1,...,±1,0)</code>. Plain LLL at delta 0.99 was not strong enough on the 400-bit entries; <strong>BKZ block size 20</strong> finished the reduction and produced the needed row. Reconstructing bits and packing LSB-first gives the input.</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">key hex  : 69736663727b6c6c6c5f64656e73657d
+key ascii: isfcr{lll_dense}
+$ printf 'isfcr{lll_dense}' | ./chall
+CORRECT -- the flag is the input you just gave me.</code></pre>
+      
+    </figure><p>Requires <code>fpylll</code>.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="ouroboros.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">OUROBOROS</span></a>
+    <a class="wu-pager-link wu-pager-next" href="turning-chart.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Turning Chart</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

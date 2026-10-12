@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Red Skull's Trail · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="A riddle names Vormir-616, whose GitHub repo has a tampered record. The git history reveals an image rename, and base64 trailing the PNG's IEND chunk gives the username." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>red-skulls-trail</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Red Skull's Trail <span class="page-sub">GitHub history to a PNG trailer</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-osint">osint</span>
+      <span>100 pts</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{PhantomSoul}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Solution</strong></p>
+<h3 id="1-google-drive-file"><a class="wu-anchor" href="#1-google-drive-file" aria-hidden="true">#</a>1. Google Drive File</h3>
+<p>The challenge provides a Google Drive link to
+<code>riddle - Hrishikesh More.txt</code>:</p>
+<blockquote>
+<p>The Soul Stone was supposed to be returned to its resting place on
+Vormir-616, but the record says different!!!
+Investigate who was the user.
+Remember, only Red skull can lead you to your destination.
+Only worthy one will be able to get the stone back.</p>
+</blockquote>
+<p>Key clue: <strong>Vormir-616</strong> is a username to search for.</p>
+<h3 id="2-github-repo"><a class="wu-anchor" href="#2-github-repo" aria-hidden="true">#</a>2. GitHub Repo</h3>
+<p>Searching GitHub for <code>Vormir-616</code> leads to:
+<a href="https://github.com/Vormir-616/Missing-Record">https://github.com/Vormir-616/Missing-Record</a></p>
+<p>The repo contains <code>README.md</code>, <code>RECORD1</code>-<code>RECORD6</code>, and 21 commits.</p>
+<p>Records 1, 2, 4, and 5 each name a user who returned the stone
+(<code>soulkeeper</code>, <code>vormir_watcher</code>, <code>echoofvormir</code>, <code>soulbound</code>). <strong>RECORD3</strong>
+was tampered with - git history shows it originally said &quot;RECOVERED&quot; but was
+changed to &quot;UNRECOVERED&quot; with the note &quot;Find the user of the stone.&quot; The
+username was removed.</p>
+<h3 id="3-record6-hidden-image"><a class="wu-anchor" href="#3-record6-hidden-image" aria-hidden="true">#</a>3. RECORD6 - Hidden Image</h3>
+<p>Git history reveals RECORD6 was originally uploaded as <code>soul_stone.png</code>,
+then renamed through several steps:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">soul_stone.png → Nothing_suspicious.png → Nothing_suspicious.md → Nothing_suspicious → RECORD6</code></pre>
+      
+    </figure><p>The file is still a valid PNG image (1254x1254).</p>
+<h3 id="4-steganography-trailer-data"><a class="wu-anchor" href="#4-steganography-trailer-data" aria-hidden="true">#</a>4. Steganography - Trailer Data</h3>
+<p>Running <code>exiftool</code> on the PNG shows:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">Warning: [minor] Trailer data after PNG IEND chunk</code></pre>
+      
+    </figure><p>Extracting the bytes after the <button type="button" class="wu-gloss" data-def="The final chunk of a PNG file, marking the end of image data; anything appended after it is ignored by image viewers.">IEND chunk</button>:</p>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">data = <span class="hljs-built_in">open</span>(<span class="hljs-string">&#x27;RECORD6&#x27;</span>, <span class="hljs-string">&#x27;rb&#x27;</span>).read()</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">iend = data.find(<span class="hljs-string">b&#x27;IEND&#x27;</span>)</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">trailer = data[iend+<span class="hljs-number">8</span>:]</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-built_in">print</span>(trailer)  <span class="hljs-comment"># b&#x27;UGhhbnRvbVNvdWw=\n&#x27;</span></span></span></code></pre>
+      
+    </figure><p>Base64 decoding:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">echo &quot;UGhhbnRvbVNvdWw=&quot; | base64 -d
+# PhantomSoul</code></pre>
+      
+    </figure><p><strong>PhantomSoul</strong> is the missing user from RECORD3 - the one connected to the
+Soul Stone.</p>
+<h2 id="tools-used"><a class="wu-anchor" href="#tools-used" aria-hidden="true">#</a>Tools Used</h2>
+<ul>
+<li>Google Drive (view riddle)</li>
+<li>GitHub (repo + commit history)</li>
+<li><code>git log</code>, <code>git show</code>, <code>git diff</code> (inspect tampered records)</li>
+<li><code>exiftool</code> (detect trailer data in PNG)</li>
+<li><code>base64 -d</code> (decode hidden string)</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><ol class="wu-toc-sub"><li><a href="#1-google-drive-file">1. Google Drive File</a></li><li><a href="#2-github-repo">2. GitHub Repo</a></li><li><a href="#3-record6-hidden-image">3. RECORD6 - Hidden Image</a></li><li><a href="#4-steganography-trailer-data">4. Steganography - Trailer Data</a></li></ol><li><a href="#tools-used">Tools Used</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="return-to-win.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Return to Win</span></a>
+    <a class="wu-pager-link wu-pager-next" href="level-0-first-fragment.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Level 0: First Fragment</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

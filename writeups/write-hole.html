@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Write-Hole · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Three raw drive images from a crashed NAS. Using e2fsck as the oracle recovers the RAID geometry, and the one record whose GCM tag was destroyed is decrypted independently of the tag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>write-hole</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Write-Hole <span class="page-sub">RAID5 write hole and AEAD recovery</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{p4r1ty_n3v3r_l13s_wr1t3_h0l3_r3m3mb3rs}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A three-drive NAS lost power partway through writing a sealed report; three raw images (<code>bay0.img</code>, <code>bay1.img</code>, <code>bay2.img</code>, 17 MiB each) are given. Every &quot;easy&quot; piece is a decoy for one genuinely nasty record at the end: a record whose GCM tag is the only thing the crash destroyed.</p>
+<p><strong>Fingerprinting:</strong> a structured band starting at <code>0x100000</code> (1 MiB) leaks an ext4 superblock (magic <code>0xEF53</code>) with volume label <code>ev-nas3</code>. The 1 MiB offset implies a metadata reservation area, and the superblock appears identically on <code>bay0</code>/<code>bay1</code> but is zero on <code>bay2</code> - two identical copies plus one zero chunk means <strong>XOR parity (RAID5)</strong>.</p>
+<p><strong>Geometry brute force:</strong> rather than trusting XOR-consistency (broken by design in a write-hole challenge, since the interesting stripes are deliberately inconsistent), the <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> used is <strong>filesystem validity</strong> (<code>e2fsck -fn</code>): assembling every <code>(chunk size, drive order, parity rotation, data order)</code> combination and checking which produces a clean ext4. Exactly one config works: <code>C=32768</code>, <code>D=0x100000</code>, left-symmetric parity rotation <code>(0+2t) mod 3</code>.</p>
+<p><strong>What&#39;s on the volume:</strong> <code>/etc/nas.conf</code> confirms RAID5 with <strong>no write-intent bitmap</strong> (the write hole is live) and <code>data=journal</code>. <code>/stage/isfc-stage.py</code> documents the sealing scheme: 32768-byte records, 12-byte nonce <code>job||index</code>, AAD <code>payload.bin|job|idx</code>, AES-256-GCM, key burn-after-read from <code>/stage/.keyslot</code>. <code>stage.log</code> shows job 7&#39;s keyslot was rotated and then consumed just before the crash.</p>
+<p><strong>Recovering burn-after-read keys:</strong> because the array overwrites in place nightly, old blocks linger. Scanning for a <code>KSLT</code> magic finds several 64-byte keyslot blobs including job 7&#39;s discarded (rotated) key and its live key (matched by <code>key_id</code>).</p>
+<p><strong>The write hole itself:</strong> <code>payload.bin</code> maps to 6 contiguous 32768-byte records across RAID5 stripes. Records 0/2/4 sit intact on single drives. Records 1 and 5 are in stripes where the data chunk was never (re)written but parity was updated - recovered trivially as <code>parity ^ surviving_neighbour</code>. <strong>Record 3 is different:</strong> the parity chunk&#39;s <em>write itself was torn</em> - the nonce bytes are correct but AES-GCM tag verification fails. Since AES-GCM is CTR + GHASH, and the keystream depends only on key+nonce (both already known), the plaintext is recovered by <strong>bypassing the tag entirely</strong>: manually computing the CTR keystream and XORing - no tag required. This is validated by running the identical CTR routine on a record whose tag does verify and matching byte-for-byte.</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">nonce = rec[:<span class="hljs-number">12</span>]</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">ks = AES_CTR_keystream(key, nonce)</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">plain = xor(rec[<span class="hljs-number">12</span>:-<span class="hljs-number">16</span>], ks)   <span class="hljs-comment"># tag never consulted</span></span></span></code></pre>
+      
+    </figure><p>Three records carry flag shards; concatenating in order:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">isfcr{p4r1ty_n3v3r_l13s_wr1t3_h0l3_r3m3mb3rs}</code></pre>
+      
+    </figure><p>(The decrypted plaintext literally reads <code>isfar{...}</code> due to an author typo - the event&#39;s accepted prefix <code>isfcr{</code> is substituted on output.) Lessons: use the artifact&#39;s own validity as the brute-force oracle instead of an XOR-consistency check that the challenge deliberately breaks; burn-after-read secrets survive in stale blocks on in-place-overwritten media; a lost AEAD authentication tag does not mean lost data if you hold the key and nonce.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="last-packet.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">last packet</span></a>
+    <a class="wu-pager-link wu-pager-next" href="journal-necromancy.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Journal Necromancy</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

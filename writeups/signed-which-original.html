@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>signed, but which original? · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Five signed checkpoints, only some of them genuinely valid. Finding the largest correct tree head scopes the log, and strict RFC 8785 and ordering checks single out the one redacted derivative that passes." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>signed-which-original</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>signed, but which original? <span class="page-sub">provenance chain audit</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{29336738f5f44f4d2d1e3ac2}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><code>handout.zip</code> → <code>case.json</code> (a case spec the target derivative must satisfy: capture principal, final action <code>redact</code>, intermediate actions <code>crop</code>/<code>resize</code>, max chain 4, parent-before-child, <code>log_scope: largest_valid_checkpoint</code>, RFC8785 canonical encoding, target incident id, root key, 5 signed tree heads) + <code>entries.bin</code> (magic <code>ISFCRLOG</code>, TLV records: key registry, manifest, incident link, tree-head stubs).</p>
+<p>Manifests are ed25519-signed over the raw JSON bytes (not over a canonical form - confirmed by local verification). <code>parent_asset_sha256</code> links a DAG from capture through derivatives.</p>
+<p><strong>Checkpoint validity</strong> requires both a valid signature over the canonical <code>{key_id, root_hash, tree_size}</code> AND a correct RFC6962 Merkle root over the log records, AND an authorized signer. Of the 5 checkpoints: <code>tree_size=55</code> has a correct root but forged signature; <code>tree_size=50</code> has a valid signature but a root mismatch; <code>tree_size=52</code> is signed by the rogue secondary key; only <code>tree_size=33</code> and <strong>46</strong> (the largest valid) pass everything - so <code>log_scope</code> = records 0..45.</p>
+<p><strong>Finding the derivative:</strong> only one capture (<code>capture-north</code>-signed) has a <code>crop → resize → redact</code> continuation. Among the redact candidates, each must pass raw-sig validity, RFC8785 canonical JSON, in-scope index, and parent-logged-before-child - eliminating candidates with duplicate JSON keys, unicode-escaped keys, extra spaces, forged signatures, case-mismatched hex links, and out-of-scope indices (idx48 &gt; scope 45). <strong><code>mf-ee2392778137</code></strong> is the only survivor.</p>
+<figure class="wu-code" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">evidence = [derivative_asset, derivative_manifest_id, ancestry_joined,</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">            capture_asset, target_incident_id, <span class="hljs-built_in">str</span>(tree_size)]</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">E = json.dumps(evidence, ensure_ascii=<span class="hljs-literal">True</span>, separators=(<span class="hljs-string">&quot;,&quot;</span>, <span class="hljs-string">&quot;:&quot;</span>)).encode(<span class="hljs-string">&quot;ascii&quot;</span>)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">key = scrypt(<span class="hljs-string">b&quot;isfcr-forensics\x00&quot;</span>+E, salt=..., n=<span class="hljs-number">131072</span>, r=<span class="hljs-number">8</span>, p=<span class="hljs-number">1</span>, dklen=<span class="hljs-number">32</span>)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">flag = AESGCM(key).decrypt(nonce, ct, <span class="hljs-string">b&quot;signed-but-which-original&quot;</span>)</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">isfcr{29336738f5f44f4d2d1e3ac2}</span></span></code></pre>
+      
+    </figure><p>&quot;signed&quot; ≠ &quot;valid&quot;: several redacts carry valid signatures over non-canonical JSON, uppercase hex links, or out-of-scope entries. Merkle-root correctness alone or signature correctness alone is not enough - the largest checkpoint is disqualified on purpose, and <code>root_key</code> in <code>case.json</code> is a decoy (checkpoints verify against the log key&#39;s own registered pubkey).</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="ghost-in-the-spooler.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Ghost in the Spooler</span></a>
+    <a class="wu-pager-link wu-pager-next" href="frost-ledger.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">frost-ledger</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

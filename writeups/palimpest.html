@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Palimpest · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A Zig-built VM re-keys itself from its own register state on every one of 320 steps. Rather than invert it by hand, the whole loop is symbolised for bitwuzla with printable-ASCII constraints and solved in one query." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>palimpest</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Palimpest <span class="page-sub">bitcode VM solved with SMT</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{p4p3r_r3m3mb3rs_wh4t_1nk_f0rg3ts}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A statically linked, stripped Zig-built ELF. The catalogue (<code>?</code>) shows two decoy flags for JOB 00/02 plus a reversed hint &quot;Restoration starts at the last impression.&quot; The input check requires <code>isfcr{</code> + 32 <code>[a-z0-9_]</code> chars + <code>}</code>, and the 32 inner chars are copied verbatim into eight 32-bit registers - no hashing of the input.</p>
+<p><strong>The virtual machine:</strong> 320 iterations consume 8 bytecode bytes each, decoding an opcode and operands via a rolling hash keyed by an accumulator <code>r9</code>, built from <code>rol5</code>/xor mixing with the golden-ratio constant. Range checks on decoded operands are hard rejects. Nine ops shuffle the eight registers: ADD imm, XOR imm, ROL reg, MUL imm, ADD ROL, XOR ROL, S-box substitute, SWAP, MOVE pointer. A 3-bit pointer <code>P</code> only moves on the MOVE op. After the op, the <em>new</em> register state feeds the next round&#39;s key - self-referential, hence <em>Palimpest</em> / &quot;a mirror on the workbench&quot;. The final gate requires <code>P==1</code>, a running sum check, and the eight registers to equal two hard-coded 128-bit constants.</p>
+<p><strong>Solving:</strong> rather than hand-invert the data-dependent control flow, the whole loop was reimplemented and symbolised with 8 symbolic 32-bit registers, asserting at every step: range checks, selector validity, guard conditions, plus the final equality/<code>P==1</code>/sum constraints and &quot;body is printable ASCII&quot;. A concrete Python twin was first validated against the binary under gdb (step-0 decode and re-keyed <code>r9</code> both matched). This is QF_BV; <strong>bitwuzla</strong> solved it in seconds (a <button type="button" class="wu-gloss" data-def="An SMT solver: give it symbolic variables and constraints and it finds a satisfying assignment or proves none exists.">z3</button> port also worked but was slower/memory-hungry).</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">$ python3 bw_solve.py print
+RESULT: sat
+FLAG: isfcr{p4p3r_r3m3mb3rs_wh4t_1nk_f0rg3ts}
+
+$ printf 'isfcr{p4p3r_r3m3mb3rs_wh4t_1nk_f0rg3ts}\n' | ./palimpsest
+&gt; Seal accepted. Job 04 restored.</code></pre>
+      
+    </figure><p>Two bugs cost time: z3&#39;s <code>&gt;&gt;</code> is arithmetic (sign-extending) - needed <code>z3.LShR</code> for the rotate helper; and the epilogue adds byte <code>b7</code>, not the loop counter (the assembly clobbers the counter register first).</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="the-press.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">the-press</span></a>
+    <a class="wu-pager-link wu-pager-next" href="ouroboros.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">OUROBOROS</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

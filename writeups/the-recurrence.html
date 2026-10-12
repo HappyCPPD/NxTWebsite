@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The-Recurrence · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The 28-byte input is a 224-bit scalar fed through a Lucas V-sequence ladder. The check reduces to a quadratic in alpha^k, and the group order is smooth enough for Pohlig-Hellman to recover the scalar in milliseconds." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>the-recurrence</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>The-Recurrence <span class="page-sub">Lucas sequence and discrete log</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{p0hlig_h3llman_sm00th}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A stripped 64-bit ELF reads exactly 28 bytes and prints <code>CORRECT</code> or <code>nope.</code>. The flag <strong>is</strong> the 28-byte input. The 28 bytes pack into a 224-bit <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> scalar <code>k</code>. A loop runs bit 255 down to bit 0 of <code>k</code>, updating two 256-bit values <code>A</code>, <code>B</code> initialised to <code>A=2</code>, <code>B=P</code> (a constant), using modular add/sub/mul helpers mod <code>M</code>.</p>
+<p><strong>The recurrence:</strong> bit clear → <code>A&#39; = A*A-2, B&#39; = A*B-P</code>; bit set → <code>A&#39; = A*B-P, B&#39; = B*B-2</code>. This is exactly the <strong>double-and-add ladder of a Lucas V-sequence</strong> <code>V_n(P, Q=1)</code>: <code>V_0=2, V_1=P, V_2n=V_n^2-2, V_2n+1=V_n*V_n+1-P</code>. With <code>(A,B)=(V_n,V_n+1)</code>, bit clear → <code>n:=2n</code>, bit set → <code>n:=2n+1</code>. After consuming <code>k</code>, the state is <code>(V_k, V_k+1)</code>.</p>
+<p><strong>The check:</strong> only <code>A</code> is verified against a constant <code>T</code>, so <code>V_k(P,1) ≡ T (mod M)</code>.</p>
+<p><strong>Inverting it:</strong> since <code>Q=1</code>, the characteristic roots <code>α, β = α^-1</code> give <code>V_n = α^n + α^-n</code>. <code>V_k = T</code> becomes a quadratic in <code>α^k</code>: <code>(α^k)² − T·α^k + 1 = 0</code>, solved via Tonelli-Shanks since <code>T²−4</code> is a QR. Recovering <code>k</code> is now a discrete log of <code>α^k</code> base <code>α</code> in <code>F_M*</code>. Factoring <code>M-1</code> shows it is squarefree and <strong>fully smooth</strong> (largest factor 59051), and <code>α</code> is a primitive root - Pohlig-Hellman splits the 247-bit dlog into dlogs per ~16-bit prime, CRT&#39;d together in milliseconds. Two candidate roots give two candidate <code>k</code> values (±k); exactly one lies in <code>[0, 2^224)</code> and yields printable ASCII.</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">k = 13207006284361456903106593959418730498679199957338452512214440375145
+k.to_bytes(28, 'little') = b'isfcr{p0hlig_h3llman_sm00th}'</code></pre>
+      
+    </figure><p>Verified: <code>printf &#39;%s&#39; &#39;isfcr{p0hlig_h3llman_sm00th}&#39; | ./chall</code> → <code>CORRECT</code>. The author conveniently chose a prime <code>M</code> with a fully smooth <code>M-1</code> (the flag name gives it away).</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="one-more.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">one-more</span></a>
+    <a class="wu-pager-link wu-pager-next" href="the-loom.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">The-Loom</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fluxgate G3 · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Each firmware artifact is verified alone but never as a set. One same-counter sidegrade adds an unlock opcode and a tab upgrade lowers its capability requirement, so a basic token can unlock." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>fluxgate-g3</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Fluxgate G3 <span class="page-sub">composing signed firmware parts</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-pwn">pwn</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{s1gn3d_p4rts_uns1gn3d_whole_ab84f1}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><code>nc 0.cloud.chals.io 25537</code>, a simulated maintenance controller with an Ed25519-signed firmware artifact format (<code>pol</code>/<code>tab</code>/<code>rad</code> components, each with a security counter and dependency ranges) and a token/capability-gated command dispatcher.</p>
+<p>The controller verifies each firmware artifact <strong>individually</strong> (signature, counter ≥ stored, dependency ranges satisfied) but <strong>never validates the resulting combination as a coherent whole</strong>. A low-tier service credential (<code>user_id=42</code>, <code>caps=0x0003</code>, no <code>SERVICE</code> bit) is issued by default.</p>
+<p><strong>The composition:</strong> <code>pol-v3rc.fw</code> is a same-counter &quot;sidegrade&quot; (counter 3 == stored 3, so it&#39;s accepted) that adds a handler for opcode <code>0x70</code> (UNLOCK) and relaxes the <code>tab</code> dependency range. <code>tab-v3.fw</code> is a counter-valid upgrade (3 ≥ stored 2) that lowers opcode <code>0x70</code>&#39;s required capability from <code>0x8000</code> (SERVICE) to <code>0x0001</code> (BASIC_READ) - which the default token already has. Neither artifact alone grants anything: v3rc&#39;s handler is useless while <code>tab-v2</code> still demands SERVICE; <code>tab-v3</code>&#39;s lowered requirement is useless without a <code>0x70</code> handler in <code>pol</code>. Installed together, opcode <code>0x70</code> becomes &quot;UNLOCK, requires only BASIC_READ.&quot;</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">1. UPDATE pol-v3rc.fw   (sidegrade, counter 3 == 3)
+2. UPDATE tab-v3.fw     (upgrade, counter 3 &gt;= 2)
+3. BOOT                 (dependency ranges still satisfied)
+4. TOKEN                (user_id=42, caps=0x0003)
+5. SEND opcode 0x70 with the token -&gt; capability check passes on BASIC_READ
+resp_b64=...  -&gt;  isfcr{s1gn3d_p4rts_uns1gn3d_whole_ab84f1}</code></pre>
+      
+    </figure><p>Fix: validate the <em>set</em>, not just the elements - pin an authorized (component → version/counter) manifest and verify a single signature over the whole installed image before boot/dispatch. &quot;Signed parts, unsigned whole&quot;: composable trust boundaries (here, a policy table plus a capability table) must be validated as a unit, or two individually benign, individually-signed artifacts can degenerate into privilege escalation.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="ghost-13.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">GHOST-13</span></a>
+    <a class="wu-pager-link wu-pager-next" href="flaguard.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">FlaGuard</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

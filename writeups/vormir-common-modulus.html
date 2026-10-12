@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vormir Common Modulus · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="The same message is encrypted under one modulus with e=65537 and e=65539. The extended Euclidean algorithm gives a and b with a*e1 + b*e2 = 1, so m = c1^a * c2^b mod n." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>vormir-common-modulus</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Vormir Common Modulus <span class="page-sub">RSA common modulus attack</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span>
+      <span>100 pts</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{v0rm1r_tw1st3d_rsa_l34ks_th3_s0ul}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>TL;DR</strong></p>
+<p>Classic <strong>Common Modulus</strong> attack. Two RSA ciphertexts <code>c1</code>, <code>c2</code> were
+produced with the <strong>same modulus <code>n</code></strong> but <strong>coprime public exponents</strong>
+<code>e1=65537</code>, <code>e2=65539</code>, over the <em>same</em> plaintext. Their exponents satisfy
+<code>a*e1 + b*e2 = 1</code>, so the plaintext is recovered directly:
+<code>m = c1^a · c2^b mod n</code>.</p>
+<h2 id="given-data-paramstxt"><a class="wu-anchor" href="#given-data-paramstxt" aria-hidden="true">#</a>Given data (params.txt)</h2>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">n  = 16380649768533394557837493376413306403300053927332145442950164332328030751564185489519565597585555867737606727528343
+e1 = 65537
+e2 = 65539
+c1 = 13717084049277399427945358975177210874446528287993178469838547381506741616766449871863462627142297960244208456711847
+c2 = 4601321998457411971134687661444766716276847022305030736758227088246554672740623255330037934526510403437754437399162</code></pre>
+      
+    </figure><h2 id="approach"><a class="wu-anchor" href="#approach" aria-hidden="true">#</a>Approach</h2>
+<ol>
+<li>Confirm <code>gcd(e1, e2) = 1</code> (both are primes, so yes).</li>
+<li>Run the extended Euclidean algorithm to get <code>a, b</code> with
+<code>a·e1 + b·e2 = 1</code>. Result: <code>a = 32769</code>, <code>b = -32768</code>.</li>
+<li>Compute <code>m = c1^a · c2^b (mod n)</code>, taking <code>c2^b</code> as
+<code>inverse(c2)^|b| mod n</code> since <code>b &lt; 0</code>.</li>
+<li>Decode <code>m</code> as big-endian bytes → flag.</li>
+</ol>
+<h2 id="solve"><a class="wu-anchor" href="#solve" aria-hidden="true">#</a>Solve</h2>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 solve.py</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># OWASP{v0rm1r_tw1st3d_rsa_l34ks_th3_s0ul}</span></span></span></code></pre>
+      
+    </figure><h2 id="why-it-works"><a class="wu-anchor" href="#why-it-works" aria-hidden="true">#</a>Why it works</h2>
+<p>RSA encrypts <code>c = m^e mod n</code>. With two exponents on the same <code>n</code> and same
+<code>m</code>: <code>c1^a · c2^b = m^(a·e1 + b·e2) = m^1 = m (mod n)</code>. No factoring
+required - the weakness is reusing one modulus with multiple exponents over
+the same message.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#given-data-paramstxt">Given data (params.txt)</a></li><li><a href="#approach">Approach</a></li><li><a href="#solve">Solve</a></li><li><a href="#why-it-works">Why it works</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="soul-forge.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Soul Forge</span></a>
+    <a class="wu-pager-link wu-pager-next" href="double-trouble.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Double Trouble</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

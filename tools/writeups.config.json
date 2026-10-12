@@ -1,6 +1,603 @@
 {
   "events": [
     {
+      "id": "cryovault-ctf-2026",
+      "event": "CryoVault CTF 2026",
+      "team": "NxT",
+      "attribution": "solo",
+      "result": {
+        "placement": "87th",
+        "field": "of 504",
+        "solves": 48,
+        "date": "11 October 2026"
+      },
+      "challenges": [
+        {
+          "slug": "leaky-eval",
+          "name": "leaky-eval",
+          "category": "crypto",
+          "subtitle": "Ring-LWE decryption leak",
+          "flag": "isfcr{n3g4cycl1c_n01s3_l34k}",
+          "blurb": "The service publishes one exact noise coefficient per Ring-LWE sample. Each leak is a full linear equation over Z_Q, so 72 samples solve for the ternary secret by plain Gaussian elimination and open the AES-GCM flag."
+        },
+        {
+          "slug": "hidden-weights",
+          "name": "hidden-weights",
+          "category": "crypto",
+          "subtitle": "orthogonal relation lattice",
+          "flag": "isfcr{0rth0g0n4l_l4tt1c3_1s_th3_tr1ck}",
+          "blurb": "Both the subset-sum weights and the 0/1 selection matrix are hidden, so the usual embedding is useless. LLL on the relation lattice exposes 40 short kernel vectors that pin down the secret rows, and a linear solve mod M recovers the weights."
+        },
+        {
+          "slug": "free-lunch",
+          "name": "free-lunch",
+          "category": "crypto",
+          "subtitle": "CICO on a cube-root permutation",
+          "flag": "isfcr{b4ckw4rds_1s_h4lf_th3_d3gr33}",
+          "blurb": "A 20-round cube-root permutation over GF(p)^2 must map (x, 0) to an output ending in zero. Written as a backward recurrence, the degree only triples every two steps, so the whole problem collapses to roots of one degree-59049 polynomial."
+        },
+        {
+          "slug": "implicit-twins",
+          "name": "implicit-twins",
+          "category": "crypto",
+          "subtitle": "implicit factorization of two RSA moduli",
+          "flag": "isfcr{1mpl1c1t_f4ct0r1ng_0f_tw1ns}",
+          "blurb": "Two 1280-bit moduli share a long run of low bits in their 1024-bit primes. Because the other primes are only 256 bits, the short vector (q1, q2) in a 2-D lattice falls out of plain Gauss reduction and factors both."
+        },
+        {
+          "slug": "half-truths",
+          "name": "half-truths",
+          "category": "crypto",
+          "subtitle": "Reed-Solomon list decoding",
+          "flag": "isfcr{l1st_d3c0d1ng_p4st_th3_r4d1us}",
+          "blurb": "512 Shamir shares with only 185 honest, far past what any unique decoder can fix. Sudan-style list decoding with a carefully chosen degree bound recovers the polynomial, and a de-branched root finder pulls out the coefficients."
+        },
+        {
+          "slug": "toxic-waste",
+          "name": "toxic-waste",
+          "category": "crypto",
+          "subtitle": "Cheon's attack on a trimmed KZG setup",
+          "flag": "isfcr{ch30n_8f_th3_c0mpr3ss3d_srs}",
+          "blurb": "Keeping only the first and last powers of tau looked like a space saving. Cheon's attack turns those two group elements into two baby-step giant-step phases of about 2^22 steps each, recovering tau and the flag key."
+        },
+        {
+          "slug": "sparse-change",
+          "name": "sparse-change",
+          "category": "crypto",
+          "subtitle": "Prony's problem over a finite field",
+          "flag": "isfcr{pr0ny_kn3w_1t_1n_1795}",
+          "blurb": "Only 48 evaluations of a secret 24-term sparse polynomial are given. The samples form a sum of exponentials, so a Hankel system finds the recurrence, Cantor-Zassenhaus splits it, and Pohlig-Hellman turns the roots into exponents."
+        },
+        {
+          "slug": "one-more",
+          "name": "one-more",
+          "category": "crypto",
+          "subtitle": "polynomial-time ROS attack on blind Schnorr",
+          "flag": "isfcr{r0s_1s_n0t_h4rd_f0r_l0g_p}",
+          "blurb": "A blind Schnorr signing oracle that lets you open 256 concurrent sessions. The polynomial-time ROS attack forges one more valid signature than sessions answered in a few seconds, with no Wagner tree and no heavy memory."
+        },
+        {
+          "slug": "the-recurrence",
+          "name": "The-Recurrence",
+          "category": "rev",
+          "subtitle": "Lucas sequence and discrete log",
+          "flag": "isfcr{p0hlig_h3llman_sm00th}",
+          "blurb": "The 28-byte input is a 224-bit scalar fed through a Lucas V-sequence ladder. The check reduces to a quadratic in alpha^k, and the group order is smooth enough for Pohlig-Hellman to recover the scalar in milliseconds."
+        },
+        {
+          "slug": "the-loom",
+          "name": "The-Loom",
+          "category": "rev",
+          "subtitle": "second-order reversible automaton",
+          "flag": "isfcr{2nd_0rd3r_r3v_c3ll_aut0m8}",
+          "blurb": "A million rounds of a nonlinear update look expensive, but the recurrence P[n+1] = g(P[n]) xor P[n-1] is its own inverse. Walking backward from the two exposed states recovers the input."
+        },
+        {
+          "slug": "the-press",
+          "name": "the-press",
+          "category": "rev",
+          "subtitle": "inverting an LZMA-style range coder",
+          "flag": "isfcr{r4ng3_c0d3r_b1t_3x4ct_y0!}",
+          "blurb": "32 bytes in, 36 bytes out, with hand-rolled arithmetic coding after an XOR-diff pass. Running the matching range decoder over the target and then undoing the prefix XOR gives the input."
+        },
+        {
+          "slug": "palimpest",
+          "name": "Palimpest",
+          "category": "rev",
+          "subtitle": "bitcode VM solved with SMT",
+          "flag": "isfcr{p4p3r_r3m3mb3rs_wh4t_1nk_f0rg3ts}",
+          "blurb": "A Zig-built VM re-keys itself from its own register state on every one of 320 steps. Rather than invert it by hand, the whole loop is symbolised for bitwuzla with printable-ASCII constraints and solved in one query."
+        },
+        {
+          "slug": "ouroboros",
+          "name": "OUROBOROS",
+          "category": "rev",
+          "subtitle": "JIT code with a self-referential key",
+          "flag": "isfcr{c0d3_th4t_3ats_1ts_t41l!!}",
+          "blurb": "The binary synthesises its own checker at runtime, one block per 8 input bytes. The fixed function prologue is free known plaintext against the keystream, so each block's seed and word follow with no 2^64 search."
+        },
+        {
+          "slug": "the-ledger",
+          "name": "The Ledger",
+          "category": "rev",
+          "subtitle": "subset-sum via lattice reduction",
+          "flag": "isfcr{lll_dense}",
+          "blurb": "The check is an exact integer subset sum over 128 entries of 400 bits, a density of about 0.32. BKZ with block size 20 on the standard low-density lattice yields the 128-bit selector, which is the input."
+        },
+        {
+          "slug": "turning-chart",
+          "name": "Turning Chart",
+          "category": "rev",
+          "subtitle": "inverting a fixed 320-round program",
+          "flag": "isfcr{3v3ry_r0ut3_r3m3mb3rs_1ts_0r1g1n}",
+          "blurb": "Every round's operation comes from a PRNG that never sees the input, so the whole thing is a fixed invertible byte program. Logging the ops under gdb and applying their inverses in reverse order recovers the flag."
+        },
+        {
+          "slug": "ghost-in-the-spooler",
+          "name": "Ghost in the Spooler",
+          "category": "forensics",
+          "subtitle": "spooler shadow file and tracking dots",
+          "flag": "isfcr{e24d16be9d731cba}",
+          "blurb": "The flag hashes a username, printer serial and timestamp. The .SHD file gives the owner and FILETIME, and the faint yellow DocuColor dots in the scan decode to the machine's serial and confirm the time."
+        },
+        {
+          "slug": "signed-which-original",
+          "name": "signed, but which original?",
+          "category": "forensics",
+          "subtitle": "provenance chain audit",
+          "flag": "isfcr{29336738f5f44f4d2d1e3ac2}",
+          "blurb": "Five signed checkpoints, only some of them genuinely valid. Finding the largest correct tree head scopes the log, and strict RFC 8785 and ordering checks single out the one redacted derivative that passes."
+        },
+        {
+          "slug": "frost-ledger",
+          "name": "frost-ledger",
+          "category": "forensics",
+          "subtitle": "custom copy-on-write page format",
+          "flag": "isfcr{stale_cow_67c1_root_fc8fe97f_backwards_heap}",
+          "blurb": "A volume with a stale format note and no walk subcommand. The real layout packs payloads against the end of each page with offsets counting backward, which lets the B+tree be walked by hand to an overflow chain holding the flag."
+        },
+        {
+          "slug": "the-image-that-forgot",
+          "name": "The Image That Forgot",
+          "category": "forensics",
+          "subtitle": "timeline normalisation and OCI resolution",
+          "flag": "isfcr{57cfd556fca281af64d920ef}",
+          "blurb": "Events in eight different UTC offsets must be normalised before the live instance can be identified. Resolving the OCI index to the right platform manifest then selects the key version that decrypts the incident note."
+        },
+        {
+          "slug": "the-last-committed-message",
+          "name": "the last committed message",
+          "category": "forensics",
+          "subtitle": "SQLite WAL multi-generation replay",
+          "flag": "isfcr{a03a410f1b87dbc115dd1ef6}",
+          "blurb": "The target operation was overwritten in the final database but survives in an older WAL generation. Replaying generations commit by commit and snapshotting at each boundary recovers the note and its attachment record."
+        },
+        {
+          "slug": "last-packet",
+          "name": "last packet",
+          "category": "forensics",
+          "subtitle": "debug header leak in a pcap",
+          "flag": "isfcr{l33t_c0d3_tw0_sum_f0und}",
+          "blurb": "A developer left X-Debug-Mode on against an internal API, and the verbose reply carried an internal_key. It decodes through hex, base64 and a single-byte XOR whose key the known flag prefix gives away."
+        },
+        {
+          "slug": "write-hole",
+          "name": "Write-Hole",
+          "category": "forensics",
+          "subtitle": "RAID5 write hole and AEAD recovery",
+          "flag": "isfcr{p4r1ty_n3v3r_l13s_wr1t3_h0l3_r3m3mb3rs}",
+          "blurb": "Three raw drive images from a crashed NAS. Using e2fsck as the oracle recovers the RAID geometry, and the one record whose GCM tag was destroyed is decrypted independently of the tag."
+        },
+        {
+          "slug": "journal-necromancy",
+          "name": "Journal Necromancy",
+          "category": "forensics",
+          "subtitle": "deleted NTFS data clusters",
+          "flag": "isfcr{mft_slack_dies_but_data_clusters_remember_1a2f}",
+          "blurb": "The journal is wiped, but the data clusters of deleted files survive. Three tagged key shares are carved out by magic bytes, and the AES-GCM tag settles which byte layout is correct."
+        },
+        {
+          "slug": "phantom-mesh",
+          "name": "Phantom Mesh",
+          "category": "forensics",
+          "subtitle": "CPA on a software-AES mesh",
+          "flag": "isfcr{ph4nt0m_m3sh_h4rm0n1cs_un14sk_th3_tc_l1nk_k3y}",
+          "blurb": "The rogue node's AES current draw modulates its transmitter bias, so the I/Q envelope is a power trace. Correlation power analysis recovers the fleet-wide link key, which unwraps the network key and the diagnostic report."
+        },
+        {
+          "slug": "end-mark",
+          "name": "end-mark",
+          "category": "forensics",
+          "subtitle": "SQLite WAL snapshot isolation",
+          "flag": "isfcr{28bc454d9b8fc1b73ff97a0d7db31a76}",
+          "blurb": "A trace records reader and writer order but not the bytes returned. Working out which WAL snapshot each deferred reader pinned, including the stale generation left by a RESTART checkpoint, reconstructs all 24 reads."
+        },
+        {
+          "slug": "attestation",
+          "name": "attestation",
+          "category": "web",
+          "subtitle": "tar PAX smuggling and referrer confusion",
+          "flag": "isfcr{attest_5d60_notary_41a34ce7_laundered}",
+          "blurb": "An intake filter checks only the raw USTAR name while the opening desk honours a PAX path override. Smuggling the release record through that gap and building a two-child index launders a sealed case into a live one."
+        },
+        {
+          "slug": "canonical-sin",
+          "name": "Canonical Sin",
+          "category": "web",
+          "subtitle": "CBOR canonicalization differential",
+          "flag": "isfcr{c4n0n1c4l_d1ff3r3nt14l_t4g_55799_1s_th3_s3lf_d3scr1b3_tr4p_2ec4}",
+          "blurb": "Two byte-level filters guard the admin claim. An indefinite-length string slips past the raw blocklist and tag 55799 slips past the semantic one, and the final decoder still reads role as admin."
+        },
+        {
+          "slug": "draftpad",
+          "name": "Draftpad",
+          "category": "web",
+          "subtitle": "CRDT range redaction leak",
+          "flag": "isfcr{merge_shifts_the_wall_not_the_window}",
+          "blurb": "Redaction is computed from block index positions at request time while the content is always shipped. Merges shift indices, so the private window drifts off the flag block and the public export prints it."
+        },
+        {
+          "slug": "the-hidden-test-case",
+          "name": "The Hidden Test Case",
+          "category": "web",
+          "subtitle": "UNION SQL injection",
+          "flag": "isfcr{tw0_sum_h1dd3n_t3st_c4s3_a91c3e7}",
+          "blurb": "A lone quote returns 400 but a balanced payload returns every row, so the search is injectable. Four columns and a read of sqlite_master expose an internal_notes table holding the flag."
+        },
+        {
+          "slug": "the-meridian",
+          "name": "The Meridian",
+          "category": "web",
+          "subtitle": "prototype pollution to derived key",
+          "flag": "isfcr{d33p_m3rg3_p0llut3s_th3_pr0v3n4nc3_v4ult_1n_th3_m3r1d14n}",
+          "blurb": "A static museum app hides a sealed vault behind a polluted shared-view link. Pollution through a unicode-escaped __proto__ key, plus the right pepper and a registrar audit, derives the AEAD key."
+        },
+        {
+          "slug": "tearing",
+          "name": "tearing",
+          "category": "pwn",
+          "subtitle": "TOCTOU race on shared state",
+          "flag": "isfcr{t0ct0u_w1nd0w_0nly_0p3ns_c0ncurr3ntly}",
+          "blurb": "The vault's win guard is checked separately from the update and shared across every connection. A burst of 64 threads makes many claims land inside the window at once."
+        },
+        {
+          "slug": "mirage",
+          "name": "mirage",
+          "category": "pwn",
+          "subtitle": "blind format string, no binary",
+          "flag": "isfcr{bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry}",
+          "blurb": "No binary is shipped, only an echo service that leaks more than it should. Leaking stack words proves a static non-PIE image, and a positional arbitrary read pulls the flag straight from memory."
+        },
+        {
+          "slug": "slab",
+          "name": "slab",
+          "category": "pwn",
+          "subtitle": "slab allocator aliasing to code execution",
+          "flag": "isfcr{cust0m_sl4b_n0_gl1bc_r3c1p3_s4v3s_y0u}",
+          "blurb": "A freed note's XOR-encoded free-list link is attacker-controlled, so a note can be made to alias the slot table. That gives arbitrary read and write, enough to dump the program and hijack a function pointer."
+        },
+        {
+          "slug": "echochamber-user",
+          "name": "echochamber-user",
+          "category": "pwn",
+          "subtitle": "SSTI to RCE and a nonce-gated socket",
+          "flag": "isfcr{th3_sh3ll_1s_r34d1ng_m3_r34d_1t_b4ck}",
+          "blurb": "Default credentials lead to a Jinja2 preview feature that renders unsanitised input. RCE as analyst exposes the sentinel source, so the time-based socket nonce can be computed and used to read the user flag."
+        },
+        {
+          "slug": "echochamber-root",
+          "name": "echochamber-root",
+          "category": "pwn",
+          "subtitle": "inherited CAP_DAC_READ_SEARCH",
+          "flag": "isfcr{t0_w1n_th3_g4me_pl4y_a_d1ff3r3nt_g4me}",
+          "blurb": "The sentinel process holds CAP_DAC_READ_SEARCH and passes it to anything it spawns. Running a command through its socket reads the root flag with no classic privesc needed."
+        },
+        {
+          "slug": "keystone-user",
+          "name": "KeyStone-User",
+          "category": "pwn",
+          "subtitle": "SSTI and a forged TPM quote",
+          "flag": "isfcr{tr0st_but_v3rify_the_endors3ment}",
+          "blurb": "The vault verifies a quote against an attestation key the client itself supplies and never performs credential activation. After SSTI for a foothold, any RSA key can pose as the TPM and be handed a leaked SSH key."
+        },
+        {
+          "slug": "keystone-root",
+          "name": "KeyStone-Root",
+          "category": "pwn",
+          "subtitle": "TOCTOU in a setuid measurement helper",
+          "flag": "isfcr{a_pcr_is_a_promise_not_proof}",
+          "blurb": "The helper hashes and allowlists a path, sleeps 20 ms, then opens the same path again to execute. Flipping a symlink between the two opens runs the attacker payload as root."
+        },
+        {
+          "slug": "phantom-15",
+          "name": "PHANTOM-15",
+          "category": "forensics",
+          "subtitle": "802.15.4 CCM*, Reed-Solomon and CPA",
+          "flag": "isfcr{phantom15_6b4cf2a16a3ffc72c9420983dec02be1}",
+          "blurb": "Three radio monitors and lab measurements must be combined to recover a missed diagnostic record. Getting the CCM* nonce byte order right, RS erasure decoding and a jitter-aware CPA for the key each unlock one stage."
+        },
+        {
+          "slug": "ghost-13",
+          "name": "GHOST-13",
+          "category": "forensics",
+          "subtitle": "journal rollover, ECDSA nonce reuse, DTMF",
+          "flag": "isfcr{ghost13_dc8f84a256fa64108b6c75a151a1474d}",
+          "blurb": "Four artifacts chain together. A wrapped 16-bit journal picks the active config, two Modbus signatures reuse an ECDSA nonce to leak the scalar, and DTMF tones from a WAV finish the key for the OTA unseal."
+        },
+        {
+          "slug": "fluxgate-g3",
+          "name": "Fluxgate G3",
+          "category": "pwn",
+          "subtitle": "composing signed firmware parts",
+          "flag": "isfcr{s1gn3d_p4rts_uns1gn3d_whole_ab84f1}",
+          "blurb": "Each firmware artifact is verified alone but never as a set. One same-counter sidegrade adds an unlock opcode and a tab upgrade lowers its capability requirement, so a basic token can unlock."
+        },
+        {
+          "slug": "flaguard",
+          "name": "FlaGuard",
+          "category": "rev",
+          "subtitle": "shadow dex decoy and a missing flip()",
+          "flag": "isfcr{sh4d0w_cl455l04d3r_tr1ckery}",
+          "blurb": "A shadow dex is meant to swap in a second flag checker, but the buffer is never flipped before loading, so the loader sees zero bytes. The visible checker is the real one, and it inverts byte by byte."
+        },
+        {
+          "slug": "mirror-garden",
+          "name": "Mirror Garden",
+          "category": "rev",
+          "subtitle": "1024 z3 leaves and native JNI",
+          "flag": "isfcr{m1rr0r_g4rden_bl00ms_@t_m1dn1ght_7f3a}",
+          "blurb": "1024 generated Java leaves each encode a system of byte equations. All are solved with z3, one decodes differently, and Unicorn emulation of the native bloom() finishes the transform without reversing it by hand."
+        },
+        {
+          "slug": "faraday-cage",
+          "name": "Faraday Cage",
+          "category": "rev",
+          "subtitle": "permuted-handler custom cipher",
+          "flag": "isfcr{p3rmut3d_h4ndl3rs_v5_cust0m_ch4ch4_1n_th3_c4g3}",
+          "blurb": "The native checker is a bytecode VM whose 48 handlers are shuffled at runtime. Rebuilding the ISA in Python, validated against Unicorn, exposes a custom AES-like cipher that inverts by hand."
+        },
+        {
+          "slug": "oatmeal",
+          "name": "Oatmeal",
+          "category": "rev",
+          "subtitle": "ART OAT is authoritative over the APK",
+          "flag": "isfcr{5958fbb07efd243b}",
+          "blurb": "The APK's notes are a staging decoy and the device actually ran the odex. Its checkFlag_v2 bytecode VM reduces to one invertible constraint per byte, and an FNV-1a finaliser turns the secret into the flag."
+        },
+        {
+          "slug": "the-aggregate-remembers",
+          "name": "the-aggregate-remembers",
+          "category": "ai",
+          "subtitle": "federated gradient inversion",
+          "flag": "isfcr{9b1aa6a53205a859c14cc5e4}",
+          "blurb": "Per-round weight updates from a federated linear-regression client leak its data. Rank analysis across six reused checkpoints shows a batch of two, and the raw 16-byte records are recovered from the gradients."
+        },
+        {
+          "slug": "the-shape-of-silence",
+          "name": "the-shape-of-silence",
+          "category": "ai",
+          "subtitle": "hidden ReLU network and a version trap",
+          "flag": "isfcr{577027585a0778773aa949d9}",
+          "blurb": "Clustered probe points fit exact integer affine pieces, so the model is a ReLU net. Four captures belong to a different model version, and dropping them resolves nine units that predict the targets."
+        },
+        {
+          "slug": "the-deletion-echo",
+          "name": "The Deletion Echo",
+          "category": "ai",
+          "subtitle": "inverting a ridge-regression oracle",
+          "flag": "isfcr{763c8479fac095a9e471ad3d}",
+          "blurb": "Published means and variances leak the Hessian and label moments of each release. Ordering the snapshots and isolating the deletion step, then an integer MILP, names the deleted records and their labels."
+        },
+        {
+          "slug": "one-pound-fish",
+          "name": "One Pound Fish",
+          "category": "osint",
+          "subtitle": "reverse image geolocation",
+          "flag": "isfcr{russell_market}",
+          "blurb": "An unindexed fish market photo with a white blur over the signage. TinEye, Yandex and Bing all missed, but Google Lens placed it at Russell Market in Shivajinagar, Bengaluru."
+        }
+      ]
+    },
+    {
+      "id": "byteme-ctf-26",
+      "event": "ByteMe CTF 26",
+      "team": "NxT, TxN",
+      "result": {
+        "placement": "87th",
+        "field": "of 300",
+        "solves": 24,
+        "date": "9 October 2026"
+      },
+      "challenges": [
+        {
+          "slug": "hidden-soul",
+          "name": "Hidden Soul",
+          "category": "forensics",
+          "subtitle": "LSB stego in an 80x80 PNG",
+          "flag": "OWASP{h1dd3n_s0ul_b3n34th_th3_sh4d0w}",
+          "blurb": "A plain ASCII flag sits in the least-significant bits of every R, G and B value. zsteg finds it at b1,rgb,lsb,xy, and a short Pillow script confirms the same bytes."
+        },
+        {
+          "slug": "soul-world",
+          "name": "Soul World",
+          "category": "forensics",
+          "subtitle": "LSB stego, two independent extractions",
+          "flag": "OWASP{s0ul_w0rld_h1d3s_1ts_s3cr3t}",
+          "blurb": "Another RGB LSB image, this time with the flag at the very start of the bitstream. zsteg and a from-scratch row-major extractor produce byte-identical output."
+        },
+        {
+          "slug": "the-last-soul",
+          "name": "The Last Soul",
+          "category": "forensics",
+          "subtitle": "LSB stego carrying base64",
+          "points": 200,
+          "flag": "OWASP{th3_l4st_s0ul_w4s_n3v3r_l0st}",
+          "blurb": "The LSB layer is itself a base64 string. An incompressible 19 KB file for an 80x80 image is the tell, and decoding the extracted text gives the flag."
+        },
+        {
+          "slug": "soul-in-the-shadows",
+          "name": "Soul in the Shadows",
+          "category": "forensics",
+          "subtitle": "LSB, base64 and a VORMIR XOR",
+          "points": 100,
+          "flag": "OWASP{the_soul_was_here}",
+          "blurb": "Nothing is appended to the PNG, but the pixels carry a base64 string in their LSBs. The decoded bytes are ciphertext, and the key VORMIR is teased by the image's tEXt comment and the title."
+        },
+        {
+          "slug": "invisible-signal",
+          "name": "Invisible Signal",
+          "category": "forensics",
+          "subtitle": "a message drawn as a scatter plot",
+          "points": 200,
+          "flag": "OWASP{Sou15_c4nt_b3_533n_bY_n0rm41_3y3s}",
+          "blurb": "A matplotlib scatter plot hides 40 double-size markers among hundreds of noise points. Calibrating the axes from the gridlines and reading each y-value as an ASCII code spells a leetspeak sentence."
+        },
+        {
+          "slug": "broken-soul-vault",
+          "name": "Broken Soul Vault",
+          "category": "forensics",
+          "subtitle": "hex payload in a mislabelled .bin",
+          "points": 100,
+          "flag": "OWASP{br0k3n_s0ul_v4ult_r3c0v3r3d}",
+          "blurb": "The .bin file is plain text, with guard values around a hex line. Decoding the middle line and checking it against the OWASP pattern picks the valid recovered block."
+        },
+        {
+          "slug": "soul-memory",
+          "name": "Soul Memory",
+          "category": "forensics",
+          "subtitle": "process extract with a decoy hint",
+          "points": 100,
+          "flag": "OWASP{s0ul_m3m0ry_n3v3r_d13s}",
+          "blurb": "The memory dump is a small key=value extract. A vault_hint line points past the cache key, but the flag is just carried in the data field."
+        },
+        {
+          "slug": "echoes-of-the-snap",
+          "name": "Echoes of the Snap",
+          "category": "forensics",
+          "subtitle": "hex in a DNS TXT field",
+          "points": 200,
+          "flag": "OWASP{3ch03s_0f_th3_sn4p_r3m41n}",
+          "blurb": "The capture summary shows one stream with a long even-length hex string in a TXT record. Piping it through xxd -r -p gives readable leetspeak."
+        },
+        {
+          "slug": "echoes-of-vormir-mem-1",
+          "name": "Echoes of Vormir: Mem-1",
+          "category": "forensics",
+          "subtitle": "timestamp from a Windows memory image",
+          "points": 100,
+          "flag": "OWASP{2026-10-08 05:07:43}",
+          "blurb": "The first memory forensics warm-up asks when the dump was taken. Volatility 3 windows.info reports the SystemTime from KUSER_SHARED_DATA, which is the flag."
+        },
+        {
+          "slug": "echoes-of-vormir-mem-2",
+          "name": "Echoes of Vormir: Mem-2",
+          "category": "forensics",
+          "subtitle": "a renamed PowerShell in the process list",
+          "points": 200,
+          "flag": "OWASP{SoulHunt_7F31}",
+          "blurb": "One process does not belong: SoulHunt_7F31 spawned from powershell.exe. Its command line and dumped strings show it is a renamed copy of PowerShell."
+        },
+        {
+          "slug": "last-memory-of-vormir",
+          "name": "The Last Memory of Vormir",
+          "category": "forensics",
+          "subtitle": "reversed speech and a WAV trailer",
+          "points": 100,
+          "flag": "OWASP{th3_k3y_1s_s4cr1f1c3}",
+          "blurb": "The WAV speaks backwards and says the key is sacrifice. 213 bytes sit past the declared RIFF end as hex pairs, and XORing them with that key yields the riddle."
+        },
+        {
+          "slug": "sacrifice",
+          "name": "Sacrifice",
+          "category": "forensics",
+          "subtitle": "PCAP, FTP files and nested archives",
+          "flag": "OWASP{4_50u1_f0r_4_50u1_v0rm1r}",
+          "blurb": "A PCAP's FTP streams carry a JPEG whose comment holds a password and whose embedded ZIP holds comms.bin. Peeling gzip, bzip2 and gzip off to a tar leaves one oversized log with a base64 flag."
+        },
+        {
+          "slug": "soul-forge",
+          "name": "Soul Forge",
+          "category": "crypto",
+          "subtitle": "two-time pad and crib dragging",
+          "points": 100,
+          "flag": "OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4nd0m}",
+          "blurb": "Two ciphertexts share a keystream and the first 12 bytes match. XORing them and dragging cribs from the shared prefix recovers both plaintexts."
+        },
+        {
+          "slug": "vormir-common-modulus",
+          "name": "Vormir Common Modulus",
+          "category": "crypto",
+          "subtitle": "RSA common modulus attack",
+          "points": 100,
+          "flag": "OWASP{v0rm1r_tw1st3d_rsa_l34ks_th3_s0ul}",
+          "blurb": "The same message is encrypted under one modulus with e=65537 and e=65539. The extended Euclidean algorithm gives a and b with a*e1 + b*e2 = 1, so m = c1^a * c2^b mod n."
+        },
+        {
+          "slug": "double-trouble",
+          "name": "Double Trouble",
+          "category": "crypto",
+          "subtitle": "shared RSA prime and an XOR key",
+          "points": 100,
+          "flag": "OWASP{soul_stone_claimed}",
+          "blurb": "The gcd of the two moduli is a shared prime, which decrypts both. One plaintext is base64 and the other is the XOR key GAMORA that unlocks it."
+        },
+        {
+          "slug": "souls-whisper",
+          "name": "Soul's Whisper",
+          "category": "rev",
+          "subtitle": "stack-built strings in an ELF",
+          "points": 100,
+          "flag": "OWASP{th3_s0ul_st0n3_wh1sp3r}",
+          "blurb": "Strings shows four overlapping 8-byte fragments that nearly spell the flag. Reading soul_stone() shows the real layout and the gate string soul, so the naive concatenation is a trap."
+        },
+        {
+          "slug": "souls-weakness",
+          "name": "Soul's Weakness",
+          "category": "pwn",
+          "subtitle": "gets() overflow to a win function",
+          "points": 200,
+          "flag": "OWASP{S0ul_St0ne_Buff3r_0v3rfl0w}",
+          "blurb": "An unstripped, non-PIE binary with no canary and a gets() into a 32-byte buffer. 40 bytes of padding and the address of soul_stone hijacks the return, verified against the remote."
+        },
+        {
+          "slug": "return-to-win",
+          "name": "Return to Win",
+          "category": "pwn",
+          "subtitle": "ret2win with a 10-byte buffer",
+          "points": 100,
+          "flag": "OWASP{g3ts_1s_4_s3cur1ty_n1ghtm4r3}",
+          "blurb": "A classic gets() overflow into hello()'s 10-byte buffer. 18 bytes of padding reach the return address, which is pointed at win()."
+        },
+        {
+          "slug": "red-skulls-trail",
+          "name": "Red Skull's Trail",
+          "category": "osint",
+          "subtitle": "GitHub history to a PNG trailer",
+          "points": 100,
+          "flag": "OWASP{PhantomSoul}",
+          "blurb": "A riddle names Vormir-616, whose GitHub repo has a tampered record. The git history reveals an image rename, and base64 trailing the PNG's IEND chunk gives the username."
+        },
+        {
+          "slug": "level-0-first-fragment",
+          "name": "Level 0: First Fragment",
+          "category": "misc",
+          "subtitle": "QR code split into 3x3 tiles",
+          "points": 100,
+          "flag": "OWASP{Th3_f1rst_fr4gm3nt}",
+          "blurb": "A WinZip AES archive opens with the password OWASP. Its nine shuffled tiles are slices of one QR code, rebuilt by locating finder patterns and validating the decode."
+        },
+        {
+          "slug": "level-1-shattered-memories",
+          "name": "Level 1: Shattered Memories",
+          "category": "misc",
+          "subtitle": "rotated 4x4 QR tiles",
+          "points": 100,
+          "flag": "OWASP{Sh4tt3r3d_m3m0r13s}",
+          "blurb": "Sixteen binary tiles are shuffled and rotated. Edge-signature matching with backtracking, validated by a QR decoder, assembles the code."
+        }
+      ]
+    },
+    {
       "id": "skillbit-flash-ctf-2026-09",
       "event": "September 2026 SkillBit Flash CTF",
       "team": "NxT",
@@ -323,7 +920,7 @@
       "focus": ["Forensics", "OSINT", "Crypto"],
       "bio": "Forensics and OSINT by habit, crypto when a lattice is involved. Runs the occasional CTF solo under the handle NxT.",
       "linkedin": "https://www.linkedin.com/in/ashton-ang-wu-zun-846999353/",
-      "events": ["skillbit-flash-ctf-2026-09", "tfc-ctf-26", "tisc-2026"]
+      "events": ["cryovault-ctf-2026", "byteme-ctf-26", "skillbit-flash-ctf-2026-09", "tisc-2026", "tfc-ctf-26", "kaspersky-ctf-2026"]
     },
     {
       "slug": "txn",
@@ -336,7 +933,7 @@
       "focus": ["Web", "Pwn", "Reverse"],
       "bio": "Team lead. Web, binary exploitation, and reverse engineering.",
       "linkedin": "https://www.linkedin.com/in/andrei-yeo-qiu-shi-799b25386/",
-      "events": []
+      "events": ["byteme-ctf-26", "kaspersky-ctf-2026"]
     },
     {
       "slug": "dxt",

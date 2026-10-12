@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ghost in the Spooler · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The flag hashes a username, printer serial and timestamp. The .SHD file gives the owner and FILETIME, and the faint yellow DocuColor dots in the scan decode to the machine's serial and confirm the time." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>ghost-in-the-spooler</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Ghost in the Spooler <span class="page-sub">spooler shadow file and tracking dots</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{e24d16be9d731cba}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Artifacts: <code>FP02CF4.SHD</code> (520 B), <code>FP02CF4.SPL</code> (1872 B), <code>scan.png</code> (2550×3300). A workstation was imaged and three print-spooler leftovers survived; a scanner holds a scan of the printed page. The flag is built from three recovered values: <code>flag = isfcr{ sha256(username + &quot;|&quot; + serial + &quot;|&quot; + timestamp)[:16] }</code>, timestamp formatted <code>YYYY-MM-DDTHH:MM:SSZ</code>.</p>
+<p><strong>Username:</strong> <code>FP02CF4.SHD</code> is a Windows spooler shadow file - a small header whose 32-bit fields are byte-offsets into a trailing UTF-16LE string table. The job owner field resolves to <strong><code>j.holbrook</code></strong>. The originating machine is <code>FIN-WKS-014</code>, printer <code>Xerox DocuColor 12 PS</code> shared as <code>\\PRINT01\HR-DocuColor-12</code>. The <code>.SPL</code> (EMF format) confirms the page content but yields no device id.</p>
+<p><strong>Timestamp:</strong> the 8-byte FILETIME at <code>.SHD</code> offset <code>0x40</code> is <code>0x01db090f0de78e00</code> - 100ns intervals since 1601-01-01 UTC, converting to <strong><code>2024-09-17T14:37:00Z</code></strong>.</p>
+<p><strong>Printer serial:</strong> <code>scan.png</code> carries a very faint repeating pattern in pale yellow ink - the classic <strong>Xerox DocuColor &quot;yellow dots&quot; / Machine Identification Code (MIC)</strong>. Isolating the yellow ink yields a 15×8 dot matrix tile repeating every 300px on a 9px grid. Decoding per the EFF DocuColor Tracking Dot Decoding Guide (column-parity row, row-parity column, 7-bit-per-column bytes): minute=37, hour=14, day=17, month=9, year=24 (2024) - matching the SHD FILETIME exactly, proving the page came from that machine - and the remaining serial digits read <strong><code>8842013</code></strong>. The extraction was cross-checked against the EFF guide&#39;s own worked example.</p>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> hashlib</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">u, s, ts = <span class="hljs-string">&quot;j.holbrook&quot;</span>, <span class="hljs-string">&quot;8842013&quot;</span>, <span class="hljs-string">&quot;2024-09-17T14:37:00Z&quot;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-built_in">print</span>(<span class="hljs-string">&quot;isfcr{%s}&quot;</span> % hashlib.sha256(<span class="hljs-string">f&quot;<span class="hljs-subst">{u}</span>|<span class="hljs-subst">{s}</span>|<span class="hljs-subst">{ts}</span>&quot;</span>.encode()).hexdigest()[:<span class="hljs-number">16</span>])</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">isfcr{e24d16be9d731cba}</span></span></code></pre>
+      
+    </figure>
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="turning-chart.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Turning Chart</span></a>
+    <a class="wu-pager-link wu-pager-next" href="signed-which-original.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">signed, but which original?</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

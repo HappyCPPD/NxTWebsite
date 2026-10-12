@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Meridian · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A static museum app hides a sealed vault behind a polluted shared-view link. Pollution through a unicode-escaped __proto__ key, plus the right pepper and a registrar audit, derives the AEAD key." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>the-meridian</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>The Meridian <span class="page-sub">prototype pollution to derived key</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-web">web</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{d33p_m3rg3_p0llut3s_th3_pr0v3n4nc3_v4ult_1n_th3_m3r1d14n}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A static client-side &quot;museum&quot; app; the vault is a sealed AES-256-GCM blob reachable only via a prototype-polluted shared-view link. Two decoy flags line the way: a legacy console token and a &quot;wrong pepper&quot; self-test string.</p>
+<p><strong>The two peppers:</strong> <code>core.js</code> holds the real pepper <code>PEPPER = &quot;meridian::provenance::v3::do-not-share&quot;</code>; a legacy <code>provenance-v2.js</code> claims to be &quot;the pepper the registrar desk signs with&quot; and ships a self-test that, when run, decodes to <code>isfcr{wr0ng_p3pp3r_r1ght_curs3}</code> - confirming v2 is the wrong pepper (unmasking a legacy console log with v3 cleanly decodes; with v2 it produces garbage).</p>
+<p><strong>Unmasking the legacy console (v3 pepper):</strong> reveals an operator token (<code>isfcr{l3g4cy_st4ff_c0ns0l3_1s_n0t_th3_v4ult}</code> - explicitly stated to not open the vault) and a journal describing the vault&#39;s real access rule: it reads an operator descriptor <code>{curators, rounds}</code> from runtime config, where <code>curators</code> = the curator of every exhibit whose certificate verifies against the <strong>current</strong> registrar pepper (the visible green &quot;verified&quot; badge is not itself a verification - it only checks <code>sig.length === 12</code>), and <code>rounds = 1000 + (sum of accession years mod 4096)</code>.</p>
+<p><strong>Registrar audit:</strong> re-signing each exhibit with the v3 pepper and comparing to its stored signature isolates exactly 5 genuinely-verifying curators/years (8 other exhibits carry stale, non-verifying signatures from a prior key rotation). <code>rounds = 1000 + (9959 mod 4096) = 2767</code>.</p>
+<p><strong>Vault key:</strong> derived by iterating SHA-256 2767 times over <code>bsalt + &quot;:&quot; + curators.joined</code>, then AES-256-GCM-decrypting the vault blob (AAD <code>meridian-vault</code>), yielding the flag directly.</p>
+<p><strong>Getting the descriptor past the app - the real vulnerability:</strong> <code>openVault</code> needs <code>cfg.vault</code>, but <code>sanitizeConfig</code> deletes any <strong>own</strong> <code>vault</code> property and strips non-allowlisted feature flags, killing a naive attempt. The intended path is <strong>prototype pollution</strong> through a shared view link, whose only guard is a regex blocking literal <code>__proto__</code>/<code>constructor</code>/<code>prototype</code> substrings in the raw text - but <code>JSON.parse</code> still expands <code>\uXXXX</code> escapes in keys <em>after</em> the regex runs, so a Unicode-escaped <code>__proto__</code> key sails past the filter, becomes an <strong>own</strong> <code>__proto__</code> data property after parsing, and <code>deepMerge</code>&#39;s assignment fires the real <code>__proto__</code> setter, pushing <code>vault</code> onto <code>Object.prototype</code> where <code>sanitizeConfig</code> treats it as inherited (not deleted).</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">https://isfcrpesu-the-meridian.chals.io/#/collection?s=&lt;b64url(JSON with __proto__ key)&gt;
+isfcr{d33p_m3rg3_p0llut3s_th3_pr0v3n4nc3_v4ult_1n_th3_m3r1d14n}</code></pre>
+      
+    </figure><p>Dead ends/decoys confirmed along the way: the legacy console token, the wrong-pepper self-test string, and a scrambled &quot;verdigris&quot; hex string explicitly described as &quot;exactly as trustworthy as the certificate beside it&quot;.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="the-hidden-test-case.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">The Hidden Test Case</span></a>
+    <a class="wu-pager-link wu-pager-next" href="tearing.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">tearing</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

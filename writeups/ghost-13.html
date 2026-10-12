@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GHOST-13 · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Four artifacts chain together. A wrapped 16-bit journal picks the active config, two Modbus signatures reuse an ECDSA nonce to leak the scalar, and DTMF tones from a WAV finish the key for the OTA unseal." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>ghost-13</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>GHOST-13 <span class="page-sub">journal rollover, ECDSA nonce reuse, DTMF</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{ghost13_dc8f84a256fa64108b6c75a151a1474d}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A line controller survived a power failure; the maintenance gateway received &quot;two diagnostic writes that should never have looked alike&quot; - the giveaway for <strong>ECDSA nonce reuse</strong>. The solve chains four artifacts: <code>plc_program.bin</code> → active config, <code>plc_firmware.bin</code> → factory constants + pubkey, <code>plc_traffic.pcap</code> → two reused-nonce ECDSA signatures → signing scalar, <code>alarm_buzzer.wav</code> → DTMF keypad digits, finally unsealing <code>maintenance_update.ota</code>.</p>
+<p><strong>Stage 1 - active configuration:</strong> 8 config slots each paired with a commit journal; a slot is activated only if it has a valid matching journal (CRC + commit word valid on both). Two journals are deliberately invalid. Sequence numbers wrap (<code>65533..4</code>), requiring <strong>16-bit serial-number arithmetic</strong> rather than raw comparison to find the highest valid journal - landing on active slot 5.</p>
+<p><strong>Stage 2 - firmware constants:</strong> a section directory in the firmware image yields a 32-byte factory constant and a P-256 public key (<code>PUBK</code> section); a retired v1 recovery key section is unused.</p>
+<p><strong>Stage 3 - signing scalar:</strong> TCP-reassembled Modbus/TCP FC16 writes carry custom <code>G13C</code> fragments (validated by CRC16 + expected register address) that reassemble into padded <code>G13F</code> frames, decrypted with AES-256-CTR under a link key derived from the factory constant and committed ID/salt. Two of the three frames (<code>0x41</code>, <code>0x42</code>) <strong>share the same ECDSA nonce <code>r</code></strong> - textbook nonce-reuse key recovery:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">k = (z1 - z2) / (s1 - s2)  mod n
+d = (s1*k - z1) / r        mod n</code></pre>
+      
+    </figure><p>recovering the signing scalar <code>d</code>, verified via <code>d·G == Q</code>.</p>
+<p><strong>Stage 4 - keypad digits:</strong> a Goertzel DTMF decoder on the 8kHz WAV finds two 8-digit groups separated by a service-ready tone; adding the committed <code>keypad_trim</code> (mod 10) to the diagnostic wire-code digits gives the real keypad digits.</p>
+<p><strong>Stage 5 - the sealed update:</strong> apply a sparse binary delta to a factory image (verified against embedded CRC32s and a SHA-256 of the target), then derive an HKDF-SHA256 key from the recovered ECDSA scalar, committed ID/salt, image KDF constant, keypad digits, and hashes of the image/manifest/delta - decrypting an AES-256-GCM blob to:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;diagnostic&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;power-restoration&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;flag&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;isfcr{ghost13_dc8f84a256fa64108b6c75a151a1474d}&quot;</span><span class="hljs-punctuation">}</span></span></span></code></pre>
+      
+    </figure><p>Key takeaways: serial-number (wraparound-aware) arithmetic is needed to pick the newest journal; ECDSA nonce reuse across two signatures leaks the private scalar instantly; erasure coding (XOR parity, used elsewhere in the fragment reassembly) lets dropped fragments be rebuilt; every hash/CRC checkpoint in the chain catches a wrong branch before it wastes time.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="phantom-15.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">PHANTOM-15</span></a>
+    <a class="wu-pager-link wu-pager-next" href="fluxgate-g3.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Fluxgate G3</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>mirage · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="No binary is shipped, only an echo service that leaks more than it should. Leaking stack words proves a static non-PIE image, and a positional arbitrary read pulls the flag straight from memory." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>mirage</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>mirage <span class="page-sub">blind format string, no binary</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-pwn">pwn</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><code>nc 0.cloud.chals.io 23023</code>, no binary shipped. The description - &quot;an echo that repeats back a little more than you said&quot; - is a textbook printf format-string leak description, and the flag text (<code>bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry</code>) confirms the intent to solve entirely blind.</p>
+<p><strong>First contact:</strong> <code>%p</code>/<code>%x</code>/<code>%s</code> confirm the bug immediately; feeding <code>AAAA%p%p%p%p%p%p%p%p</code> leaks <code>0x7025702541414141</code> - our own input buffer, <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button>, living on the stack, at argument index 6 (8-byte words). An 8-byte-aligned sweep maps the stack layout and finds several <strong>fixed, non-randomised</strong> low addresses (<code>0x40xxxx</code>/<code>0x48xxxx</code>/<code>0x4bxxxx</code>), proving the binary is <strong>static, non-PIE</strong> - fixed global addresses are readable without any <button type="button" class="wu-gloss" data-def="Address Space Layout Randomization: randomizes memory addresses each run to make exploits harder to write reliably.">ASLR</button> leak.</p>
+<p><strong>Arbitrary read:</strong> naively placing the target address first fails because <code>printf</code> treats the buffer as a C string and stops at the first <code>0x00</code> byte inside the packed address. Fix: place the address <strong>after</strong> the format specifiers, computing the correct argument index from the buffer offset (<code>IDX = 6 + OFF//8</code>). Verified against known strings (<code>&quot;quit&quot;</code>, a known banner string).</p>
+<p>Two interaction quirks: the service drops the <strong>leading character</strong> of every line (so avoid relying on it), and it processes <strong>exactly one line per TCP segment</strong> (extra pipelined lines in one <code>send()</code> are discarded) - requests must be sent one line at a time.</p>
+<p><strong>Speeding up:</strong> printf accepts many positional specifiers in one format string, so one request reads ~30 addresses via <code>%38$s|%39$s|...</code>, giving ~15 ms per address and letting whole memory regions be swept in seconds.</p>
+<p><strong>Locating the flag:</strong> <code>flag.txt</code>&#39;s name sits in <code>.rodata</code>; the file is read into a fixed <code>.bss</code> buffer at startup. Sweeping <code>.bss</code> with stride 8 finds the flag string directly, confirmed by reading neighbouring (empty/NUL) addresses to pin the exact start:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">4b6ac0  isfcr{bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry}
+isfcr{bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry}</code></pre>
+      
+    </figure><p>No write primitives (<code>%n</code>) were ever needed - the flag is simply leaked out of a global via the arbitrary read. Lessons: blind format-string work proceeds via <code>%p</code> stack mapping then identifying non-randomised addresses to prove static/non-PIE; NUL bytes kill a format string unless the pointer comes <em>after</em> the specifiers; multi-specifier reads turn a 1-read-per-RTT <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> into a ~30-read-per-RTT scanner.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="tearing.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">tearing</span></a>
+    <a class="wu-pager-link wu-pager-next" href="slab.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">slab</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

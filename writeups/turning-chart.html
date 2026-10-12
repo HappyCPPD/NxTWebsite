@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Turning Chart · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Every round's operation comes from a PRNG that never sees the input, so the whole thing is a fixed invertible byte program. Logging the ops under gdb and applying their inverses in reverse order recovers the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>turning-chart</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Turning Chart <span class="page-sub">inverting a fixed 320-round program</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{3v3ry_r0ut3_r3m3mb3rs_1ts_0r1g1n}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A statically-linked, stripped ELF64. The prompt&#39;s <code>?</code> is a decoy printing a retired dial and exiting (the blurb says &quot;kept for the museum, not for navigation&quot; - a tell to ignore it). Input must be exactly 39 bytes: <code>isfcr{</code> + 32 <code>[a-z0-9_]</code> chars + <code>}</code>, copied <strong>verbatim</strong> into a 32-byte state array with no hashing at all.</p>
+<p>A fixed 320-round &quot;needle&quot; state machine then runs. Crucially every round&#39;s parameters (op, indices, operands) come only from a fixed xorshift PRNG seeded at <code>0x73b59a26</code> and rolling accumulators - <strong>nothing depends on the input state</strong>. So the whole program is a fixed, invertible sequence of 320 byte-ops. Nine op types observed: rotate 8-byte window, rotate 4-byte strided window, swap, add-with-key, XOR-rotate, S-box substitute (runtime 256-byte table), a combine op, reverse a 4-byte window, no-op. The final state is compared against 32 hard-coded bytes XOR-masked by a second xorshift stream.</p>
+<p><strong>Method:</strong> gdb-logged the full 320-round op sequence and the runtime 256-byte permutation and final PRNG value. Reimplemented the 9 ops in Python; a forward pass with all-<code>&#39;a&#39;</code> input reproduced the binary&#39;s final state exactly, confirming the model. Recovered the required pre-XOR final state from the hard-coded target and the final xorshift stream, then applied each op&#39;s inverse over <code>reversed(ops)</code>.</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">num ops 320 rounds 0 319
+forward match: True
+mid bytes: b'3v3ry_r0ut3_r3m3mb3rs_1ts_0r1g1n'
+re-fwd match: True
+$ printf 'isfcr{3v3ry_r0ut3_r3m3mb3rs_1ts_0r1g1n}\n' | ./turning_chart
+Course: Chart opened. Course restored.
+exit=0</code></pre>
+      
+    </figure><p>&quot;Every route remembers its origin&quot;: the transform is a fixed, data-independent op program, so it is trivially invertible. The decoy dial and the missing input dependency are the two traps - the machine is a bijection, not a one-way function.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="the-ledger.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">The Ledger</span></a>
+    <a class="wu-pager-link wu-pager-next" href="ghost-in-the-spooler.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Ghost in the Spooler</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

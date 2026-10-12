@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hidden Soul · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="A plain ASCII flag sits in the least-significant bits of every R, G and B value. zsteg finds it at b1,rgb,lsb,xy, and a short Pillow script confirms the same bytes." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>hidden-soul</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Hidden Soul <span class="page-sub">LSB stego in an 80x80 PNG</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{h1dd3n_s0ul_b3n34th_th3_sh4d0w}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Challenge:</strong> &quot;A seemingly ordinary Soul Stone fragment contains a secret hidden inside its pixels. Extract the concealed message.&quot;</p>
+<ul>
+<li>Attachment: <code>soul_fragment.png</code></li>
+<li>80×80, 8-bit RGB, non-interlaced PNG (19,353 bytes - large for only 19,200 px, a mild hint that low-order bits are doing work).</li>
+<li>Flag format: <code>OWASP{...}</code></li>
+</ul>
+<h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
+<p>Classic LSB steganography in the colour channels.</p>
+<p>Triage:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">file soul_fragment.png      # PNG 80x80 RGB
+exiftool soul_fragment.png  # no interesting metadata
+binwalk soul_fragment.png   # only the normal IEND zlib stream
+zsteg -a soul_fragment.png  # &lt;-- hit</code></pre>
+      
+    </figure><p><code>zsteg</code> reports the payload on the <strong><code>b1,rgb,lsb,xy</code></strong> pattern, i.e. the
+least-significant bit of every R, G, B channel value, scanned row-major:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">b1,rgb,lsb,xy  .. text: &quot;OWASP{h1dd3n_s0ul_b3n34th_th3_sh4d0w}&quot;</code></pre>
+      
+    </figure><p>The payload is a plain ASCII string (no passphrase, no compression). Bits from
+each channel are packed MSB-first into bytes; the flag is the opening ASCII run
+that terminates at <code>}</code> followed by binary noise.</p>
+<h2 id="reproduce"><a class="wu-anchor" href="#reproduce" aria-hidden="true">#</a>Reproduce</h2>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">python3 solve.py soul_fragment.png
+# FLAG: OWASP{h1dd3n_s0ul_b3n34th_th3_sh4d0w}</code></pre>
+      
+    </figure><p>The extractor is dependency-light (Pillow only) and does not rely on zsteg:
+it reads the LSB of each R/G/B sample in row-major order and repacks
+bits→bytes. Both methods agree.</p>
+<h2 id="dead-ends"><a class="wu-anchor" href="#dead-ends" aria-hidden="true">#</a>Dead ends</h2>
+<ul>
+<li>Appended/embedded archive after IEND: none (binwalk finds only the PNG IHDR zlib stream).</li>
+<li>EXIF / textual metadata chunks (tEXt/zTXt/iTXt): none.</li>
+<li>Passphrase-protected steghide/outguess: N/A - payload is raw LSB, no key.</li>
+</ul>
+<p><strong>Difficulty notes:</strong> Single-pass solve: <code>zsteg -a</code> on the first look. The only
+&quot;trick&quot; is that the message is bit-plane 1 of the <em>RGB</em> channels (not a single
+channel), so a naive single-channel LSB dump misses it.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#solution">Solution</a></li><li><a href="#reproduce">Reproduce</a></li><li><a href="#dead-ends">Dead ends</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev wu-pager-index" href="../writeups.html"><span class="wu-pager-dir">Index</span><span class="wu-pager-name">All writeups</span></a>
+    <a class="wu-pager-link wu-pager-next" href="soul-world.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Soul World</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

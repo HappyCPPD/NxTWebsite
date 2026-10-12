@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mirror Garden · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="1024 generated Java leaves each encode a system of byte equations. All are solved with z3, one decodes differently, and Unicorn emulation of the native bloom() finishes the transform without reversing it by hand." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>mirror-garden</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Mirror Garden <span class="page-sub">1024 z3 leaves and native JNI</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{m1rr0r_g4rden_bl00ms_@t_m1dn1ght_7f3a}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>An APK (925 KB) with a near-empty <code>MainActivity</code> that calls a single <code>native</code> method <code>bloom(byte[])</code> in <code>libgarden.so</code>, plus 1024 generated Java classes <code>one/sr/garden/leaf/L0000..L1023</code>, each with one <code>verify(byte[]) -&gt; byte[]</code> method encoding a system of 8 equations over 16 byte-variables (using jadx&#39;s decompiled forms of <code>(a|b)-(a&amp;b) == a^b</code> and <code>(x^y)+2(x&amp;y) == x+y</code>).</p>
+<p><strong>Solving all 1024 leaves:</strong> a small symbolic evaluator textually rewrites each <code>long jN = ...</code> line into <button type="button" class="wu-gloss" data-def="An SMT solver: give it symbolic variables and constraints and it finds a satisfying assignment or proves none exists.">z3</button> 32-bit BitVector operations, split on <code>||</code> for the final equality checks. All 1024 leaves are satisfiable; for each, <code>bArr2 XOR input[i&amp;15]</code> yields a 48-byte value. 1023 of them decode to a well-formed <code>isfcr{&lt;plant&gt;_&lt;hex&gt;}</code> plus junk bytes - pure decoys. Exactly <strong>one leaf (357)</strong> fails that pattern - &quot;the only leaf that remembers&quot; - so its raw output must be post-processed by native code.</p>
+<p><strong>Reversing <code>bloom()</code>:</strong> the tiny native library (<code>.text</code> only 0x12b8 bytes) computes a constant leaf index via an internal mixing function that <strong>never reads its input arguments</strong> (emulated in Unicorn, confirmed <code>index = 0x1ab67d65 &amp; 0x3ff = 357</code>), calls <code>one/sr/garden/leaf/L0357.verify()</code> via JNI reflection, XORs the 48-byte result against an internal state, then runs it through an internal &quot;mirror&quot; transform chain.</p>
+<p><strong>Full emulation instead of hand-reversing the mirror VM:</strong> rather than reimplementing the native transform routines by hand, the entire <code>bloom()</code> function is emulated in Unicorn with a <strong>stub JNI environment</strong> (mapped function-pointer table implementing <code>FindClass</code>, <code>GetStaticMethodID</code>, <code>CallStaticObjectMethodA</code>, array accessors, <code>NewStringUTF</code>, plus stubbed <code>snprintf</code>/<code>memcpy</code>), with <code>CallStaticObjectMethodA</code> honoured by substituting the precomputed leaf-357 result.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">FINAL: isfcr{m1rr0r_g4rden_bl00ms_@t_m1dn1ght_7f3a}</code></pre>
+      
+    </figure><p>Negative control: feeding all-zero or arbitrary 16-byte input into the same emulation stops at a length/guard check and returns <code>the mirror cracks.</code> - confirming only the true leaf-357 preimage produces the flag.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">isfcr{m1rr0r_g4rden_bl00ms_@t_m1dn1ght_7f3a}</code></pre>
+      
+    </figure><p>Reusable lessons: a tiny APK whose only logic is one <code>native</code> method means the JNI body <em>is</em> the challenge - read the function-pointer call sites rather than guessing the (large) JNI index table. 1024 generated classes are just constraint systems, solved per-leaf with z3. Emulating obfuscated native transforms with a stub JNI/libc is faster and exact compared to hand-reversing them, provided a negative control proves the result comes from the intended path.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="flaguard.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">FlaGuard</span></a>
+    <a class="wu-pager-link wu-pager-next" href="faraday-cage.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Faraday Cage</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

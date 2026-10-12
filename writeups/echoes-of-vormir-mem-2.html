@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Echoes of Vormir: Mem-2 · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="One process does not belong: SoulHunt_7F31 spawned from powershell.exe. Its command line and dumped strings show it is a renamed copy of PowerShell." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>echoes-of-vormir-mem-2</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Echoes of Vormir: Mem-2 <span class="page-sub">a renamed PowerShell in the process list</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span>
+      <span>200 pts</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{SoulHunt_7F31}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>From the Echoes of Vormir memory forensics series. The artifact is <code>soul.zip</code>, containing <code>soul.mem</code>, a 2.6 GB Windows memory dump captured with FTK Imager, reused across all five sub-challenges.</p>
+<blockquote>
+<p><em>Among everything running on the machine, something doesn&#39;t belong. Find
+it.</em></p>
+</blockquote>
+<p>We&#39;re given <code>soul.mem</code>, a Windows memory dump captured with FTK Imager.</p>
+<h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
+<h3 id="1-list-running-processes"><a class="wu-anchor" href="#1-list-running-processes" aria-hidden="true">#</a>1. List running processes</h3>
+<p>Using Volatility 3 to enumerate all processes:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">vol -f soul.mem windows.pslist.PsList</span></span></code></pre>
+      
+    </figure><p>Most of the output is standard Windows processes - <code>svchost.exe</code>,
+<code>csrss.exe</code>, <code>explorer.exe</code>, <code>msedge.exe</code>, etc. But one entry stands out:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">PID   PPID  ImageFileName       CreateTime
+2580  6960  SoulHunt_7F31.      2026-10-08 04:48:01 UTC</code></pre>
+      
+    </figure><p>A process named <code>SoulHunt_7F31</code> spawned by <code>powershell.exe</code> (PID 6960) - clearly not a legitimate Windows process.</p>
+<h3 id="2-inspect-the-command-line"><a class="wu-anchor" href="#2-inspect-the-command-line" aria-hidden="true">#</a>2. Inspect the command line</h3>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">vol -f soul.mem windows.cmdline.CmdLine --pid 2580</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-string">&quot;C:\Users\nightwatch\Desktop\SoulHunt_7F31.exe&quot;</span> -NoLogo -NoProfile -NoExit -Command Start-Sleep -Seconds 7200</span></span></code></pre>
+      
+    </figure><p>The executable sits on the user <code>nightwatch</code>&#39;s Desktop and was invoked with
+PowerShell-style flags to stay alive silently for 2 hours.</p>
+<h3 id="3-confirm-it39s-masquerading"><a class="wu-anchor" href="#3-confirm-it39s-masquerading" aria-hidden="true">#</a>3. Confirm it&#39;s masquerading</h3>
+<p>Dumping the executable from memory and checking its strings:</p>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">vol -f soul.mem windows.dumpfiles.DumpFiles --virtaddr 0xdb0f7765f7e0</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">strings SoulHunt_7F31.exe.img | grep -i powershell</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">powershell.pdb</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">&lt;description&gt;PowerShell&lt;/description&gt;</span></span></code></pre>
+      
+    </figure><p><code>SoulHunt_7F31.exe</code> is a <strong>renamed copy of PowerShell</strong> - a classic evasion
+technique to disguise malicious activity under an innocuous-looking process
+name.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#solution">Solution</a><ol class="wu-toc-sub"><li><a href="#1-list-running-processes">1. List running processes</a></li><li><a href="#2-inspect-the-command-line">2. Inspect the command line</a></li><li><a href="#3-confirm-it39s-masquerading">3. Confirm it&#39;s masquerading</a></li></ol></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="echoes-of-vormir-mem-1.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Echoes of Vormir: Mem-1</span></a>
+    <a class="wu-pager-link wu-pager-next" href="last-memory-of-vormir.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">The Last Memory of Vormir</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

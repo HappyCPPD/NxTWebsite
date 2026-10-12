@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Soul's Whisper · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="Strings shows four overlapping 8-byte fragments that nearly spell the flag. Reading soul_stone() shows the real layout and the gate string soul, so the naive concatenation is a trap." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>souls-whisper</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Soul's Whisper <span class="page-sub">stack-built strings in an ELF</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span>
+      <span>100 pts</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{th3_s0ul_st0n3_wh1sp3r}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>1. First look</strong></p>
+<p>The handout is a single 16 KB file:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">soul_whisper: ELF 64-bit LSB pie executable, x86-64, dynamically linked,
+              interpreter /lib64/ld-linux-x86-64.so.2, not stripped</code></pre>
+      
+    </figure><p>Not stripped - so symbols are intact and there is no need to fight the
+disassembler. <code>nm</code> names two interesting functions immediately:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">000000000000129a T main
+00000000000011c9 T soul_stone</code></pre>
+      
+    </figure><p>Running it shows a themed prompt:</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">====================================
+        SOUL STONE VAULT
+====================================
+
+The Soul Stone remembers everything...
+
+Enter the secret phrase:</code></pre>
+      
+    </figure><h2 id="2-leaking-fragments-with-strings"><a class="wu-anchor" href="#2-leaking-fragments-with-strings" aria-hidden="true">#</a>2. Leaking fragments with strings</h2>
+<p><code>strings</code> coughs up four suspicious 8-byte fragments, each ending in a stray
+<code>H</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">OWASP{thH
+3_s0ul_sH
+l_st0n3_H
+wh1sp3r}H</code></pre>
+      
+    </figure><p>Stripping the trailing <code>H</code> (which is really the first byte of the <em>next</em>
+instruction&#39;s opcode being mistaken for text) leaves:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">OWASP{th  3_s0ul_s  l_st0n3_  wh1sp3r}</code></pre>
+      
+    </figure><p>Concatenating gives <code>OWASP{th3_s0ul_sl_st0n3_wh1sp3r}</code> - visibly <em>almost</em>
+right but with a duplicated <code>sl</code>. That seam is the tell: the pieces are
+overlapping, and reading them naively is a trap. Time to read the actual
+code.</p>
+<h2 id="3-main-the-gate"><a class="wu-anchor" href="#3-main-the-gate" aria-hidden="true">#</a>3. main() - the gate</h2>
+<figure class="wu-code" data-lines="9">
+      <figcaption>
+        
+        <span class="wu-code-lang">asm</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-asm"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">call</span>   __isoc99_scanf                      <span class="hljs-comment">; &quot;%63s&quot; into buf @ rbp-0x50</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">mov</span>    <span class="hljs-built_in">DWORD</span> <span class="hljs-built_in">PTR</span> [<span class="hljs-built_in">rbp</span>-<span class="hljs-number">0x55</span>], <span class="hljs-number">0x6c756f73</span>    <span class="hljs-comment">; 73 6f 75 6c = &quot;soul&quot;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">mov</span>    <span class="hljs-built_in">BYTE</span>  <span class="hljs-built_in">PTR</span> [<span class="hljs-built_in">rbp</span>-<span class="hljs-number">0x51</span>], <span class="hljs-number">0x00</span>          <span class="hljs-comment">; NUL terminate</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-keyword">lea</span>    <span class="hljs-built_in">rdx</span>, [<span class="hljs-built_in">rbp</span>-<span class="hljs-number">0x55</span>]</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"><span class="hljs-keyword">lea</span>    <span class="hljs-built_in">rax</span>, [<span class="hljs-built_in">rbp</span>-<span class="hljs-number">0x50</span>]</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"><span class="hljs-keyword">call</span>   strcmp                              <span class="hljs-comment">; strcmp(input, &quot;soul&quot;)</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-keyword">test</span>   <span class="hljs-built_in">eax</span>, <span class="hljs-built_in">eax</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"><span class="hljs-keyword">jne</span>    reject</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc"><span class="hljs-keyword">call</span>   soul_stone                          <span class="hljs-comment">; match -&gt; print the flag</span></span></span></code></pre>
+      
+    </figure><p><code>0x6c756f73</code> is <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> <code>73 6f 75 6c</code> = <strong><code>soul</code></strong>. The compared
+constant is built on the stack, not stored as a plain string in <code>.rodata</code>,
+which is why it doesn&#39;t appear as its own entry in <code>strings</code>.</p>
+<p>So the &quot;secret phrase&quot; the vault is guarding is literally <code>soul</code>. A match
+falls through to <code>soul_stone()</code>.</p>
+<h2 id="4-soul-stone-where-the-flag-actually-lives"><a class="wu-anchor" href="#4-soul-stone-where-the-flag-actually-lives" aria-hidden="true">#</a>4. soul_stone() - where the flag actually lives</h2>
+<p><code>soul_stone()</code> assembles the flag from four 64-bit <code>movabs</code> immediates
+written to overlapping <code>rbp</code>-relative slots, copies 29 bytes (<code>0x00..0x1C</code>)
+into a local buffer, NUL-terminates it, then <code>printf(&quot;Flag: %s&quot;)</code>:</p>
+<figure class="wu-code" data-lines="9">
+      <figcaption>
+        
+        <span class="wu-code-lang">asm</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-asm"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">movabs <span class="hljs-built_in">rax</span>, <span class="hljs-number">0x68747b505341574f</span>   <span class="hljs-comment">; &quot;OWASP{th&quot;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">movabs <span class="hljs-built_in">rdx</span>, <span class="hljs-number">0x735f6c7530735f33</span>   <span class="hljs-comment">; &quot;3_s0ul_s&quot;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">mov</span>    [<span class="hljs-built_in">rbp</span>-<span class="hljs-number">0x70</span>], <span class="hljs-built_in">rax</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-keyword">mov</span>    [<span class="hljs-built_in">rbp</span>-<span class="hljs-number">0x68</span>], <span class="hljs-built_in">rdx</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">movabs <span class="hljs-built_in">rax</span>, <span class="hljs-number">0x5f336e3074735f6c</span>   <span class="hljs-comment">; &quot;l_st0n3_&quot;</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">movabs <span class="hljs-built_in">rdx</span>, <span class="hljs-number">0x7d72337073316877</span>   <span class="hljs-comment">; &quot;wh1sp3r}&quot;</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"><span class="hljs-keyword">mov</span>    [<span class="hljs-built_in">rbp</span>-<span class="hljs-number">0x63</span>], <span class="hljs-built_in">rax</span>           <span class="hljs-comment">; &lt;-- <span class="hljs-doctag">note:</span> -0x63, NOT -0x60</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc"><span class="hljs-keyword">mov</span>    [<span class="hljs-built_in">rbp</span>-<span class="hljs-number">0x5b</span>], <span class="hljs-built_in">rdx</span></span></span></code></pre>
+      
+    </figure><p>Laying the writes out by <code>rbp</code> offset:</p>
+<table>
+<thead>
+<tr>
+<th>immediates (hex)</th>
+<th>little-endian ASCII</th>
+<th>written at</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>0x68747b505341574f</code></td>
+<td><code>OWASP{th</code></td>
+<td><code>rbp-0x70</code></td>
+</tr>
+<tr>
+<td><code>0x735f6c7530735f33</code></td>
+<td><code>3_s0ul_s</code></td>
+<td><code>rbp-0x68</code></td>
+</tr>
+<tr>
+<td><code>0x5f336e3074735f6c</code></td>
+<td><code>l_st0n3_</code></td>
+<td><code>rbp-0x63</code></td>
+</tr>
+<tr>
+<td><code>0x7d72337073316877</code></td>
+<td><code>wh1sp3r}</code></td>
+<td><code>rbp-0x5b</code></td>
+</tr>
+</tbody></table>
+<p>The third write sits at <code>-0x63</code>, three bytes <strong>into</strong> the second write&#39;s
+slot. It re-lands <code>l</code>, <code>_</code>, <code>s</code> over the exact same <code>l</code>, <code>_</code>, <code>s</code> that
+<code>3_s0ul_s</code> already ends with - a deliberate overlap that reproduces the seam
+we saw in <code>strings</code>. Same values, so nothing is corrupted; it just exists to
+make linear/naive reconstruction produce the wrong <code>...sl...</code> result.
+Reading from <code>-0x70</code> upward with later writes winning:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">O W A S P { t h 3 _ s 0 u l _ s t 0 n 3 _ w h 1 s p 3 r }</code></pre>
+      
+    </figure><p>→ <code>OWASP{th3_s0ul_st0n3_wh1sp3r}</code></p>
+<h2 id="5-solve"><a class="wu-anchor" href="#5-solve" aria-hidden="true">#</a>5. Solve</h2>
+<p>Fastest path - the binary prints the flag once you know the gate word:</p>
+<figure class="wu-code" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">echo</span> <span class="hljs-string">&#x27;soul&#x27;</span> | ./soul_whisper</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">[+] The stone recognizes your soul.</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">[+] Access granted.</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">Flag: OWASP{th3_s0ul_st0n3_wh1sp3r}</span></span></code></pre>
+      
+    </figure><p>Static path, no execution - decode the immediates directly:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 solve.py     <span class="hljs-comment"># OWASP{th3_s0ul_st0n3_wh1sp3r}</span></span></span></code></pre>
+      
+    </figure><h2 id="6-takeaways"><a class="wu-anchor" href="#6-takeaways" aria-hidden="true">#</a>6. Takeaways</h2>
+<ul>
+<li>&quot;Not stripped&quot; is a gift: <code>nm</code> handed over <code>main</code> and <code>soul_stone</code>.</li>
+<li>A stack-built <code>strcmp</code> constant is a cheap way to hide a password from
+<code>strings</code>; recognize the <code>mov DWORD PTR [...], imm</code> + <code>strcmp</code> idiom.</li>
+<li>Overlapping <code>movabs</code> immediates are a classic obfuscation: the fragments
+in <code>strings</code> <em>look</em> almost right but duplicate a seam character. Trust the
+disassembly&#39;s memory layout, not the string dump.</li>
+<li>Two independent methods (live run, static decode) agree - high
+confidence.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#2-leaking-fragments-with-strings">2. Leaking fragments with strings</a></li><li><a href="#3-main-the-gate">3. main() - the gate</a></li><li><a href="#4-soul-stone-where-the-flag-actually-lives">4. soul_stone() - where the flag actually lives</a></li><li><a href="#5-solve">5. Solve</a></li><li><a href="#6-takeaways">6. Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="double-trouble.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Double Trouble</span></a>
+    <a class="wu-pager-link wu-pager-next" href="souls-weakness.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Soul's Weakness</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

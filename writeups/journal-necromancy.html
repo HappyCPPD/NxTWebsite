@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Journal Necromancy · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The journal is wiped, but the data clusters of deleted files survive. Three tagged key shares are carved out by magic bytes, and the AES-GCM tag settles which byte layout is correct." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>journal-necromancy</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Journal Necromancy <span class="page-sub">deleted NTFS data clusters</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{mft_slack_dies_but_data_clusters_remember_1a2f}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A 64 MiB bare NTFS volume &quot;WORK&quot; (sector 512, cluster 4096, MFT at byte <code>0x4000</code>, 222 records). Live files include a vault (<code>Personal/vault/secure_archive.enc</code>, AES-256-GCM); deleted files include ~131 deleted cache blobs and a few individually-named deleted files. Most other files are decoys.</p>
+<p><strong>The lock:</strong> <code>Personal/reminders.txt</code> documents the construction - the vault is AES-256-GCM with a <strong>three-way XOR key</strong>, where each &quot;carrier&quot; holds a 32-byte share plus a 1-byte index and a 1-byte XOR-parity, self-identifying by index 1/2/3. The vault layout: 4-byte marker (<code>&quot;ENC1&quot;</code>), 12-byte nonce, ciphertext, 16-byte tag.</p>
+<p><strong>Finding the carriers:</strong> the decisive discriminator is a <strong>4-byte magic <code>de ad 53 47</code></strong> (&quot;necromancy&quot; theme) - a grep finds exactly three hits, all sitting inside the binary tails of deleted files or a random cluster (the data clusters survive even though the files themselves are deleted).</p>
+<p><strong>The one-byte trap:</strong> the reminder says &quot;a 32-byte share plus a 1-byte index and a 1-byte xor-parity&quot; but doesn&#39;t fix the byte order. Two layouts (<code>[magic][idx][parity][share]</code> vs <code>[magic][idx][share][parity]</code>) both pass the parity self-check <code>parity == xor(share) ^ idx</code>, because the parity byte sits adjacent to the share either way. The <strong>AES-GCM tag disambiguates</strong>: only Layout <code>[magic][idx][share][parity]</code> verifies.</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">key = <span class="hljs-built_in">bytes</span>(a ^ b ^ c <span class="hljs-keyword">for</span> a, b, c <span class="hljs-keyword">in</span> <span class="hljs-built_in">zip</span>(share1, share2, share3))</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># AES-256-GCM: marker || nonce || ciphertext || tag</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">FLAG = isfcr{mft_slack_dies_but_data_clusters_remember_1a2f}</span></span></code></pre>
+      
+    </figure><p>The title &quot;Journal-Necromancy&quot; and the fully-wiped <code>$LogFile</code> (2 MiB of <code>0xFF</code>) are a red herring pointing at journal/UsnJrnl recovery - the real lesson, spelled out by the flag itself, is that <strong>deleting a file clears its MFT record/slack, but not its data clusters</strong>, so the embedded carriers survive and can be &quot;resurrected.&quot; A naive full-image parity scan (ignoring the magic) produces several bogus coincidental hits from pure-random clusters and from decoy cache blobs using a different parity convention.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="write-hole.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Write-Hole</span></a>
+    <a class="wu-pager-link wu-pager-next" href="phantom-mesh.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Phantom Mesh</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

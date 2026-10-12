@@ -63,7 +63,7 @@ function navHtml(prefix, active = 'writeups') {
   <div class="container nav-inner">
     <div class="nav-id">
       <a href="${prefix}index.html#top" class="brand">
-        <img src="${prefix}images/brand/logo.png" alt="NXT_CTFS logo" />
+        <img src="${prefix}images/brand/logo-v2.png" alt="NXT_CTFS logo" />
         <span class="brand-name">NXT_CTFS</span>
       </a>
     </div>
@@ -98,7 +98,7 @@ function footerHtml(prefix) {
   <div class="footer-grid">
     <div>
       <a href="${prefix}index.html#top" class="footer-brand">
-        <img src="${prefix}images/brand/logo.png" alt="NXT_CTFS logo" />
+        <img src="${prefix}images/brand/logo-v2.png" alt="NXT_CTFS logo" />
         <span>NXT_CTFS</span>
       </a>
       <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
@@ -148,7 +148,7 @@ function page({ prefix, title, desc, body, navActive = 'writeups' }) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}" />
-<link rel="icon" href="${prefix}images/brand/logo.png" type="image/png" />
+<link rel="icon" href="${prefix}images/brand/logo-v2.png" type="image/png" />
 ${cssLinks(prefix)}
 <script>document.documentElement.classList.add('js');</script>
 </head>

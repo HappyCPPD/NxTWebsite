@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>one-more · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A blind Schnorr signing oracle that lets you open 256 concurrent sessions. The polynomial-time ROS attack forges one more valid signature than sessions answered in a few seconds, with no Wagner tree and no heavy memory." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>one-more</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>one-more <span class="page-sub">polynomial-time ROS attack on blind Schnorr</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{r0s_1s_n0t_h4rd_f0r_l0g_p}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Solved with the <strong>polynomial-time ROS attack</strong> (Benhamouda-Lepoint-Loss-Orrù-Raykova, Eurocrypt 2021): 256 parallel sessions, a few lines of modular arithmetic, ~4.5 s against the live service. No Wagner k-tree, no big memory.</p>
+<p><strong>The service:</strong> <code>wss://one-more.isfcr.xyz</code> is a blind Schnorr signing <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> on secp256k1. Per connection it draws a fresh secret <code>x ← Z_n</code> and publishes <code>X = xG</code>. Protocol: <code>open</code> returns <code>id k R</code> (<code>R = rG</code>); <code>sign &lt;k&gt; &lt;c&gt;</code> returns <code>s = (r + c·x) mod n</code> once per session; <code>submit</code> with a JSON list of signatures wins if <code>good &gt; answered</code>. A submitted signature <code>[m_hex, Rx, Ry, s]</code> counts iff <code>s·G == R + H(R, m)·X</code>. Limits: <code>MAX_SESSIONS=512</code>, <code>MAX_SUBMIT=600</code>.</p>
+<p><strong>Why the &quot;obvious&quot; attack is a trap:</strong> the classical break is Wagner&#39;s <code>(ℓ+1)</code>-sum/k-tree attack on ROS, costing ~2³⁴ hash evaluations and tens of GB RAM for a 256-bit curve - infeasible on a 16 GB machine. Wagner is the <em>generic</em> algorithm, but ROS is not generically hard when the attacker controls the dimension: with <code>ℓ ≈ log₂(n) = 256</code> concurrent sessions, there is a <strong>polynomial-time</strong> solver.</p>
+<p><strong>The math:</strong> open ℓ sessions with nonces <code>R_0..R_{ℓ-1}</code>. For coefficient vector <code>a</code>, <code>R = Σ a_j R_j</code>, <code>s = Σ a_j s_j</code> gives <code>s·G = R + (Σ a_j c_j)·X</code>, valid iff <code>Σ a_j c_j ≡ H(R, m) (mod n)</code>. Use ℓ singletons (<code>a = e_j</code>, forcing <code>c_j = H(R_j, m_j)</code>) plus one aggregate (<code>a = ρ</code>).</p>
+<p><strong>The binary-choice gadget:</strong> for each session, prepare two messages, <code>d_j = (h_j^1 - h_j^0) mod n</code>. Pick <code>ρ_j = 2^j · d_j^{-1} (mod n)</code>. Flipping session <code>j</code>&#39;s message changes the aggregate sum by exactly <code>2^j</code> - each session becomes an independent bit of weight <code>2^j</code>. Fix aggregate nonce <code>R* = Σ ρ_j R_j</code>, target <code>T = H(R*, m*)</code>, baseline <code>L0 = Σ ρ_j h_j^0</code>, <code>v = (T − L0) mod n</code>. Since <code>v &lt; 2^256</code>, its binary expansion directly picks which message/challenge to use per session - no search.</p>
+<p><strong>Assembling the win:</strong> sign each session once (<code>c_j = h_j^{bit_j}</code>), submit 256 singletons + 1 aggregate = 257 valid signatures from 256 sign calls → <code>good = 257 &gt; answered = 256</code> → one more!</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">X = 6e50692dae1d2014598197dc3bbc46e9...
+opened 256 sessions
+built challenges
+signed 256 sessions
+valid 257 answered 256
+one more! isfcr{r0s_1s_n0t_h4rd_f0r_l0g_p}
+
+real    0m4.497s</code></pre>
+      
+    </figure><p><strong>Takeaways:</strong> ROS is only hard generically - with <code>ℓ ≥ log₂ n</code> concurrent sessions the Benhamouda et al. solver is polynomial. The gadget (per-session binary choice + coefficient <code>ρ_j = 2^j · d_j^{-1}</code>) turns each session into an independent power-of-two bit, solved by reading off the binary expansion. Blind Schnorr is broken in the concurrent setting (reference: Benhamouda, Lepoint, Loss, Orrù, Raykova, <em>On the (in)security of ROS</em>, Eurocrypt 2021).</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="sparse-change.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">sparse-change</span></a>
+    <a class="wu-pager-link wu-pager-next" href="the-recurrence.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">The-Recurrence</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

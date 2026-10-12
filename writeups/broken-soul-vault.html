@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Broken Soul Vault · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="The .bin file is plain text, with guard values around a hex line. Decoding the middle line and checking it against the OWASP pattern picks the valid recovered block." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>broken-soul-vault</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Broken Soul Vault <span class="page-sub">hex payload in a mislabelled .bin</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span>
+      <span>100 pts</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{br0k3n_s0ul_v4ult_r3c0v3r3d}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Description:</strong> &quot;The Soul Vault suffered metadata corruption during a
+recovery operation. Identify the valid recovered block and decode its
+contents.&quot;</p>
+<h2 id="attachments"><a class="wu-anchor" href="#attachments" aria-hidden="true">#</a>Attachments</h2>
+<ul>
+<li><code>metadata.bin.txt</code> (87 bytes)</li>
+<li><code>vault.log</code> (133 bytes)</li>
+</ul>
+<h2 id="walkthrough"><a class="wu-anchor" href="#walkthrough" aria-hidden="true">#</a>Walkthrough</h2>
+<h3 id="1-read-the-vault-log"><a class="wu-anchor" href="#1-read-the-vault-log" aria-hidden="true">#</a>1. Read the vault log</h3>
+<p><code>vault.log</code> describes the failed recovery session:</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">OPEN vault
+AUTH keeper
+READ /soul/fragment
+ERROR checksum mismatch
+RECOVER block=17
+RECOVER block=18
+NOTE corrupted metadata follows</code></pre>
+      
+    </figure><p>Two blocks were pulled from the vault (17 and 18); the log warns the
+metadata that follows is corrupted. The task is to pick the <em>valid</em> recovered
+block and decode it.</p>
+<h3 id="2-inspect-the-metadata"><a class="wu-anchor" href="#2-inspect-the-metadata" aria-hidden="true">#</a>2. Inspect the metadata</h3>
+<p><code>metadata.bin.txt</code> is plain text despite the <code>.bin</code> name - always verify
+with <code>file</code> / <code>xxd</code> first:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">00ff11aa
+4f574153507b6272306b336e5f7330756c5f7634756c745f7233633076337233647d
+deadbeef</code></pre>
+      
+    </figure><p>Line 1 (<code>00ff11aa</code>) and line 3 (<code>deadbeef</code>) are the block guard/delimiter
+values; the middle line is the recovered block payload stored as ASCII hex.</p>
+<h3 id="3-decode-the-payload"><a class="wu-anchor" href="#3-decode-the-payload" aria-hidden="true">#</a>3. Decode the payload</h3>
+<p>Hex-decode the middle line:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">4f 57 41 53 50 7b 62 72 30 6b 33 6e 5f 73 30 75 6c 5f 76 34 75 6c 74 5f 72 33 63 30 76 33 72 33 64 7d
+ O  W  A  S  P  {  b  r  0  k  3  n  _  s  0  u  l  _  v  4  u  l  t  _  r  3  c  0  v  3  r  3  d  }</code></pre>
+      
+    </figure><p>This yields a well-formed flag, confirming it is the valid recovered block:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">OWASP{br0k3n_s0ul_v4ult_r3c0v3r3d}</code></pre>
+      
+    </figure><p>The plaintext reads &quot;broken soul vault recovered&quot;, matching the challenge
+story and the challenge name (Broken-Soul-Vault).</p>
+<h3 id="4-automate-it"><a class="wu-anchor" href="#4-automate-it" aria-hidden="true">#</a>4. Automate it</h3>
+<p><code>solve.py</code> performs the same steps (parse the lines, hex-decode each
+candidate, validate against the <code>OWASP{...}</code> pattern):</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">python3 solve.py metadata.bin.txt
+[*] metadata lines: ['00ff11aa', '4f574153507b6272306b336e5f7330756c5f7634756c745f7233633076337233647d', 'deadbeef']
+[*] block 4f574153... -&gt; OWASP{br0k3n_s0ul_v4ult_r3c0v3r3d}
+
+[+] FLAG: OWASP{br0k3n_s0ul_v4ult_r3c0v3r3d}</code></pre>
+      
+    </figure><h2 id="key-takeaways"><a class="wu-anchor" href="#key-takeaways" aria-hidden="true">#</a>Key takeaways</h2>
+<ul>
+<li>A <code>.bin</code> extension does not mean binary - check with <code>file</code> / <code>xxd</code>.</li>
+<li>&quot;Corrupted metadata + valid block&quot; prompts usually mean: parse the
+container, validate each candidate against the flag format, and keep the
+one that fits.</li>
+<li>Hex-dumping the guard values (<code>00ff11aa</code>, <code>deadbeef</code>) shows they are
+sentinels, not data - the only decodable payload is the middle line.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#attachments">Attachments</a></li><li><a href="#walkthrough">Walkthrough</a><ol class="wu-toc-sub"><li><a href="#1-read-the-vault-log">1. Read the vault log</a></li><li><a href="#2-inspect-the-metadata">2. Inspect the metadata</a></li><li><a href="#3-decode-the-payload">3. Decode the payload</a></li><li><a href="#4-automate-it">4. Automate it</a></li></ol></li><li><a href="#key-takeaways">Key takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="invisible-signal.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Invisible Signal</span></a>
+    <a class="wu-pager-link wu-pager-next" href="soul-memory.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Soul Memory</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

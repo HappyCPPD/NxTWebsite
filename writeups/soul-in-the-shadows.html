@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Soul in the Shadows · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="Nothing is appended to the PNG, but the pixels carry a base64 string in their LSBs. The decoded bytes are ciphertext, and the key VORMIR is teased by the image's tEXt comment and the title." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>soul-in-the-shadows</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Soul in the Shadows <span class="page-sub">LSB, base64 and a VORMIR XOR</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span>
+      <span>100 pts</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{the_soul_was_here}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Challenge:</strong> <em>Soul in the Shadows</em> - &quot;There is more to this image than what
+you can see. Recover the hidden flag.&quot; Flag format: <code>OWASP{...}</code></p>
+<p>Attachment: a player archive containing a single image, <code>archive.png</code>, and a
+short <code>challenge.txt</code> repeating the prompt. The title and the &quot;more than you
+can see&quot; line both point at pixel-level steganography.</p>
+<h2 id="1-triage"><a class="wu-anchor" href="#1-triage" aria-hidden="true">#</a>1. Triage</h2>
+<p>First pass is always cheap metadata and structure inspection, because it
+tells you where <em>not</em> to dig.</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">$ file archive.png
+archive.png: PNG image data, 1000 x 1180, 8-bit/color RGB, non-interlaced
+
+$ identify archive.png
+archive.png PNG 1000x1180 1000x1180+0+0 8-bit sRGB 2.01123MiB</code></pre>
+      
+    </figure><p>Nothing exotic - a plain 8-bit RGB PNG, no alpha channel, non-interlaced.
+Next, walk the PNG chunk list and check for data smuggled <em>outside</em> the
+pixels:</p>
+<ul>
+<li>Chunks present: <code>IHDR</code>, three <code>tEXt</code>, ~33 × <code>IDAT</code>, <code>IEND</code>.</li>
+<li><strong>No trailing bytes after <code>IEND</code></strong> (a classic ZIP/append trick) - the file
+ends cleanly.</li>
+<li><code>binwalk</code> finds nothing but the PNG header and its own zlib <code>IDAT</code> stream - no embedded archive, no secondary file.</li>
+</ul>
+<p>So the payload is not appended or embedded as a file; it must be <em>inside</em> the
+pixels or in the text chunks.</p>
+<h2 id="2-the-metadata-hint"><a class="wu-anchor" href="#2-the-metadata-hint" aria-hidden="true">#</a>2. The metadata hint</h2>
+<p><code>exiftool</code> surfaces the three <code>tEXt</code> chunks:</p>
+<table>
+<thead>
+<tr>
+<th>Keyword</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Title</td>
+<td><code>Forgotten Record</code></td>
+</tr>
+<tr>
+<td>Author</td>
+<td><code>Archives</code></td>
+</tr>
+<tr>
+<td>Comment</td>
+<td><code>Some things are left behind on Vormir.</code></td>
+</tr>
+</tbody></table>
+<p>The Comment is doing real work here. The title (&quot;Forgotten Record&quot;) and
+author (&quot;Archives&quot;) are pure atmosphere, but <strong>Vormir</strong> is a deliberate
+breadcrumb - in the MCU, Vormir is the planet of the Soul Stone, and the
+prompt is <em>&quot;Soul in the Shadows.&quot;</em> A place-name like that is almost never
+scenery in a stego challenge; it is a candidate key, password, or XOR mask.
+Keep it in your pocket.</p>
+<h2 id="3-finding-the-payload"><a class="wu-anchor" href="#3-finding-the-payload" aria-hidden="true">#</a>3. Finding the payload</h2>
+<p>With pixels as the only remaining carrier, the right tool is <code>zsteg</code>, which
+brute-forces every combination of bit-plane, channel order, bit significance,
+and scan direction:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">$ zsteg -a archive.png</code></pre>
+      
+    </figure><p>Buried in the output, one channel decodes to clean, readable ASCII:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">b1,rgb,lsb,xy .. text: &quot;The archive was checked twice.
+GRgTHhkpIic3Ejo9IyMNOighCSc3Pywv
+The records showed nothing unusual.
+::END::&quot;</code></pre>
+      
+    </figure><p>Decoding that channel directly gives exactly:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">$ zsteg -e b1,rgb,lsb,xy archive.png
+The archive was checked twice.
+GRgTHhkpIic3Ejo9IyMNOighCSc3Pywv
+The records showed nothing unusual.
+::END::</code></pre>
+      
+    </figure><p>Interpreting the channel spec:</p>
+<ul>
+<li><strong><code>b1</code></strong> - bit-plane 1 (the least-significant bit of each byte).</li>
+<li><strong><code>rgb</code></strong> - all three colour channels, in R→G→B order.</li>
+<li><strong><code>lsb</code></strong> - least-significant bit first.</li>
+<li><strong><code>xy</code></strong> - normal raster order (row by row, left to right).</li>
+</ul>
+<p>So the message is stored one bit per colour-component LSB, a very common and
+very robust scheme. The surrounding prose (&quot;checked twice&quot;, &quot;nothing
+unusual&quot;) is flavour, and <code>::END::</code> is a self-imposed terminator. The
+<strong>middle line is the payload</strong>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">GRgTHhkpIic3Ejo9IyMNOighCSc3Pywv</code></pre>
+      
+    </figure><p>32 characters, mixed case with digits - the signature of Base64. Decoding it
+yields 24 opaque bytes, not text, so there is a second layer:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">$ echo 'GRgTHhkpIic3Ejo9IyMNOighCSc3Pywv' | base64 -d | xxd
+00000000: 1918 131e 1929 2227 3712 3a3d 2323 0d3a  .....)&quot;'7.:=##.:
+00000010: 2821 0927 373f 2c2f                      (!.'7?,/</code></pre>
+      
+    </figure><h2 id="4-cracking-the-second-layer"><a class="wu-anchor" href="#4-cracking-the-second-layer" aria-hidden="true">#</a>4. Cracking the second layer</h2>
+<p>We have 24 bytes and a strong hint that the word <code>VORMIR</code> is the key. Test it
+as a <strong>repeating-key XOR</strong> and use a known-plaintext check: every solution
+must start with <code>OWASP{</code>.</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">ciphertext[0..5] : 19 18 13 1e 19 29
+key &quot;VORMIR&quot;     : 56 4f 52 4d 49 52
+XOR              : 4f 57 41 53 50 7b   -&gt;  &quot;OWASP{&quot;</code></pre>
+      
+    </figure><p>The first six bytes XOR cleanly to the flag prefix, so the key is correct.
+Apply it across the whole 24-byte blob (<code>key[i % 6]</code>):</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">$ echo 'GRgTHhkpIic3Ejo9IyMNOighCSc3Pywv' | base64 -d | python3 -c \
+    &quot;import sys;d=sys.stdin.buffer.read();k=b'VORMIR';print(''.join(chr(b^k[i%6]) for i,b in enumerate(d)))&quot;
+OWASP{the_soul_was_here}</code></pre>
+      
+    </figure><h2 id="5-the-three-layer-chain"><a class="wu-anchor" href="#5-the-three-layer-chain" aria-hidden="true">#</a>5. The three-layer chain</h2>
+<ol>
+<li><strong>Pixels</strong> - a base64 string hidden in the R/G/B LSBs (<code>b1,rgb,lsb,xy</code>).</li>
+<li><strong>Encoding</strong> - Base64, hiding 24 raw bytes rather than ASCII.</li>
+<li><strong>Cipher</strong> - repeating-key XOR with <code>VORMIR</code>, the key teased by the PNG
+metadata comment and the challenge title.</li>
+</ol>
+<p>Each layer has a tell: the LSB channel produced readable prose, the Base64
+string had the right alphabet and length, and the decoded bytes failed every
+text test (high-bit and control characters) - the universal sign that you
+are looking at ciphertext, not a mis-decode.</p>
+<h2 id="6-one-shot-reproduction"><a class="wu-anchor" href="#6-one-shot-reproduction" aria-hidden="true">#</a>6. One-shot reproduction</h2>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">zsteg -e b1,rgb,lsb,xy archive.png | sed -n 2p | <span class="hljs-built_in">base64</span> -d \</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  | python3 -c <span class="hljs-string">&quot;import sys;d=sys.stdin.buffer.read();k=b&#x27;VORMIR&#x27;;print(&#x27;&#x27;.join(chr(b^k[i%6]) for i,b in enumerate(d)))&quot;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># OWASP{the_soul_was_here}</span></span></span></code></pre>
+      
+    </figure><p>Or simply:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 solve.py archive.png</span></span></code></pre>
+      
+    </figure><h2 id="7-lessons-takeaways"><a class="wu-anchor" href="#7-lessons-takeaways" aria-hidden="true">#</a>7. Lessons / takeaways</h2>
+<ul>
+<li><strong>Read the metadata first.</strong> A $0 <code>exiftool</code> call here supplied the XOR
+key. Metadata is where challenge authors hide hints they <em>want</em> you to
+find.</li>
+<li><strong>Titles and comments are content.</strong> &quot;Soul&quot;, &quot;Vormir&quot;, &quot;shadows&quot; were all
+signalling, not scenery.</li>
+<li><strong>Know what &quot;not text&quot; looks like.</strong> Control characters and bytes ≥ 0x80
+after a Base64 decode mean &quot;another layer&quot;, not &quot;wrong channel&quot;.</li>
+<li><strong>Use known-plaintext.</strong> The fixed <code>OWASP{</code> prefix instantly validates a
+guess at the XOR key; never brute-force blindly when the answer format is
+known.</li>
+<li><strong><code>zsteg -a</code> is exhaustive here.</strong> Once it printed the ASCII channel, the
+bit-plane search was finished - no need to keep sweeping.</li>
+</ul>
+<h2 id="coverage-confidence"><a class="wu-anchor" href="#coverage-confidence" aria-hidden="true">#</a>Coverage / confidence</h2>
+<ul>
+<li><strong>Complete</strong> - the <code>zsteg -a</code> sweep is exhaustive over bit-planes/orders,
+and the one payload channel is unambiguous and self-delimiting (<code>::END::</code>).</li>
+<li>Key recovery is <strong>verified</strong> by known-plaintext (<code>OWASP{</code> prefix).</li>
+<li>HIGH confidence. Flag submitted once.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-triage">1. Triage</a></li><li><a href="#2-the-metadata-hint">2. The metadata hint</a></li><li><a href="#3-finding-the-payload">3. Finding the payload</a></li><li><a href="#4-cracking-the-second-layer">4. Cracking the second layer</a></li><li><a href="#5-the-three-layer-chain">5. The three-layer chain</a></li><li><a href="#6-one-shot-reproduction">6. One-shot reproduction</a></li><li><a href="#7-lessons-takeaways">7. Lessons / takeaways</a></li><li><a href="#coverage-confidence">Coverage / confidence</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="the-last-soul.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">The Last Soul</span></a>
+    <a class="wu-pager-link wu-pager-next" href="invisible-signal.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Invisible Signal</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

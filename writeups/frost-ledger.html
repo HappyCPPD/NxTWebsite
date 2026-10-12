@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>frost-ledger · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A volume with a stale format note and no walk subcommand. The real layout packs payloads against the end of each page with offsets counting backward, which lets the B+tree be walked by hand to an overflow chain holding the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>frost-ledger</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>frost-ledger <span class="page-sub">custom copy-on-write page format</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{stale_cow_67c1_root_fc8fe97f_backwards_heap}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>A 12 MiB volume (<code>registry.fvr</code>, 3072 × 4096B pages) plus a static reader <code>fvrctl</code>. <code>fvrctl lsroot</code> shows 8 root slots with epochs 288-291, one marked <code>TORN</code>. The release notes explicitly removed the <code>get</code>/<code>walk</code> subcommands - the tree must be walked by hand. The log shows a policy change re-issuing <code>bay/07/thaw-authority</code> out-of-line at 08:02, then a crash (undervoltage) at 09:14.</p>
+<p><strong>Picking the live root:</strong> the slot array is a ring buffer of the last 8 generations; a slot failing its fnv1a-64 checksum is skipped at mount. The highest <em>verifying</em> slot is epoch 290 (root_pgid 3039) - epoch 291 is the crash-torn commit.</p>
+<p><strong>The descriptor convention - the real puzzle:</strong> <code>ONDISK-NOTES.txt</code> documents format v0 (12-byte descriptor, payload offsets counted forward from page body start) but the volume is v1 (16-byte descriptor, trailing flags word) and - crucially - the release notes admit <code>ONDISK-NOTES.txt</code> was never revised for the v1 change. Examining the actual bytes shows payloads are packed against the <strong>end</strong> of the page with offsets counting <strong>backward</strong>: <code>payload at page[page_size - off]</code>. The flag name <em>backwards_heap</em> confirms this.</p>
+<p><strong>Walking to the record:</strong> descend as a normal B+tree using the v1 convention; the target key sorts into the leftmost subtree, found on DATA page 3030 with an overflow flag. OVERFLOW pages chain <code>{next_pgid, bytes_used, payload}</code> with no fixed stride: <code>966 -&gt; 2675 -&gt; 184 -&gt; 355 -&gt; 0</code>, reassembling to 2372 bytes matching the declared <code>total_len</code>. The stored bytes start <code>78 da</code> (zlib); decompressing yields a FROSTLINE VAULT AUTHORITY RECORD with <code>epoch: 290</code> matching the live root generation.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">authority-token: isfcr{stale_cow_67c1_root_fc8fe97f_backwards_heap}</code></pre>
+      
+    </figure><p><strong>The decoys:</strong> scanning every page for the key (instead of walking the live tree) turns up 291 copies - 289 superseded version-3 records (<code>isfcr{thaw_authority_superseded_at_epoch_6}</code>), the crash-torn generation-291 copy (<code>isfcr{superseded_authority_rev6_0fa710}</code>), and the one genuine generation-290 record. Only the generation-290 record sits in the live tree and corresponds to the logged &quot;commit ok&quot;.</p>
+<p>Reproducible with <code>python3 solve.py</code> (stdlib only).</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="signed-which-original.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">signed, but which original?</span></a>
+    <a class="wu-pager-link wu-pager-next" href="the-image-that-forgot.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">The Image That Forgot</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>toxic-waste · CryoVault CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Keeping only the first and last powers of tau looked like a space saving. Cheon's attack turns those two group elements into two baby-step giant-step phases of about 2^22 steps each, recovering tau and the flag key." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>toxic-waste</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>toxic-waste <span class="page-sub">Cheon's attack on a trimmed KZG setup</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">isfcr{ch30n_8f_th3_c0mpr3ss3d_srs}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<blockquote>
+<p>Trusted setup done, secret burned. We kept the two ends and binned the middle to save on disk.</p>
+</blockquote>
+<p><code>chall.py</code> runs a KZG-style trusted setup: picks <code>d = 2^44</code>, a prime <code>m</code>, <code>q = d*m + 1</code> prime, a 1024-bit prime <code>P</code> with <code>q | P-1</code>, generator <code>g</code> of the order-<code>q</code> subgroup, and secret <code>tau</code> uniform in <code>[2, q-2]</code>. The full SRS would be <code>g, g^tau, ..., g^(tau^d)</code>; only the two ends are kept: <code>A = g^tau</code> (head), <code>B = g^(tau^d)</code> (tail). The flag key is <code>sha256(str(tau))</code>. The claimed security is <code>sqrt(q)</code> ≈ 2^43.5; both claims are wrong - this is exactly the setup for <strong>Cheon&#39;s attack</strong>.</p>
+<p><strong>Why the two ends are fatal:</strong> Cheon&#39;s attack (J. H. Cheon, 2010) solves, given <code>g, g^alpha, g^(alpha^d)</code> with <code>d | q-1</code>, for <code>alpha</code> in <code>O(sqrt(q/d) + sqrt(d))</code>. Decompose <code>tau = h^(k0 + k1*m) mod q</code> for a generator <code>h</code> of <code>Z_q^*</code>. Since <code>h^(q-1) = 1</code>, <code>tau^d = h^(d*k0) (mod q)</code>, so <code>B</code> leaks <code>k0</code> and <code>A</code> then leaks <code>k1</code> via two BSGS phases.</p>
+<p><strong>Phase 1 (recover k0, ~3.35M steps/side):</strong> <code>k0 = i*N + j</code>. Build baby table <code>{ g^(h^(d*j)) : 0 &lt;= j &lt; N }</code>; walk giant side <code>B^(h^(-d*i*N))</code> until it lands in the table.</p>
+<p><strong>Phase 2 (recover k1, ~4.19M steps/side):</strong> with <code>eta = h^m</code>, <code>A^(h^-k0) = g^(eta^k1)</code>. Same BSGS structure recovers <code>k1</code>.</p>
+<p>Environment quirk: <code>2</code> is not a primitive root mod <code>q</code>; the smallest generator found was <code>h = 3</code>. Complexity ≈ <code>2^22</code> group operations per phase.</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">[cheon] generator h = 3
+[cheon] part1: N = 3349947        # baby built in 138s, giant match at i=1.41M
+[cheon] k0 = 4734199638712
+[cheon] part2: N2 = 4194305       # baby built in 186s, giant match at i=2.21M
+[cheon] k1 = 9264960971644
+[cheon] RECOVERED tau = 53372121991905014611291611
+FLAG: isfcr{ch30n_8f_th3_c0mpr3ss3d_srs}</code></pre>
+      
+    </figure><p>Sanity checks <code>g^(h^(d*k0)) == B</code> and <code>g^tau == A</code> both pass. A two-ended SRS (<code>g^tau</code>, <code>g^(tau^d)</code>) is not &quot;just ends&quot;; it is a full Cheon auxiliary-input instance whenever <code>d | q-1</code>. The real security is <code>O(sqrt(q/d) + sqrt(d))</code>, not <code>sqrt(q)</code>; factoring <code>q-1</code> and noticing the big power-of-two divisor is the audit step that was skipped.</p>
+
+    </article>
+    
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="half-truths.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">half-truths</span></a>
+    <a class="wu-pager-link wu-pager-next" href="sparse-change.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">sparse-change</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>
