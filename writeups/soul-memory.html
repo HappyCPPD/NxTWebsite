@@ -68,21 +68,41 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><strong>Challenge:</strong> &quot;A memory dump from a Soul Vault process contains traces of a
-recovered fragment. Find the hidden information inside the process data.&quot;</p>
-<p>Attachment: <code>memory_dump.txt</code> (148 bytes).</p>
-<h2 id="analysis"><a class="wu-anchor" href="#analysis" aria-hidden="true">#</a>Analysis</h2>
-<p>Despite the &quot;memory dump&quot; framing, the attachment is a small plain-text
-<code>PROCESS MEMORY EXTRACT</code> - not a raw hex/core dump. So no volatility /
-binwalk / strings-on-binary stage was needed; a single read reveals the
-whole structure.</p>
-<figure class="wu-code wu-code-output" data-lines="7">
+<ul>
+<li>Event: CTF7 (Byteme 2026)</li>
+<li>Category: Forensics</li>
+<li>Author: Pratik Jadhav</li>
+<li>Points: 100 (Easy)</li>
+<li>Solves: 96</li>
+<li>Flag format: <code>OWASP{...}</code></li>
+</ul>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">PROCESS MEMORY EXTRACT
+      <pre id="code-1"><code class="language-text">OWASP{s0ul_m3m0ry_n3v3r_d13s}</code></pre>
+      
+    </figure><h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<blockquote>
+<p>A memory dump from a Soul Vault process contains traces of a recovered
+fragment. Find the hidden information inside the process data.</p>
+</blockquote>
+<p>Attachment: <code>memory_dump.txt</code> (148 bytes).</p>
+<h2 id="analysis"><a class="wu-anchor" href="#analysis" aria-hidden="true">#</a>Analysis</h2>
+<p>Despite the &quot;memory dump&quot; framing, the attachment is a small plain-text
+<code>PROCESS MEMORY EXTRACT</code> - not a raw hex/core dump. So no volatility /
+binwalk / strings-on-binary stage was needed; a single read reveals the whole
+structure.</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">PROCESS MEMORY EXTRACT
 pid=4041
 module=soul-cache
 user=keeper
@@ -99,21 +119,21 @@ the actual secret is simply carried in the <code>data=</code> field on the next 
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
-        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">grep -o <span class="hljs-string">&#x27;OWASP{[^}]*}&#x27;</span> memory_dump.txt</span></span>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">grep -o <span class="hljs-string">&#x27;OWASP{[^}]*}&#x27;</span> memory_dump.txt</span></span>
 <span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># OWASP{s0ul_m3m0ry_n3v3r_d13s}</span></span></span></code></pre>
       
     </figure><h2 id="takeaway"><a class="wu-anchor" href="#takeaway" aria-hidden="true">#</a>Takeaway</h2>
 <p>The <code>data=</code> line held the flag in cleartext. The <code>vault_hint</code> text is a
 rabbit hole; the real trick is just reading the process-extract artifact
-end-to-end.</p>
+end-to-end. Flag: <code>OWASP{s0ul_m3m0ry_n3v3r_d13s}</code>.</p>
 
     </article>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#analysis">Analysis</a></li><li><a href="#extraction">Extraction</a></li><li><a href="#takeaway">Takeaway</a></li></ol>
+        <ol><li><a href="#flag">Flag</a></li><li><a href="#challenge">Challenge</a></li><li><a href="#analysis">Analysis</a></li><li><a href="#extraction">Extraction</a></li><li><a href="#takeaway">Takeaway</a></li></ol>
       </nav>
   </div>
 

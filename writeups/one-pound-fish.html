@@ -67,10 +67,62 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A single image <code>fish.png</code> (745×999) with only the title &quot;One-pound-fish&quot; - no description, no EXIF/GPS. Standard steganography checks (<code>exiftool</code>, <code>binwalk</code>, <code>zsteg</code>, PNG chunk walk) confirm this is a pure visual geolocation challenge.</p>
-<p><strong>Visual analysis:</strong> an outdoor fish market in a narrow lane - a tall old stone/masonry compound wall on the left with blue-painted stalls at its base; multi-story concrete buildings on the right with colonial-era arched windows and roll-up metal shutters; a blue circular &quot;SA&quot; sign in the background; a woman in a black hijab selling fish; a deliberate white blur across the center obscuring signage.</p>
-<p><strong>Reverse image search:</strong> TinEye found zero matches (image not indexed), Yandex CBIR returned only generic &quot;fish market&quot; tags (Malé, Hurghada, Blida - no exact match), Bing Visual Search mis-guessed &quot;Essaouira Fish Market.&quot; <strong>Google Lens correctly identified Russell Market, Shivajinagar, Bengaluru, India</strong>, with its AI Overview explicitly describing &quot;the open-air fish and seafood market section outside Russell Market.&quot;</p>
-<p><strong>Confirmation:</strong> Russell Market fits every visual clue - built in 1927 in Tudor/colonial style by the British (explaining the arched windows and old masonry), located in Shivajinagar, a predominantly Muslim neighborhood in central Bengaluru (explaining the hijab-wearing vendors), with the tall wall being the market complex&#39;s boundary wall and outdoor fish-selling spilling into adjacent lanes. The CTF is organized by ISFCR at PES University, Bengaluru - the photo was almost certainly taken by a student at their own city&#39;s iconic market, 3 km from campus.</p>
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<p>A single image <code>fish.png</code> (745x999 PNG) and the title <strong>&quot;One-pound-fish&quot;</strong>. No description (platform shows &quot;???&quot;). Identify the place in the photo.</p>
+<h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
+<h3 id="step-1-rule-out-steganography"><a class="wu-anchor" href="#step-1-rule-out-steganography" aria-hidden="true">#</a>Step 1 - Rule out steganography</h3>
+<p>Standard checks (<code>exiftool</code>, <code>binwalk</code>, <code>zsteg</code>, <code>strings</code>, PNG chunk walk) confirm no hidden data, no EXIF/GPS, no appended files. This is a pure visual geolocation challenge.</p>
+<h3 id="step-2-analyze-the-image"><a class="wu-anchor" href="#step-2-analyze-the-image" aria-hidden="true">#</a>Step 2 - Analyze the image</h3>
+<p>The photo shows an outdoor fish market in a narrow lane:</p>
+<ul>
+<li><strong>Left side:</strong> A tall, old stone/masonry wall with vegetation on top and a sloped coping - resembling a canal or fort compound wall. Blue-painted market stalls run along its base.</li>
+<li><strong>Right side:</strong> Multi-story concrete buildings with colonial-era arched windows, flat roofs, roll-up metal shutters, and a blue-and-white striped awning.</li>
+<li><strong>Background:</strong> A blue circular <strong>&quot;SA&quot;</strong> sign on a building, a blue metal-clad structure, dense overhead cabling, a modern municipal streetlight.</li>
+<li><strong>People:</strong> Men in casual clothes, a woman in a black hijab selling fish on the right.</li>
+<li><strong>Goods:</strong> Stainless-steel trays of fish on the ground, blue and orange HDPE crates, a parked scooter with a white plate.</li>
+<li><strong>Obstruction:</strong> A white horizontal smudge/blur across the center obscures signage - likely deliberate to increase difficulty.</li>
+</ul>
+<h3 id="step-3-reverse-image-search"><a class="wu-anchor" href="#step-3-reverse-image-search" aria-hidden="true">#</a>Step 3 - Reverse image search</h3>
+<table>
+<thead>
+<tr>
+<th>Engine</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>TinEye</td>
+<td>0 matches - image is not on the indexed web</td>
+</tr>
+<tr>
+<td>Yandex CBIR</td>
+<td>Generic &quot;fish market&quot; tag, similar images from Malé, Hurghada, Blida - no exact match</td>
+</tr>
+<tr>
+<td>Bing Visual Search</td>
+<td>Auto-query &quot;Essaouira Fish Market&quot; (incorrect), no pages containing the image</td>
+</tr>
+<tr>
+<td>Google Lens</td>
+<td><strong>Russell Market, Shivajinagar, Bengaluru, India</strong> ✅</td>
+</tr>
+</tbody></table>
+<p>Google Lens was the intended solve path. Its AI Overview identified the image as:</p>
+<blockquote>
+<p>&quot;The open-air fish and seafood market section outside <strong>Russell Market</strong> in Shivajinagar, Bengaluru, India.&quot;</p>
+</blockquote>
+<h3 id="step-4-confirm-the-identification"><a class="wu-anchor" href="#step-4-confirm-the-identification" aria-hidden="true">#</a>Step 4 - Confirm the identification</h3>
+<p>Russell Market fits every visual clue:</p>
+<ul>
+<li><strong>Built in 1927</strong> in Tudor/colonial style by the British - explains the arched windows and old masonry.</li>
+<li>Located in <strong>Shivajinagar</strong>, a predominantly Muslim neighborhood in central Bengaluru - explains the hijab-wearing vendors.</li>
+<li>The tall wall on the left is the <strong>compound/boundary wall</strong> of the market complex.</li>
+<li>The outdoor fish selling area spills into the narrow lanes adjacent to the main market building.</li>
+<li>The CTF is organized by <strong>ISFCR at PES University, Bengaluru</strong> - the photo was almost certainly taken by a student at their own city&#39;s iconic market, just 3 km from campus.</li>
+</ul>
+<h3 id="the-title-hint"><a class="wu-anchor" href="#the-title-hint" aria-hidden="true">#</a>The title hint</h3>
+<p>&quot;One-pound-fish&quot; references the <a href="https://en.wikipedia.org/wiki/One_Pound_Fish">viral 2012 song</a> by Muhammad Shahid Nazir, a fishmonger at Queen&#39;s Market in London. The title is thematic (fish market → fish market photo) rather than a direct pun on the place name - though it may also nod to the lively, chaotic atmosphere shared by both markets.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
@@ -79,10 +131,20 @@
       </figcaption>
       <pre id="code-1"><code class="language-text">isfcr{russell_market}</code></pre>
       
-    </figure><p>Lessons: Google Lens&#39;s visual feature matching and AI overview outperformed TinEye/Yandex/Bing on this unindexed photo (datacenter/VPN IPs get aggressively captcha&#39;d by Lens - the solve required uploading via imgur and using the <code>uploadbyurl</code> Lens endpoint). The &quot;One-pound-fish&quot; title references a viral 2012 fishmonger song and is thematic rather than a direct geographic pun - extensive incorrect analysis chasing &quot;pond&quot; (Pondicherry) and Algeria wasted time before the simplest reading (it&#39;s a fish market challenge) proved correct. Local organizer context (a Bengaluru-based CTF) made the market&#39;s local fame the deciding signal.</p>
+    </figure><h2 id="lessons-learned"><a class="wu-anchor" href="#lessons-learned" aria-hidden="true">#</a>Lessons learned</h2>
+<ol>
+<li><strong>Google Lens is the weapon of choice for GeoINT.</strong> Other reverse image search engines (TinEye, Yandex, Bing) failed to identify this unindexed photo. Google Lens&#39;s visual feature matching and AI overview nailed it instantly.</li>
+<li><strong>Check your IP.</strong> Google Lens aggressively captchas datacenter/VPN IPs. The solve required uploading the image to imgur (a host Google can fetch from) and using the <code>uploadbyurl</code> Lens endpoint.</li>
+<li><strong>Don&#39;t overthink the title.</strong> The &quot;One-pound-fish&quot; title led to extensive (incorrect) analysis of Pondicherry (&quot;pond&quot;-icherry) and Algeria. The simplest reading - it&#39;s a fish market challenge - was correct.</li>
+<li><strong>Local context matters.</strong> The CTF organizers are in Bengaluru. A 229-solve OSINT challenge is likely something familiar to them - their own city&#39;s most famous market.</li>
+</ol>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#solution">Solution</a><ol class="wu-toc-sub"><li><a href="#step-1-rule-out-steganography">Step 1 - Rule out steganography</a></li><li><a href="#step-2-analyze-the-image">Step 2 - Analyze the image</a></li><li><a href="#step-3-reverse-image-search">Step 3 - Reverse image search</a></li><li><a href="#step-4-confirm-the-identification">Step 4 - Confirm the identification</a></li><li><a href="#the-title-hint">The title hint</a></li></ol></li><li><a href="#flag">Flag</a></li><li><a href="#lessons-learned">Lessons learned</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

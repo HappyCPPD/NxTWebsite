@@ -6,28 +6,242 @@
 
 ---
 
-A three-drive NAS lost power partway through writing a sealed report; three raw images (`bay0.img`, `bay1.img`, `bay2.img`, 17 MiB each) are given. Every "easy" piece is a decoy for one genuinely nasty record at the end: a record whose GCM tag is the only thing the crash destroyed.
+## The story
 
-**Fingerprinting:** a structured band starting at `0x100000` (1 MiB) leaks an ext4 superblock (magic `0xEF53`) with volume label `ev-nas3`. The 1 MiB offset implies a metadata reservation area, and the superblock appears identically on `bay0`/`bay1` but is zero on `bay2` - two identical copies plus one zero chunk means **XOR parity (RAID5)**.
+> A three-drive NAS lost power partway through writing a sealed report, and nobody
+> had saved the RAID settings. The three drives were pulled and imaged raw. The
+> report holds a custody token for a piece of evidence that cannot be reissued.
 
-**Geometry brute force:** rather than trusting XOR-consistency (broken by design in a write-hole challenge, since the interesting stripes are deliberately inconsistent), the oracle used is **filesystem validity** (`e2fsck -fn`): assembling every `(chunk size, drive order, parity rotation, data order)` combination and checking which produces a clean ext4. Exactly one config works: `C=32768`, `D=0x100000`, left-symmetric parity rotation `(0+2t) mod 3`.
+We get `bay0.img`, `bay1.img`, `bay2.img` (17 MiB each), and a flag format
+`isfcr{...}` (see the caveat at the bottom).
 
-**What's on the volume:** `/etc/nas.conf` confirms RAID5 with **no write-intent bitmap** (the write hole is live) and `data=journal`. `/stage/isfc-stage.py` documents the sealing scheme: 32768-byte records, 12-byte nonce `job||index`, AAD `payload.bin|job|idx`, AES-256-GCM, key burn-after-read from `/stage/.keyslot`. `stage.log` shows job 7's keyslot was rotated and then consumed just before the crash.
+This is a **RAID5 write-hole** challenge. Every "easy" piece is really a decoy for
+the one genuinely nasty piece at the end: a record whose **GCM tag** is the only
+thing the crash destroyed.
 
-**Recovering burn-after-read keys:** because the array overwrites in place nightly, old blocks linger. Scanning for a `KSLT` magic finds several 64-byte keyslot blobs including job 7's discarded (rotated) key and its live key (matched by `key_id`).
+## 1. Fingerprinting the images
 
-**The write hole itself:** `payload.bin` maps to 6 contiguous 32768-byte records across RAID5 stripes. Records 0/2/4 sit intact on single drives. Records 1 and 5 are in stripes where the data chunk was never (re)written but parity was updated - recovered trivially as `parity ^ surviving_neighbour`. **Record 3 is different:** the parity chunk's *write itself was torn* - the nonce bytes are correct but AES-GCM tag verification fails. Since AES-GCM is CTR + GHASH, and the keystream depends only on key+nonce (both already known), the plaintext is recovered by **bypassing the tag entirely**: manually computing the CTR keystream and XORing - no tag required. This is validated by running the identical CTR routine on a record whose tag does verify and matching byte-for-byte.
+Each image is pure high-entropy data except for a band of structured, mostly-zero
+content starting at `0x100000` (1 MiB). Dumping that band immediately leaks the
+filesystem:
 
-```python
-nonce = rec[:12]
-ks = AES_CTR_keystream(key, nonce)
-plain = xor(rec[12:-16], ks)   # tag never consulted
+```
+00100430: ... 53ef 0100 0100 0000 70bb b069 ...   <- ext4 magic 0xEF53
+00100470: ... 65 76 2d 6e 61 73 33                <- volume label "ev-nas3"
 ```
 
-Three records carry flag shards; concatenating in order:
+An ext4 primary superblock sits at offset 56 of its 1024-byte header, i.e. at
+`0x100400`. Ext4's *primary* superblock lives at filesystem offset **1024**.
+Therefore **filesystem logical 1024 == raw 0x100400**, i.e. logical 0 == raw
+`0x100000`. The drives reserve a **1 MiB metadata area** at the front (the
+high-entropy first MiB on every drive) - classic hardware/`md`-style layout with
+the RAID superblocks wiped.
+
+The ext4 superblock only appears on `bay0` and `bay1` at `0x100400`; on `bay2`
+those bytes are zero. Two identical data copies + one zero chunk = **XOR parity**,
+so this is RAID5.
+
+## 2. RAID5 geometry
+
+We need three unknowns: chunk size `C`, base offset `D`, and the parity/data
+mapping. Cheap brute force with a filesystem-validity oracle nails all of them.
+
+Distinctently: assemble the logical device for every `(C, drive order, parity
+rotation, data order)`, then run `e2fsck -fn` on it. Exactly one class of configs
+comes out **clean**:
+
+```
+C = 32768 (32 KiB), D = 0x100000, members (bay0,bay1,bay2),
+parity(t) = (0 + 2*t) mod 3,  data order = (P+1),(P+2)   # left-symmetric
+```
+
+The earlier "XOR of the 3 drives at every offset" heuristic is a red herring here:
+it only returns `0` in the untouched all-zero stripes, because the interesting
+stripes are *deliberately* inconsistent (that is the write hole). Validity of the
+resulting ext4 is the reliable oracle.
+
+After assembly: 32 MiB logical ext4, `Filesystem state: clean` (but
+`needs_recovery`), 512 inodes, `/stage`, `/etc`, `/docs`, `/backup`, `/var`.
+
+## 3. What's on the volume
+
+`/etc/nas.conf`:
+
+```
+# ev-nas-3
+host=ev-nas-3
+volume=/dev/md0  fs=ext4  opts=rw,noatime,data=journal
+md0: raid5, 3 members (bays 0-2), write-intent bitmap: none (perf)
+ups: apc-smt1500 shutdown_delay=120s
+backup: /backup nightly 01:00
+```
+
+Two loud hints: **no write-intent bitmap** (so the write hole is live) and
+**`data=journal`**.
+
+`/stage/isfc-stage.py` documents the sealing scheme:
+
+```python
+REC   = 32768                       # sealed record size
+NONCE = 12
+PLAIN = REC - NONCE - TAG           # 32740 plaintext bytes/record  (TAG = 16)
+...
+nonce = struct.pack(">QI", job, idx)            # job || record index
+aad   = b"payload.bin|%d|%d" % (job, idx)
+return nonce + AESGCM(key).encrypt(nonce, plain, aad)   # nonce | ct | tag
+```
+
+and that the key comes from `/stage/.keyslot`, **burn-after-read** ("the key now
+lives only in RAM"). `stage.log`:
+
+```
+2026-03-09 ... stage job=5 keyslot consumed (burn-after-read) key_id=c44b43c950a294df
+2026-03-10 ... stage job=6 keyslot consumed (burn-after-read) key_id=772f2715dbe1362b
+2026-03-11T00:41:19Z ops: keyslot for job 7 was regenerated by operator (rotate), previous slot discarded
+2026-03-11T01:00:02Z stage job=7 keyslot consumed (burn-after-read)
+2026-03-11T01:00:02Z stage job=7 intent written, 6 records submitted (qd=6)
+```
+
+Job 7 is the one. Its intent file gives the expected SHA-256 of all six sealed
+records and the live key id:
+
+```
+"key_id": "b5125b19a47d9d61"
+"records": [ c89fb079…, fc8e9bbf…, 5670e63d…, e32523b9…, 1cad93e8…, 29d63bd8… ]
+```
+
+### Recovering the burn-after-read keys
+
+Deleted files aren't gone on this array: it is overwritten nightly **in place**,
+so old blocks linger. Scanning pre-rotation Python string-search-style for the
+`KSLT` magic turns up several 64-byte keyslot blobs, including a live job-7 slot
+and the **discarded** rotated one:
+
+```
+bay1 @0x10a000  job=7  key=d5ff6659…   <- discarded (rotate)
+bay1 @0x110000  job=7  key=f1d921fa…   <- LIVE (sha256[:16] == b5125b19a47d9d61)
+bay2 @0x110000  job=7  key=f1d921fa…   <- same, replicated
+bay0 @0x10b000  job=6  key=faf15a53…   ; bay2 @0x105000  job=5  key=dd8bdf0d…
+```
+
+Pick job-7's by `key_id` and you can decrypt the report.
+
+## 4. `payload.bin` and the write hole
+
+`payload.bin` is a 196608-byte file = 6 × 32768 records, and the ext4 extent is
+`(0-47):1160-1207`, i.e. logical `0x488000..0x4B8000`, contiguous. Mapping that
+through the RAID5 geometry:
+
+| logical chunk | record | physical (raw offset) |
+|---------------|--------|-----------------------|
+| 145           | rec0   | bay2 @ 0x340000       |
+| 146           | rec1   | parity: bay2 ^ bay1 @ 0x348000 |
+| 147           | rec2   | bay1 @ 0x348000       |
+| 148           | rec3   | parity: bay0 ^ bay1 @ 0x350000 |
+| 149           | rec4   | bay0 @ 0x350000       |
+| 150           | rec5   | parity: bay0 ^ bay2 @ 0x358000 |
+
+Records 0/2/4 sit intact on single drives. Records 1 and 3 (and 5) are in stripes
+whose data chunk was never written - `bay1@0x348000`, `bay0@0x350000` etc. still
+hold the *previous* night's ciphertext (`job 6`/`job 0`). Those are exactly the
+RAID5 stripes caught mid-write: **the data chunk is stale but the parity is the
+new XOR**, so
+
+```
+rec = parity ^ surviving_neighbour
+```
+
+Recovering rec1 and rec5 this way is routine: `bay1^bay2 @ 0x348000` and
+`bay0^bay2 @ 0x358000` both decrypt cleanly with `AESGCM`.
+
+**Rec3 is different.** `bay0^bay1 @ 0x350000` starts with the *correct* nonce
+`…0007 00000003` (a 2⁻⁹⁶ coincidence if it were wrong) but the resulting record
+fails `AESGCM.decrypt` - i.e. the first 12 bytes of the parity chunk are right and
+something later is wrong. The write of the parity chunk itself was **torn**: the
+tail never landed.
+
+There is no way to tell from the tag-dependent decryption which bytes are good.
+But AES-GCM is CTR + GHASH:
+
+```
+ciphertext = plaintext XOR keystream(key, nonce)          # independent of tag
+tag        = GHASH(key, aad, ciphertext)                  # only the tag needs the rest
+```
+
+The keystream depends **only on the key and the 12-byte nonce** - both of which we
+already have. So we bypass the tag entirely:
+
+```python
+nonce = rec[:12]                                   # job||idx, we know it
+ks    = AES(algorithms.AES(key), modes.CTR(nonce + b"\x00\x00\x00\x02"))  # GCM J0+1
+plain = xor(rec[12:-16], ks)                       # tag never consulted
+```
+
+That yields a fully coherent `part 4/6`, ending in the report's `PAD …` trailer -
+proving the ciphertext really was intact and only the tag was lost. (Cross-checked
+by running the identical CTR routine on record 0 and matching `AESGCM` output
+byte-for-byte.)
+
+A stream-cipher record survives losing its authentication tag. That is the crux of
+`write-hole`: the crash did not corrupt the *message*, only its *seal*.
+
+## 5. The token
+
+Every part is `== RIDGELINE EVIDENCE INTAKE :: SEALED REPORT :: job 7 :: part k/6 ==`
+plus a log of `obj=EV-… sha1=… ok=?` lines. Three lines carry the shards:
+
+```
+part 2/6 : [custody-token] shard 3/3 = h0l3_r3m3mb3rs}
+part 4/6 : [custody-token] shard 1/3 = isfar{p4r1ty_n3
+part 6/6 : [custody-token] shard 2/3 = v3r_l13s_wr1t3_
+```
+
+Concatenate shard 1 → 2 → 3, no separators:
 
 ```
 isfcr{p4r1ty_n3v3r_l13s_wr1t3_h0l3_r3m3mb3rs}
 ```
 
-(The decrypted plaintext literally reads `isfar{...}` due to an author typo - the event's accepted prefix `isfcr{` is substituted on output.) Lessons: use the artifact's own validity as the brute-force oracle instead of an XOR-consistency check that the challenge deliberately breaks; burn-after-read secrets survive in stale blocks on in-place-overwritten media; a lost AEAD authentication tag does not mean lost data if you hold the key and nonce.
+("parity never lies - write hole remembers.")
+
+## Note on the prefix
+
+The decrypted shard-1 bytes literally read `isfar{…}` (hex `69 73 66 61 72 7b`).
+The CTR keystream is validated independently, so the plaintext is exact - this is
+an author typo. The event's accepted flag prefix is `isfcr{`, so the submitted
+token is:
+
+```
+isfcr{p4r1ty_n3v3r_l13s_wr1t3_h0l3_r3m3mb3rs}
+```
+
+`solve.py` normalises the prefix on output.
+
+## Reproduction
+
+`solve.py` (this folder) does the whole chain - keyslot scan, RAID5 assembly,
+direct + parity record recovery, tag-independent CTR decryption - and prints all
+six parts and the assembled flag:
+
+```
+[+] job-7 sealing key  : f1d921fa…4aa00b31fcfa3d
+[+] logical device     : 33554432 bytes
+    rec 0 -> … part 1/6 ==
+    ...
+    rec 5 -> … part 6/6 ==
+[+] shards             : {1: b'isfar{p4r1ty_n3', 2: b'v3r_l13s_wr1t3_', 3: b'h0l3_r3m3mb3rs}'}
+[+] FLAG               : isfcr{p4r1ty_n3v3r_l13s_wr1t3_h0l3_r3m3mb3rs}
+```
+
+## Lessons
+
+- Non-zero entropy everywhere is not "encrypted metadata" - find the one structured
+  band and identify the filesystem by magic (`53ef`).
+- Use the *artifact's own validity* (`e2fsck -fn`, `dumpe2fs`) as the brute-force
+  oracle for RAID geometry instead of XOR-consistency, which is broken by design
+  in a write-hole challenge.
+- "Burn-after-read" secrets survive in stale blocks when a volume is overwritten
+  in place.
+- For any CTR/AEAD stream construction, a lost authentication tag ≠ lost data.
+  If you hold the key and nonce, you hold the plaintext.
+

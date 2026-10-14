@@ -67,24 +67,204 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A 64 MiB bare NTFS volume &quot;WORK&quot; (sector 512, cluster 4096, MFT at byte <code>0x4000</code>, 222 records). Live files include a vault (<code>Personal/vault/secure_archive.enc</code>, AES-256-GCM); deleted files include ~131 deleted cache blobs and a few individually-named deleted files. Most other files are decoys.</p>
-<p><strong>The lock:</strong> <code>Personal/reminders.txt</code> documents the construction - the vault is AES-256-GCM with a <strong>three-way XOR key</strong>, where each &quot;carrier&quot; holds a 32-byte share plus a 1-byte index and a 1-byte XOR-parity, self-identifying by index 1/2/3. The vault layout: 4-byte marker (<code>&quot;ENC1&quot;</code>), 12-byte nonce, ciphertext, 16-byte tag.</p>
-<p><strong>Finding the carriers:</strong> the decisive discriminator is a <strong>4-byte magic <code>de ad 53 47</code></strong> (&quot;necromancy&quot; theme) - a grep finds exactly three hits, all sitting inside the binary tails of deleted files or a random cluster (the data clusters survive even though the files themselves are deleted).</p>
-<p><strong>The one-byte trap:</strong> the reminder says &quot;a 32-byte share plus a 1-byte index and a 1-byte xor-parity&quot; but doesn&#39;t fix the byte order. Two layouts (<code>[magic][idx][parity][share]</code> vs <code>[magic][idx][share][parity]</code>) both pass the parity self-check <code>parity == xor(share) ^ idx</code>, because the parity byte sits adjacent to the share either way. The <strong>AES-GCM tag disambiguates</strong>: only Layout <code>[magic][idx][share][parity]</code> verifies.</p>
-<figure class="wu-code" data-lines="3">
+<h2 id="1-the-artifact"><a class="wu-anchor" href="#1-the-artifact" aria-hidden="true">#</a>1. The artifact</h2>
+<p><code>evidence.img</code> (64 MiB, md5 <code>5bdfa57396e9705f071904223f29d7f4</code>) is a bare NTFS volume &quot;WORK&quot;:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">Sector 512, cluster 4096, MFT @ byte 0x4000, 222 records, flag format isfcr{...}</code></pre>
+      
+    </figure><p>Two logical layers (both stamped <code>2026-09-30 00:20:18</code> - synthetic image):</p>
+<ul>
+<li><strong>Live:</strong> <code>Documents/</code>, <code>Downloads/</code>, <code>Personal/{reminders.txt, vault/secure_archive.enc}</code>,
+<code>Photos/2026-03/IMG_2000..2005.png</code>, <code>Projects/</code>.</li>
+<li><strong>Deleted:</strong> <code>Cache/_c/</code> (~131 deleted <code>c2_*/c1_*/c0_*.tmp</code>, all 80 bytes), plus deleted
+<code>wip.tmp</code>, <code>notes.txt</code>, <code>setup-2026-03.log</code>.</li>
+</ul>
+<p>Most <code>.md/.txt/.csv</code> files are corporate word-salad; the PNGs are solid-colour 8×8 images.
+All decoys.</p>
+<h2 id="2-the-lock"><a class="wu-anchor" href="#2-the-lock" aria-hidden="true">#</a>2. The lock</h2>
+<p><code>Personal/reminders.txt</code> (inode 86) states the construction:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">- vault (aes-256-gcm). three-way xor key. do NOT lose a carrier.
+  vault layout: 4-byte marker, 12-byte nonce, then ciphertext, 16-byte tag at the end.
+  each carrier holds a 32-byte share plus a 1-byte index and a 1-byte xor-parity.
+  shares self-identify by index (1/2/3).</code></pre>
+      
+    </figure><p><code>Personal/vault/secure_archive.enc</code> (inode 87, 85 bytes, confirmed via <code>icat 87</code>):</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">marker = 454e4331  (&quot;ENC1&quot;)
+nonce  = 0b19ec38c3998e78f2aa611b                            (12 bytes)
+ct     = 72800e27932b3c4ae60108f7d3b387e900bdf8a9ef2ca9e4
+         1adc7cc601f3c13b3c98f51c134adf4084910eff818a050d
+         790c3dafa9                                           (53 bytes)
+tag    = a90238a4c435931b6eb2602c5bc2af6d                     (16 bytes)</code></pre>
+      
+    </figure><p>So <code>key = share1 ^ share2 ^ share3</code> (each 32 bytes), vault = <code>&quot;ENC1&quot; || nonce || ct || tag</code>,
+AES-256-GCM, AAD none.</p>
+<h2 id="3-finding-the-carriers-the-magic-marker"><a class="wu-anchor" href="#3-finding-the-carriers-the-magic-marker" aria-hidden="true">#</a>3. Finding the carriers - the magic marker</h2>
+<p>The decisive step: the three real carriers are tagged with a <strong>4-byte magic <code>de ad 53 47</code></strong>
+(<code>dead...</code> - the &quot;necromancy&quot; theme). A single grep for it finds exactly three hits (the only
+other <code>de ad</code> runs are <code>$UpCase</code>-table noise, <code>deac dead deae ...</code>):</p>
+<figure class="wu-code" data-lines="4">
       <figcaption>
         
         <span class="wu-code-lang">python</span>
-        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">key = <span class="hljs-built_in">bytes</span>(a ^ b ^ c <span class="hljs-keyword">for</span> a, b, c <span class="hljs-keyword">in</span> <span class="hljs-built_in">zip</span>(share1, share2, share3))</span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># AES-256-GCM: marker || nonce || ciphertext || tag</span></span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">FLAG = isfcr{mft_slack_dies_but_data_clusters_remember_1a2f}</span></span></code></pre>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> re</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">d = <span class="hljs-built_in">open</span>(<span class="hljs-string">&#x27;evidence.img&#x27;</span>,<span class="hljs-string">&#x27;rb&#x27;</span>).read()</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">for</span> m <span class="hljs-keyword">in</span> re.finditer(<span class="hljs-string">b&#x27;\xde\xad\x53\x47&#x27;</span>, d):</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">    p = m.start(); <span class="hljs-built_in">print</span>(<span class="hljs-built_in">hex</span>(p), d[p:p+<span class="hljs-number">38</span>].<span class="hljs-built_in">hex</span>())</span></span></code></pre>
       
-    </figure><p>The title &quot;Journal-Necromancy&quot; and the fully-wiped <code>$LogFile</code> (2 MiB of <code>0xFF</code>) are a red herring pointing at journal/UsnJrnl recovery - the real lesson, spelled out by the flag itself, is that <strong>deleting a file clears its MFT record/slack, but not its data clusters</strong>, so the embedded carriers survive and can be &quot;resurrected.&quot; A naive full-image parity scan (ignoring the magic) produces several bogus coincidental hits from pure-random clusters and from decoy cache blobs using a different parity convention.</p>
-
+    </figure><figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">0x28b4a5d  dead5347 01 6d 71c9d7ea...4c9409bf   deleted setup-2026-03.log  (cluster 10420)
+0x2f65960  dead5347 02 e1 785bae1e...74254034   random cluster 12133
+0x36187ce  dead5347 03 ef 39842f22...56438334   deleted notes.txt          (cluster 13848)</code></pre>
+      
+    </figure><p>All three sit inside the <strong>binary tails of deleted files / a random cluster</strong> - the data
+clusters survive even though the files are deleted. (This is the whole puzzle: see §6.)</p>
+<h2 id="4-the-carrier-layout-the-one-byte-trap"><a class="wu-anchor" href="#4-the-carrier-layout-the-one-byte-trap" aria-hidden="true">#</a>4. The carrier layout - the one-byte trap</h2>
+<p>The reminder says &quot;a 32-byte share plus a 1-byte index and a 1-byte xor-parity&quot; but does <strong>not</strong>
+fix the order. Two interpretations both pass the parity self-check, because the parity byte is
+adjacent to the share either way:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">Layout A:  [magic 4][idx 1][parity 1][share 32]     share = bytes[p+6 : p+38]
+Layout Y:  [magic 4][idx 1][share 32][parity 1]     share = bytes[p+5 : p+37]   ← correct</code></pre>
+      
+    </figure><p>Both satisfy <code>parity == xor(share) ^ idx</code> (so parity alone cannot disambiguate). The GCM tag
+disambiguates immediately: <strong>Layout Y verifies, Layout A does not.</strong></p>
+<p>Correct shares (Layout Y):</p>
+<table>
+<thead>
+<tr>
+<th>idx</th>
+<th>share (32 bytes)</th>
+<th>parity</th>
+<th><code>xor(share)^idx</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><code>6d71c9d7ead70c055cfa2927a3d3c6a5fb0a7c341b18a986d0196d588b4c9409</code></td>
+<td><code>0xbf</code></td>
+<td><code>0xbf</code> ✓</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>e1785bae1e7ae88432441b37d3c3d9e3465f003e540d929367cf1f37cc742540</code></td>
+<td><code>0x34</code></td>
+<td><code>0x34</code> ✓</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>ef39842f2220d28e4a6c38c14e8442048ce9522b0794333c1b54fb3bde564383</code></td>
+<td><code>0x34</code></td>
+<td><code>0x34</code> ✓</td>
+</tr>
+</tbody></table>
+<h2 id="5-decrypt"><a class="wu-anchor" href="#5-decrypt" aria-hidden="true">#</a>5. Decrypt</h2>
+<figure class="wu-code" data-lines="11">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">from</span> Crypto.Cipher <span class="hljs-keyword">import</span> AES</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">import</span> binascii</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">s1 = binascii.unhexlify(<span class="hljs-string">&quot;6d71c9d7ead70c055cfa2927a3d3c6a5fb0a7c341b18a986d0196d588b4c9409&quot;</span>)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">s2 = binascii.unhexlify(<span class="hljs-string">&quot;e1785bae1e7ae88432441b37d3c3d9e3465f003e540d929367cf1f37cc742540&quot;</span>)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">s3 = binascii.unhexlify(<span class="hljs-string">&quot;ef39842f2220d28e4a6c38c14e8442048ce9522b0794333c1b54fb3bde564383&quot;</span>)</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">key = <span class="hljs-built_in">bytes</span>(a ^ b ^ c <span class="hljs-keyword">for</span> a, b, c <span class="hljs-keyword">in</span> <span class="hljs-built_in">zip</span>(s1, s2, s3))</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">v = <span class="hljs-built_in">open</span>(<span class="hljs-string">&#x27;vault.bin&#x27;</span>,<span class="hljs-string">&#x27;rb&#x27;</span>).read()        <span class="hljs-comment"># icat evidence.img 87 &gt; vault.bin</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">nonce, ct, tag = v[<span class="hljs-number">4</span>:<span class="hljs-number">16</span>], v[<span class="hljs-number">16</span>:-<span class="hljs-number">16</span>], v[-<span class="hljs-number">16</span>:]</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-built_in">print</span>(AES.new(key, AES.MODE_GCM, nonce=nonce).decrypt_and_verify(ct, tag))</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc"><span class="hljs-comment"># b&#x27;isfcr{mft_slack_dies_but_data_clusters_remember_1a2f}&#x27;</span></span></span></code></pre>
+      
+    </figure><figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">key  = 63301656d68d360f24d20ad13e945d4231bc2e2148810829ac828954996ef2ca
+FLAG = isfcr{mft_slack_dies_but_data_clusters_remember_1a2f}</code></pre>
+      
+    </figure><h2 id="6-why-the-journal-angle-is-a-red-herring"><a class="wu-anchor" href="#6-why-the-journal-angle-is-a-red-herring" aria-hidden="true">#</a>6. Why the &quot;journal&quot; angle is a red herring</h2>
+<ul>
+<li><code>$LogFile</code> (inode 2) is genuinely <strong>2 MiB of 0xFF</strong> (verified raw: <code>icat 2 | uniq</code>), i.e. the
+NTFS transaction journal was wiped. No <code>$UsnJrnl</code> / <code>$Extend\$UsnJrnl</code> exists either.</li>
+<li>The title &quot;Journal-Necromancy&quot; and the wiped <code>$LogFile</code> bait you into journal recovery. The
+plaintext spells out the real lesson: <strong>&quot;mft slack dies but data clusters remember&quot;</strong> - deleting
+a file clears its MFT record/slack, but the file&#39;s <em>data clusters</em> are not zeroed, so the
+embedded <code>dead5347</code> carriers survive and can be &quot;resurrected.&quot;</li>
+</ul>
+<h2 id="7-pitfalls-that-cost-the-earlier-attempt"><a class="wu-anchor" href="#7-pitfalls-that-cost-the-earlier-attempt" aria-hidden="true">#</a>7. Pitfalls that cost the earlier attempt</h2>
+<ol>
+<li><strong>Parity is only a 1-byte check</strong> - scanning the whole image for <code>[32 random][idx∈1..3][par]</code>
+produces many coincidental hits in the two pure-random clusters (2155, 12133) and in the
+deleted cache blobs. Chasing those yielded three bogus &quot;index-1&quot; shares and a decoy idx-3
+(<code>c2_0017</code>, which uses <code>par==xor(share)</code> <em>without</em> the <code>^idx</code> term - a different convention).
+The <code>dead5347</code> magic is the real discriminator.</li>
+<li><strong>The byte-order trap (§4).</strong> Reading the share as the 32 bytes <em>after</em> the parity
+(Layout A) instead of <em>before</em> it (Layout Y) shifts every share by one byte and yields a key
+that decrypts to garbage. Always let the <strong>GCM tag</strong> arbitrate the layout - it is a perfect
+<button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button>.</li>
+<li>NTFS record magic is the four bytes <code>FILE</code> (not <code>FILE0</code>); a 5-byte compare silently breaks
+hand-rolled MFT parsers.</li>
+</ol>
+<h2 id="8-reproduce"><a class="wu-anchor" href="#8-reproduce" aria-hidden="true">#</a>8. Reproduce</h2>
+<figure class="wu-code" data-lines="13">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> ~/Downloads/ctfs/CRYOVAULT/Journal-Necromancy/journal-necromancy</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">icat evidence.img 87 &gt; vault.bin                       <span class="hljs-comment"># the vault</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">python3 - &lt;&lt;<span class="hljs-string">&#x27;PY&#x27;</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">import re, binascii</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">from Crypto.Cipher import AES</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">d = open(<span class="hljs-string">&#x27;evidence.img&#x27;</span>,<span class="hljs-string">&#x27;rb&#x27;</span>).<span class="hljs-built_in">read</span>()</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">sh = {}</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"><span class="hljs-keyword">for</span> m <span class="hljs-keyword">in</span> re.finditer(b<span class="hljs-string">&#x27;\xde\xad\x53\x47&#x27;</span>, d):          <span class="hljs-comment"># magic &#x27;dead5347&#x27;</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    p = m.start(); idx = d[p+4]; sh[idx] = d[p+5:p+37]  <span class="hljs-comment"># layout: magic|idx|share32|par</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">key = bytes(a ^ b ^ c <span class="hljs-keyword">for</span> a, b, c <span class="hljs-keyword">in</span> zip(sh[1], sh[2], sh[3]))</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">v = open(<span class="hljs-string">&#x27;vault.bin&#x27;</span>,<span class="hljs-string">&#x27;rb&#x27;</span>).<span class="hljs-built_in">read</span>()</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"><span class="hljs-built_in">print</span>(AES.new(key, AES.MODE_GCM, nonce=v[4:16]).decrypt_and_verify(v[16:-16], v[-16:]))</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">PY</span></span></code></pre>
+      
+    </figure>
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-the-artifact">1. The artifact</a></li><li><a href="#2-the-lock">2. The lock</a></li><li><a href="#3-finding-the-carriers-the-magic-marker">3. Finding the carriers - the magic marker</a></li><li><a href="#4-the-carrier-layout-the-one-byte-trap">4. The carrier layout - the one-byte trap</a></li><li><a href="#5-decrypt">5. Decrypt</a></li><li><a href="#6-why-the-journal-angle-is-a-red-herring">6. Why the &quot;journal&quot; angle is a red herring</a></li><li><a href="#7-pitfalls-that-cost-the-earlier-attempt">7. Pitfalls that cost the earlier attempt</a></li><li><a href="#8-reproduce">8. Reproduce</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

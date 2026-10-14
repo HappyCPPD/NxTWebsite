@@ -67,24 +67,152 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A stripped x86-64 ELF reads 16 bytes and compares a derived 512-bit accumulator against a hard-coded target. The check: zero a 64-byte accumulator <code>R</code>; for each of 128 bits of the 16-byte input, if bit <code>i</code> is set, add a 512-bit table entry <code>T[i]</code> into <code>R</code> with carry propagation; then <code>memcmp(R, TARGET, 64)</code>. This is a <strong>128-variable subset-sum / knapsack</strong>: the 16-byte input is exactly the 128-bit selector vector.</p>
-<p>Extraction shows every <code>T[i]</code> is a 400-bit integer, <code>TARGET</code> is 406 bits, <code>sum(T)</code> is 407 bits - no modular wraparound ever happens, so the check is an exact integer subset sum. Density <code>d = 128/400 ≈ 0.32</code>, far below the Lagarias-Odlyzko threshold (0.9408), so <button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button>/BKZ recovers the (essentially unique) subset.</p>
-<p><strong>Lattice:</strong> standard low-density subset-sum lattice, dimension 129: <code>B[i][i]=2</code>, <code>B[i][n]=T[i]*W</code>, <code>B[n][j]=1</code>, <code>B[n][n]=TARGET*W</code> with <code>W=2^12</code>. A solution <code>x ∈ {0,1}^n</code> yields a short lattice vector <code>(±1,...,±1,0)</code>. Plain LLL at delta 0.99 was not strong enough on the 400-bit entries; <strong>BKZ block size 20</strong> finished the reduction and produced the needed row. Reconstructing bits and packing LSB-first gives the input.</p>
-<figure class="wu-code wu-code-output" data-lines="4">
+<p><strong>Prompt:</strong> &quot;Hand it 16 bytes. It will tell you nope.&quot;</p>
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<p><code>chall</code> is a stripped x86-64 ELF. Running it with no input prints
+<code>need exactly 16 bytes of input</code>; with any 16 bytes it prints <code>nope.</code> and
+on success <code>CORRECT -- the flag is the input you just gave me.</code></p>
+<figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">key hex  : 69736663727b6c6c6c5f64656e73657d
-key ascii: isfcr{lll_dense}
-$ printf 'isfcr{lll_dense}' | ./chall
+      <pre id="code-1"><code class="language-text">$ printf 'AAAAAAAAAAAAAAAA' | ./chall
+nope.</code></pre>
+      
+    </figure><p>Imports: <code>fread</code>, <code>memcmp</code>, <code>puts</code>, <code>fprintf</code>. So it reads 16 bytes and
+compares something derived from them against a hard-coded value.</p>
+<h2 id="2-reversing-the-check"><a class="wu-anchor" href="#2-reversing-the-check" aria-hidden="true">#</a>2. Reversing the check</h2>
+<p>Disassembly of the main routine (<code>0x4003c0</code>):</p>
+<ol>
+<li><code>fread(buf, 1, 16, stdin)</code> - 16 bytes at <code>rsp+0x10</code>.</li>
+<li>Zero a 64-byte (512-bit) accumulator <code>R</code> at <code>rsp+0x20</code>.</li>
+<li><code>r10 = 0x401360</code> - a table of 128 entries, <strong>64 bytes each</strong> (512-bit <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> integers).</li>
+<li>Loop <code>i = 0 .. 0x7F</code>:<ul>
+<li>test bit <code>i</code> of the 16-byte input (<code>byte[i&gt;&gt;3]</code>, bit <code>i&amp;7</code>);</li>
+<li>if set, add the whole 512-bit table entry <code>T[i]</code> into <code>R</code> with
+carry propagation (<code>add</code>/<code>adc</code> over 8 qwords, <code>r10 += 0x40</code>).</li>
+</ul>
+</li>
+<li><code>memcmp(R, 0x401320, 64)</code> - compare <code>R</code> against a fixed 64-byte target.</li>
+</ol>
+<p>So the check is:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">sum over set bits i of  T[i]  ==  TARGET      (mod 2^512)</code></pre>
+      
+    </figure><p>i.e. a <strong>128-variable subset-sum / knapsack</strong>: the 16-byte input is exactly
+the 128-bit selector vector.</p>
+<h2 id="3-data-extraction"><a class="wu-anchor" href="#3-data-extraction" aria-hidden="true">#</a>3. Data extraction</h2>
+<p><code>.rodata</code> is mapped at vaddr <code>0x4012a0</code> = file offset <code>0x12a0</code>, so
+<code>file_off = vaddr - 0x400000</code>.</p>
+<ul>
+<li><code>TARGET</code> @ <code>0x401320</code>, 64 bytes</li>
+<li><code>TABLE</code>  @ <code>0x401360</code>, 128 × 64 bytes</li>
+</ul>
+<p><code>extract.py</code> pulls these and reads each as a little-endian integer.</p>
+<p>Key measurements:</p>
+<ul>
+<li>every <code>T[i]</code> is a 400-bit integer;</li>
+<li><code>TARGET</code> is 406 bits, and <code>sum(T)</code> is 407 bits.</li>
+</ul>
+<p>Because the total sum is <code>&lt; 2^512</code>, <strong>no modular wraparound ever happens</strong> -
+the check is an exact integer subset sum.</p>
+<p>Density <code>d = n / bits = 128 / 400 ≈ 0.32</code>, far below the
+Lagarias - Odlyzko threshold (0.9408), so a <button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button>/BKZ lattice attack recovers
+the (essentially unique) subset.</p>
+<h2 id="4-lattice-solution"><a class="wu-anchor" href="#4-lattice-solution" aria-hidden="true">#</a>4. Lattice solution</h2>
+<p>Standard low-density subset-sum lattice, dimension <code>n+1 = 129</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">B[i][i] = 2            (i = 0..n-1)
+B[i][n] = T[i] * W
+B[n][j] = 1            (j = 0..n-1)
+B[n][n] = TARGET * W</code></pre>
+      
+    </figure><p>A solution <code>x ∈ {0,1}^n</code> with <code>Σ x_i T[i] = TARGET</code> yields the short
+lattice vector <code>(2x_0-1, ..., 2x_{n-1}-1, 0)</code>, entries <code>±1</code>.
+<code>W = 2^12</code> sharpens the tail column.</p>
+<p>LLL alone at delta 0.99 was not strong enough on the 400-bit entries; a
+short <strong>BKZ block size 20</strong> finished the reduction and produced a row
+<code>(±1,...,±1, 0)</code>. Reconstructing bits <code>x_i = (v_i+1)/2</code> and packing them
+LSB-first into 16 bytes gives the input:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">key hex  : 69736663727b6c6c6c5f64656e73657d
+key ascii: isfcr{lll_dense}</code></pre>
+      
+    </figure><p>(<code>solve2.py</code>, ~1 - 2 min.)</p>
+<h2 id="5-verification"><a class="wu-anchor" href="#5-verification" aria-hidden="true">#</a>5. Verification</h2>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">$ printf 'isfcr{lll_dense}' | ./chall
 CORRECT -- the flag is the input you just gave me.</code></pre>
       
-    </figure><p>Requires <code>fpylll</code>.</p>
+    </figure><p>Sum check in <code>solve2.py</code> also prints <code>verify: True</code>.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">isfcr{lll_dense}</code></pre>
+      
+    </figure><h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
+<table>
+<thead>
+<tr>
+<th>file</th>
+<th>purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>chall</code></td>
+<td>original binary</td>
+</tr>
+<tr>
+<td><code>extract.py</code></td>
+<td>parse ELF, dump table/target → <code>knap.json</code></td>
+</tr>
+<tr>
+<td><code>solve2.py</code></td>
+<td>LLL+BKZ lattice solve (the working one)</td>
+</tr>
+<tr>
+<td><code>knap.json</code></td>
+<td>extracted target + 128 vectors</td>
+</tr>
+<tr>
+<td><code>key.bin</code></td>
+<td>recovered 16-byte input</td>
+</tr>
+</tbody></table>
+<p>Requires <code>fpylll</code> (<code>pip install fpylll</code>).</p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-reversing-the-check">2. Reversing the check</a></li><li><a href="#3-data-extraction">3. Data extraction</a></li><li><a href="#4-lattice-solution">4. Lattice solution</a></li><li><a href="#5-verification">5. Verification</a></li><li><a href="#flag">Flag</a></li><li><a href="#files">Files</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

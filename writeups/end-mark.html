@@ -67,25 +67,189 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A &quot;seal worker&quot; performed 24 FETCH reads across six separate reader connections against a WAL-mode SQLite ledger while a single writer kept committing. The trace (<code>trace.ndjson</code>, 135 ordered events) records operations and total order but not the returned bytes. Recover the exact bytes each FETCH returned, concatenate the 24-byte payloads in slot order, and submit the first 32 hex digits of their SHA-256.</p>
-<p><strong>WAL structure:</strong> the 120 frames split into two salt groups of 60 frames each - the current generation (matching the WAL header) and a stale tail of the previous generation, left behind by a <code>PRAGMA wal_checkpoint(RESTART)</code> which only rewinds the WAL rather than truncating it. The current WAL thus holds writer transactions 61-90; the stale tail holds 31-60 (transactions 1-30 were physically overwritten and not needed).</p>
-<p><strong>Full-snapshot trick:</strong> each writer transaction appends two frames (data page, then commit page), and the entire <code>fragments</code> table (24 rows) fits in a single 1024-byte leaf page - so any transaction&#39;s page2 image is a self-contained snapshot, no replay from a base state required.</p>
-<p><strong>Snapshot timing - the crux:</strong> readers use <code>BEGIN DEFERRED</code> in autocommit mode, so no read-snapshot is taken until the first statement that touches the <strong>main database</strong> (verified empirically against real SQLite). Statements like <code>SELECT 1</code>, <code>sqlite_version()</code>, or reads from <code>temp.*</code> do <strong>not</strong> pin a snapshot, even though their log lines look like they should - several connections&#39; logged &quot;first&quot; statement is a no-op, and the true snapshot transaction is the highest writer transaction committed before the connection&#39;s actual first main-db access.</p>
-<p><strong>Recovery:</strong> for each of the 24 FETCH events, read <code>payload[slot]</code> from the reconstructed state at that connection&#39;s true snapshot transaction; all 24 slots are covered exactly once.</p>
-<figure class="wu-code wu-code-output" data-lines="3">
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">blob = concat(payload[s] for s in 0..23)   # 576 bytes
+      <pre id="code-1"><code class="language-text">isfcr{28bc454d9b8fc1b73ff97a0d7db31a76}</code></pre>
+      
+    </figure><h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<p>A &quot;seal worker&quot; performed 24 <code>SELECT payload FROM fragments WHERE slot=?</code> (FETCH) reads on
+six separate reader connections (C1..C6) against a WAL-mode SQLite ledger while a single writer
+<code>W</code> kept committing changes. The log (<code>trace.ndjson</code>) records the operations and their total
+order (<code>seq</code>) but not the returned bytes. Given the captured <code>ledger.db</code> + <code>ledger.db-wal</code>, recover
+the exact bytes each FETCH returned, concatenate the 24-byte payloads in slot order 0..23, and
+submit the first 32 hex digits of their SHA-256.</p>
+<h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
+<ul>
+<li><code>ledger.db</code>      : 3 pages (page1 = schema, page2 = <code>fragments</code>, page3 = <code>heartbeat</code>)</li>
+<li><code>ledger.db-wal</code>  : 120 frames, page size 1024</li>
+<li><code>trace.ndjson</code>   : 135 ordered events</li>
+</ul>
+<h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
+<h3 id="1-wal-structure-two-generations-survive-in-one-file"><a class="wu-anchor" href="#1-wal-structure-two-generations-survive-in-one-file" aria-hidden="true">#</a>1. WAL structure - two generations survive in one file</h3>
+<p>The 120 frames split into two salt groups of 60 frames each:</p>
+<table>
+<thead>
+<tr>
+<th>group</th>
+<th>salt1</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>frames 1..60</td>
+<td><code>0x0466e797</code></td>
+<td><strong>current</strong> generation (matches the WAL header salt)</td>
+</tr>
+<tr>
+<td>frames 61..120</td>
+<td><code>0x0466e796</code></td>
+<td>stale tail of the <strong>previous</strong> generation</td>
+</tr>
+</tbody></table>
+<p>The header salt is the giveaway: SQLite bumps the salt by 1 whenever the WAL is reset. The trace&#39;s
+one <code>PRAGMA wal_checkpoint(RESTART)</code> (seq 82, after writer transaction 60, with all readers closed)
+reset the WAL: the file was <em>not</em> truncated, so the new generation was written from frame 1 and only
+overwrote the <em>front</em> half - the old generation&#39;s last 30 transactions survived as dead tail frames.</p>
+<p>Therefore the current WAL = 30 transactions (each = 2 frames) = writer transactions <strong>61..90</strong>, and the
+stale tail = the previous generation&#39;s last 30 transactions = writer transactions <strong>31..60</strong>.
+Transactions 1..30 were physically overwritten (and are not needed, see below).</p>
+<p><code>ledger.db</code> (3 pages, dbsize 3) is the checkpointed state <strong>after tx60</strong> - verified byte-for-byte:
+<code>page1 + tx60.page2 + tx60.page3 == ledger.db</code>.</p>
+<h3 id="2-every-transaction-carries-a-full-snapshot-of-the-table"><a class="wu-anchor" href="#2-every-transaction-carries-a-full-snapshot-of-the-table" aria-hidden="true">#</a>2. Every transaction carries a full snapshot of the table</h3>
+<p>Each writer transaction appends two frames: page2 (<code>fragments</code> leaf) then page3 (<code>heartbeat</code>),
+the latter being the commit frame. A WAL frame holds a <em>complete page image</em>, and the whole
+<code>fragments</code> table (24 rows) fits in a single 1024-byte leaf page. So <strong>the page2 image of any
+transaction is a self-contained snapshot of the fragments table</strong> - no replay from a base state is
+required. State at tx <em>T</em> is assembled as <code>page1(from ledger.db) + txT.page2 + txT.page3</code> and
+queried with real SQLite.</p>
+<h3 id="3-snapshot-timing-the-crux"><a class="wu-anchor" href="#3-snapshot-timing-the-crux" aria-hidden="true">#</a>3. Snapshot timing - the crux</h3>
+<p>Readers run <code>BEGIN DEFERRED</code> in autocommit mode, so no read-snapshot is taken until the <strong>first
+statement that touches the main database</strong>. Verified empirically (SQLite 3.46.1; same semantics in
+3.50.4):</p>
+<table>
+<thead>
+<tr>
+<th>statement</th>
+<th>opens main-db snapshot?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>SELECT marker FROM heartbeat WHERE id=1</code> (C1)</td>
+<td><strong>yes</strong></td>
+</tr>
+<tr>
+<td><code>SELECT 1</code> (C2 heartbeat read)</td>
+<td><strong>no</strong></td>
+</tr>
+<tr>
+<td><code>PRAGMA user_version</code> (C3)</td>
+<td><strong>yes</strong></td>
+</tr>
+<tr>
+<td><code>SELECT marker FROM temp.pulse WHERE id=1</code> (C4)</td>
+<td><strong>no</strong> (temp db only)</td>
+</tr>
+<tr>
+<td><code>SELECT count(*) FROM sqlite_schema</code> (C5)</td>
+<td><strong>yes</strong></td>
+</tr>
+<tr>
+<td><code>SELECT sqlite_version()</code> (C6)</td>
+<td><strong>no</strong></td>
+</tr>
+</tbody></table>
+<p>So C2, C4 and C6 (whose log lines falsely look like a snapshot was taken) actually take their
+snapshot at their first FETCH. Snapshot transaction = the highest writer transaction committed
+before the reader&#39;s first main-db access (<code>seq</code> order):</p>
+<table>
+<thead>
+<tr>
+<th>conn</th>
+<th>first main-db read</th>
+<th>seq</th>
+<th>snapshot tx</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>C1</td>
+<td>heartbeat (marker)</td>
+<td>40</td>
+<td>38</td>
+</tr>
+<tr>
+<td>C2</td>
+<td>FETCH slot 9</td>
+<td>49</td>
+<td>42</td>
+</tr>
+<tr>
+<td>C3</td>
+<td>PRAGMA user_version</td>
+<td>53</td>
+<td>44</td>
+</tr>
+<tr>
+<td>C4</td>
+<td>FETCH slot 18</td>
+<td>93</td>
+<td>65</td>
+</tr>
+<tr>
+<td>C5</td>
+<td>sqlite_schema</td>
+<td>96</td>
+<td>67</td>
+</tr>
+<tr>
+<td>C6</td>
+<td>FETCH slot 1</td>
+<td>105</td>
+<td>71</td>
+</tr>
+</tbody></table>
+<p>(<code>SELECT 1</code>, <code>sqlite_version()</code>, temp reads are no-ops for the main-db snapshot.)</p>
+<h3 id="4-recover-payloads"><a class="wu-anchor" href="#4-recover-payloads" aria-hidden="true">#</a>4. Recover payloads</h3>
+<p>For each of the 24 FETCH events, take <code>payload[slot]</code> from the reconstructed state at that
+connection&#39;s snapshot transaction. All 24 slots 0..23 are covered exactly once.</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">blob = concat(payload[s] for s in 0..23)   # 576 bytes (24 x 24)
 sha256(blob) = 28bc454d9b8fc1b73ff97a0d7db31a76f16db9ebfa7690e2b48e3fa4600a5746
 flag = isfcr{28bc454d9b8fc1b73ff97a0d7db31a76}</code></pre>
       
-    </figure><p>Traps avoided: assuming all 120 WAL frames are one generation (two generations coexist, selected by header salt); taking the reader snapshot at <code>BEGIN</code> instead of the deferred first main-db touch; assuming the checkpoint truncated the WAL (RESTART only rewinds).</p>
+    </figure><h2 id="reproduce"><a class="wu-anchor" href="#reproduce" aria-hidden="true">#</a>Reproduce</h2>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">cd end-mark
+python3 solve.py     # prints the flag; asserts tx60==ledger.db and full slot coverage</code></pre>
+      
+    </figure><h2 id="traps-avoided"><a class="wu-anchor" href="#traps-avoided" aria-hidden="true">#</a>Traps avoided</h2>
+<ul>
+<li>Assuming all 120 WAL frames are one generation (they are two; header salt selects the live one).</li>
+<li>Taking the reader snapshot at <code>BEGIN</code> (it is deferred) or at a non-db statement
+(<code>SELECT 1</code> / <code>sqlite_version()</code> / temp-table reads do <strong>not</strong> pin a snapshot).</li>
+<li>Assuming the checkpoint truncated the WAL (RESTART only rewinds; the old tail survives).</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#flag">Flag</a></li><li><a href="#challenge">Challenge</a></li><li><a href="#files">Files</a></li><li><a href="#solution">Solution</a><ol class="wu-toc-sub"><li><a href="#1-wal-structure-two-generations-survive-in-one-file">1. WAL structure - two generations survive in one file</a></li><li><a href="#2-every-transaction-carries-a-full-snapshot-of-the-table">2. Every transaction carries a full snapshot of the table</a></li><li><a href="#3-snapshot-timing-the-crux">3. Snapshot timing - the crux</a></li><li><a href="#4-recover-payloads">4. Recover payloads</a></li></ol></li><li><a href="#reproduce">Reproduce</a></li><li><a href="#traps-avoided">Traps avoided</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

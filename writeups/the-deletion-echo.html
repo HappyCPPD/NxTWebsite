@@ -67,27 +67,176 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A fleet of ridge-regression releases over 12-D features, with <code>H = Σ x xᵀ + ridge·I</code>, <code>theta = H⁻¹ Σ x y</code>. An <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> publishes, per query <code>q</code>: <code>mean = qᵀtheta</code> and <code>predictive_variance = noise_variance·(1+qᵀH⁻¹q)</code>, both rounded to 12 significant digits. 5 unordered snapshots, some consecutive, one stale redeploy; unordered/unlabelled ingest batches; the deletion was fulfilled by exact retraining fused with one ingest batch in the same release. Goal: name the deleted records and their labels.</p>
-<p><strong>Step 1 - invert the oracle.</strong> <code>predictive_variance</code> is affine in the 78 monomials <code>q_i q_j</code> (i≤j) plus a constant - a 79-parameter least-squares over 240 queries per snapshot fits to ~1e-8 residual (matching the 12-sig-digit rounding), recovering <code>H⁻¹</code> (hence <code>H</code>) and the constant <code>noise_variance</code>. <code>mean = qᵀtheta</code> is a separate 12-parameter fit recovering <code>theta</code> exactly. Then <code>T := H·theta = Σ x_r·y_r</code> - the &quot;label moment&quot; vector - carries all label information for a release.</p>
-<p><strong>Step 2 - order the releases, find the stale redeploy.</strong> Grouping the 5 snapshots by <code>H</code> collapses two of them to bit-identical matrices - the stale redeploy. The remaining four distinct models form a chain <code>A→B→C→D</code>, ordered by which <code>H</code>-differences are <strong>sparse</strong> (pure single-ingest-batch additions for A→B and C→D) vs. dense (the B→C transition, which fuses one ingest batch with the deletion - the release the contract promises).</p>
-<p><strong>Step 3 - isolate the deleted record set.</strong> Because <code>ridge·I</code> cancels in a difference of releases and <code>x xᵀ</code> enters additively independent of label, <code>target := -(H_C - H_B - Σ_ingest x xᵀ) = Σ_deleted x xᵀ</code>. Greedily matching <code>target</code> against 140 candidates&#39; own <code>x xᵀ</code> finds <strong>26 records with coefficient exactly 1.0</strong> and near-zero residual - an exact, unique match.</p>
-<p><strong>Step 4 - recover the labels via integer MILP.</strong> The label-moment difference <code>T_C - T_B = Σ_ingest x·y - Σ_deleted x·y</code> gives only 12 equations in 36 unknown labels <code>y ∈ {0,1,2,3}</code> - wildly underdetermined as a real system, and the regression doesn&#39;t leak labels directly (predictions are over-shrunk, corr with true labels only 0.42). The resolution: since <code>scale ∈ {1,2,4}</code>, <code>4x</code> is integer, so <code>4A·y = 4ΔT</code> is an exact <strong>integer</strong> system; the box <code>[0,3]^36</code> intersected with this affine constraint has covolume ratio ~1e-16, so it contains essentially surely exactly one integer point. A small MILP (36 integer variables, 12 equality constraints, bounds [0,3]) finds it exactly.</p>
-<figure class="wu-code wu-code-output" data-lines="5">
+<h2 id="0-the-handout"><a class="wu-anchor" href="#0-the-handout" aria-hidden="true">#</a>0. The handout</h2>
+<p><code>the_deletion_echo.zip</code> contains exactly two files:</p>
+<ul>
+<li><code>data.json</code> (230 KB) - a <code>contract</code> block, <code>snapshots</code>, <code>candidates</code>, <code>ingest</code> batches,
+and <code>queries</code>;</li>
+<li><code>unlock.py</code> - takes a JSON list, <code>json.dumps</code> it, derives a key
+<code>scrypt(b&#39;isfcr-ml\0&#39; + enc, salt, n=131072, r=8, p=1, dklen=32)</code> and
+AES-GCM-decrypts a sealed blob; correct answer → flag.</li>
+</ul>
+<p>The contract describes a fleet of ridge-regression releases over 12-D feature vectors
+<code>x[j] = (raw[permutation[j]] − center[j]) / scale[j]</code> (no intercept), labels in <code>{0,1,2,3}</code>:</p>
+<ul>
+<li><code>training</code>: <code>H = Σ x xᵀ + ridge·I</code>, <code>theta = H⁻¹ Σ x y</code>, <code>ridge</code> a multiple of 1/16 (unpublished);</li>
+<li><code>oracle</code>: <code>mean = qᵀtheta + e_m</code> and
+<code>predictive_variance = noise_variance·(1 + qᵀ H⁻¹ q)·(1 + e_v)</code>, rounded to 12 sig-digits;</li>
+<li><code>history</code>: snapshots unordered; some consecutive versions of one service; one stale redeploy;
+ingest batches unordered/unlabelled; <strong>the deletion was fulfilled by exact retraining in the
+same release as one ingest batch</strong>;</li>
+<li><code>deletion</code>: the deleted records are a unique subset of <code>candidates</code>, once each;</li>
+<li><code>encoding</code>: ASCII-sort <code>record-id:label</code> strings for every deleted record.</li>
+</ul>
+<p>The quantity we must return is (deleted record id, its label) for each deleted record.</p>
+<h2 id="1-inverting-the-oracle-h-and-theta-fall-straight-out"><a class="wu-anchor" href="#1-inverting-the-oracle-h-and-theta-fall-straight-out" aria-hidden="true">#</a>1. Inverting the oracle: H and theta fall straight out</h2>
+<p>There are 240 queries per snapshot and 5 snapshots. Two clean least-squares fits per snapshot
+recover the whole model:</p>
+<ul>
+<li><strong>predictive_variance.</strong> Write <code>qᵀMq = Σ_i M_ii q_i² + 2Σ_{i&lt;j} M_ij q_i q_j</code>. So
+<code>pv</code> is <em>affine</em> in the 78 monomials <code>q_i q_j</code> (i≤j) plus a constant. A 79-parameter
+least-squares over 240 equations fits to a max residual of ~1e-8 (the 12-sig-digit rounding).
+The constant term is <code>noise_variance</code>; the rest gives <code>M = H⁻¹</code>, hence <code>H = M⁻¹</code>.</li>
+<li><strong>mean.</strong> <code>mean = qᵀtheta</code>, 12 parameters, fits to ~1e-8. Recovered <code>theta</code> is <em>exact</em> to
+rounding.</li>
+</ul>
+<p>Then the label moments are <code>T := H·theta = Σ_{records in the model} x_r·y_r</code> - a 12-vector per
+release. <code>H</code> depends only on the <em>features</em> of the training records (not labels); <code>T</code> carries
+all the label information.</p>
+<h2 id="2-the-chain-and-the-stale-redeploy"><a class="wu-anchor" href="#2-the-chain-and-the-stale-redeploy" aria-hidden="true">#</a>2. The chain and the stale redeploy</h2>
+<p>Grouping the five snapshots by <code>H</code> collapses them to <strong>four distinct models</strong> - the pair
+<code>snapshot-d1f54facd170</code> / <code>snapshot-80794d4ee21c</code> is bit-identical (<code>max|ΔH| ≈ 3.6</code>, versus
+~10⁵ for genuinely different releases). That is the &quot;stale redeploy&quot;.</p>
+<p>The four models form the chain <strong>A = 2ee90f53b5c2 → B = d1f54facd170 → C = e385b6f3720a →
+D = 9ccbadef83c2</strong>. Ordering follows from which differences are <em>sparse</em>:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">ingest-e0449f2a labels : 2 0 1 3 0 2 2 2 2 2
-deleted labels         : 0 0 2 1 2 2 1 1 0 0 0 0 2 3 1 3 0 2 1 2 1 1 3 2 1 2
-bash
-python3 unlock.py '[&quot;record-0730706150:0&quot;, ... ,&quot;record-ee9e7ec4d8:1&quot;]'
-# -&gt; isfcr{763c8479fac095a9e471ad3d}</code></pre>
+      <pre id="code-1"><code class="language-text">A→B :  H_B − H_A  = Σ x xᵀ  over ingest-5798d74d (12 records)            (pure ingest)
+C→D :  H_D − H_C  = Σ x xᵀ  over ingest-578b7698 (9 records)             (pure ingest)
+B→C :  H_C − H_B  = Σ x xᵀ(ingest-e0449f2a) − Σ x xᵀ(26 candidates)      (the deletion release)</code></pre>
       
-    </figure><p>Dead ends recorded: predicting labels from the shrunk regression itself (useless, corr 0.42); assuming the ingest batch&#39;s labels are trivially all-zero (the min-norm solve is non-integer, so this fails); naive <button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button>/Babai lattice rounding on an embedding (the HNF particular solution has astronomically large coordinates and float rounding loses everything - the MILP on the original small-integer system is the robust route); and an HNF sign bug (<code>·3</code> instead of <code>·(-1)</code>) that manufactured a spurious divisor-3 obstruction before being caught.</p>
+    </figure><p>A→B and C→D are reconstructed to a max residual of ~5 on entries of magnitude ~10⁶ (pure
+float noise on <code>inv(M)</code>), so they are exact single-batch additions. B→C is the release the
+contract promises: one ingest batch <strong>and</strong> a deletion, fused by exact retraining.</p>
+<h2 id="3-naming-the-deleted-records"><a class="wu-anchor" href="#3-naming-the-deleted-records" aria-hidden="true">#</a>3. Naming the deleted records</h2>
+<p>Because <code>H = Σ x xᵀ + ridge·I</code> and <code>ridge</code> cancels in a difference of releases, and because a
+record&#39;s Gram matrix <code>x xᵀ</code> enters additively (independent of its label), the deleted set is
+isolated directly:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">target := − vec( H_C − H_B − Σ_{ingest-e0449f2a} x xᵀ )  ==  Σ_{deleted} vec(x xᵀ)</code></pre>
+      
+    </figure><p>Greedily matching <code>target</code> against the 140 candidates&#39; <code>vec(x xᵀ)</code> yields <strong>26 records with
+coefficient exactly 1.0</strong> and a residual of ~5 (i.e. exact). No other subset reproduces the
+difference. The 26:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">record-0730706150 record-28c0bbf813 record-2e6662ecc6 record-3de105d25d record-3ee76f33c8
+record-46126dd779 record-473e486afd record-49aa7c51a4 record-507645d5d9 record-58fad90382
+record-5bc7d8554c record-66f65f5026 record-71fb3e266c record-7796490f27 record-77a4509144
+record-8f4b4073f9 record-90769aad7a record-978b124800 record-9cddf7a4fb record-9cfdc74744
+record-b9e67b6811 record-cf44aec78a record-cf4fee237a record-d32fd7d5d5 record-ebfb2ad09e
+record-ee9e7ec4d8</code></pre>
+      
+    </figure><h2 id="4-recovering-the-labels-the-interesting-part"><a class="wu-anchor" href="#4-recovering-the-labels-the-interesting-part" aria-hidden="true">#</a>4. Recovering the labels (the interesting part)</h2>
+<p>We now need each deleted record&#39;s label, plus - unavoidably - the labels of the <em>unlabelled</em>
+ingest batch that shipped with the deletion. The label moments give one 12-vector equation:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">T_C − T_B = Σ_{ingest-e0449f2a} x·y  −  Σ_{deleted} x·y</code></pre>
+      
+    </figure><p>That is 12 equations in 10 + 26 = 36 integer unknowns <code>y ∈ {0,1,2,3}</code> - wildly
+underdetermined as a <em>real</em> system. Two ways to screw this up:</p>
+<ul>
+<li>The <strong>regression itself does not leak labels.</strong> This release is deliberately
+over-regularised: <code>x_rᵀtheta</code> for training records is uncorrelated-ish with <code>y_r</code>
+(corr 0.42), predictions sit in [−2.7, 2.4] rather than on {0,1,2,3}. You cannot read a
+label off a prediction.</li>
+<li><strong>The min-norm / least-squares solution is not the answer</strong> (it produces values like −3.56,
+clearly outside the label set).</li>
+</ul>
+<p>The way through is that the system is exactly integral. <code>scale ∈ {1,2,4}</code>, so <code>4·x</code> is an
+integer vector; with integer labels <code>4A·y = 4·ΔT</code> where <code>A = [X_batchᵀ | −X_deletedᵀ]</code> is a
+12×36 <strong>integer</strong> matrix and the right-hand side is a <strong>12-vector of integers</strong> (we verify
+<code>4·ΔT</code> rounds to integers within 0.02). Now:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">vol( box ) / covol( column lattice of 4A )
+        =  4³⁶ / √det( 4A · (4A)ᵀ )   ≈  4.7e21 / 4.3e37   ≈  1e-16</code></pre>
+      
+    </figure><p>so the box <code>[0,3]³⁶ ∩ {4A y = 4·b}</code> contains <strong>essentially surely exactly one</strong> integer point.
+A tiny MILP - 36 integer variables, 12 exact equality constraints, bounds <code>[0,3]</code> - returns it
+(solved to optimality, residual 0). The first 10 values are the ingest batch&#39;s labels; the last
+26 are the deleted records&#39; labels (indices aligned with the list above):</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">ingest-e0449f2a labels : 2 0 1 3 0 2 2 2 2 2
+deleted labels         : 0 0 2 1 2 2 1 1 0 0 0 0 2 3 1 3 0 2 1 2 1 1 3 2 1 2</code></pre>
+      
+    </figure><h2 id="5-encode-and-open"><a class="wu-anchor" href="#5-encode-and-open" aria-hidden="true">#</a>5. Encode and open</h2>
+<p>ASCII-sort the 26 <code>record-id:label</code> strings and hand them to <code>unlock.py</code>:</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 unlock.py <span class="hljs-string">&#x27;[&quot;record-0730706150:0&quot;, ... ,&quot;record-ee9e7ec4d8:1&quot;]&#x27;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># -&gt; isfcr{763c8479fac095a9e471ad3d}</span></span></span></code></pre>
+      
+    </figure><p>The scrypt step (n=131072 → ~134 MB) is the only slow part.</p>
+<h2 id="6-dead-ends-worth-recording"><a class="wu-anchor" href="#6-dead-ends-worth-recording" aria-hidden="true">#</a>6. Dead ends worth recording</h2>
+<ul>
+<li><strong>Predicting labels from the model.</strong> Predictions are over-shrunk (<code>corr(θᵀx, y) ≈ 0.42</code>).
+Calibrating a linear map on the <em>known</em>-label ingest batches gives max residual 1.8 - useless.</li>
+<li><strong>Ordering snapshots by value/ivory.</strong> Only the <em>sparsity</em> of <code>H</code> differences orders the
+chain; cross-lineage differences (A→C, A→D, B→D) are dense and explain nothing by themselves.</li>
+<li><strong>Hoping the ingest batch&#39;s labels are &quot;obvious&quot;</strong> (e.g. all zero) so <code>ΔT</code> isolates the
+deleted labels - false; the min-norm solve is non-integer.</li>
+<li><strong>Naive <button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button>/Babai on an embedding</strong> to hit the box: the HNF particular solution has ~1e22
+coordinates and float Babai <code>round()</code> loses everything. The MILP on the <em>original</em> small-integer
+system is the robust route.</li>
+<li>An earlier bug - implementing the column-HNF negation as <code>A[:,c] -= (−2)·A[:,c]</code>
+(i.e. <code>·3</code>) instead of <code>·(−1)</code> - manufactured a spurious divisor-3 obstruction and briefly
+looked like &quot;no integer solution exists&quot;. Fixing it made all 12 HNF denominators 1.</li>
+</ul>
+<h2 id="7-files"><a class="wu-anchor" href="#7-files" aria-hidden="true">#</a>7. Files</h2>
+<ul>
+<li><code>solve.py</code> - end-to-end solver (<button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> inversion → stale-collapse → chain → deletion set →
+integral label MILP → answer), prints ANSWER and FLAG.</li>
+<li><code>data.json</code>, <code>unlock.py</code>, <code>the_deletion_echo.zip</code> - handouts, unchanged.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#0-the-handout">0. The handout</a></li><li><a href="#1-inverting-the-oracle-h-and-theta-fall-straight-out">1. Inverting the oracle: H and theta fall straight out</a></li><li><a href="#2-the-chain-and-the-stale-redeploy">2. The chain and the stale redeploy</a></li><li><a href="#3-naming-the-deleted-records">3. Naming the deleted records</a></li><li><a href="#4-recovering-the-labels-the-interesting-part">4. Recovering the labels (the interesting part)</a></li><li><a href="#5-encode-and-open">5. Encode and open</a></li><li><a href="#6-dead-ends-worth-recording">6. Dead ends worth recording</a></li><li><a href="#7-files">7. Files</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

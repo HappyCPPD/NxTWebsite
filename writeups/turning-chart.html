@@ -67,27 +67,151 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A statically-linked, stripped ELF64. The prompt&#39;s <code>?</code> is a decoy printing a retired dial and exiting (the blurb says &quot;kept for the museum, not for navigation&quot; - a tell to ignore it). Input must be exactly 39 bytes: <code>isfcr{</code> + 32 <code>[a-z0-9_]</code> chars + <code>}</code>, copied <strong>verbatim</strong> into a 32-byte state array with no hashing at all.</p>
-<p>A fixed 320-round &quot;needle&quot; state machine then runs. Crucially every round&#39;s parameters (op, indices, operands) come only from a fixed xorshift PRNG seeded at <code>0x73b59a26</code> and rolling accumulators - <strong>nothing depends on the input state</strong>. So the whole program is a fixed, invertible sequence of 320 byte-ops. Nine op types observed: rotate 8-byte window, rotate 4-byte strided window, swap, add-with-key, XOR-rotate, S-box substitute (runtime 256-byte table), a combine op, reverse a 4-byte window, no-op. The final state is compared against 32 hard-coded bytes XOR-masked by a second xorshift stream.</p>
-<p><strong>Method:</strong> gdb-logged the full 320-round op sequence and the runtime 256-byte permutation and final PRNG value. Reimplemented the 9 ops in Python; a forward pass with all-<code>&#39;a&#39;</code> input reproduced the binary&#39;s final state exactly, confirming the model. Recovered the required pre-XOR final state from the hard-coded target and the final xorshift stream, then applied each op&#39;s inverse over <code>reversed(ops)</code>.</p>
-<figure class="wu-code wu-code-output" data-lines="7">
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<ul>
+<li>The prompt asks for a &quot;course&quot;; <code>?</code> is a <strong>decoy</strong> - it prints a retired dial
+<code>4 1 7 0 9 2 5 3 8 6</code> and exits. The blurb (&quot;kept for the museum, not for navigation&quot;)
+is the tell that you should ignore it.</li>
+<li>Input must be exactly <strong>39 bytes</strong>: <code>isfcr{</code> + <strong>32</strong> <code>[a-z0-9_]</code> chars + <code>}</code>. The 32
+inner chars are copied <strong>verbatim</strong> into a 32-byte state array - there is no hashing of
+the input at all.</li>
+<li>A fixed <strong>320-round &quot;needle&quot; state machine</strong> then runs. Crucially, every round&#39;s
+parameters (which op, which indices, which operands) come only from a fixed xorshift
+PRNG seeded at <code>0x73b59a26</code> and rolling accumulators - <strong>nothing depends on the input
+state</strong>. So the whole program is a <em>fixed, invertible</em> sequence of 320 byte-ops.</li>
+<li>The final state is compared against 32 hard-coded bytes at <code>0x40211c</code>, XOR-masked by a
+second xorshift stream. Compute the required pre-mask final state, apply the op
+<strong>inverses in reverse order</strong>, and the 32 middle bytes fall straight out.</li>
+</ul>
+<hr>
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<figure class="wu-code wu-code-output" data-lines="4">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">num ops 320 rounds 0 319
+      <pre id="code-1"><code class="language-text">$ file turning_chart
+ELF 64-bit LSB executable, x86-64, statically linked, stripped
+$ strings -a -n 4 turning_chart | head
+... &quot;Course: &quot; ... &quot;Chart opened. Course restored.&quot; ... &quot;Museum dial (retired): 4 1 7 0 9 2 5 3 8 6&quot; ...</code></pre>
+      
+    </figure><p>Running it:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">$ ./turning_chart
+enter course: ?                 # decoy path
+Museum dial (retired): 4 1 7 0 9 2 5 3 8 6</code></pre>
+      
+    </figure><p>Disassembly shows the accepted input shape: <code>strncmp(buf,&quot;isfcr{&quot;,6)==0</code>,
+<code>buf[38]==&#39;}&#39;</code>, and the 32 bytes <code>buf[6..38)</code> are <code>memcpy</code>&#39;d into the state array. No
+<code>sha</code>/hash call touches the input.</p>
+<h2 id="2-the-state-machine"><a class="wu-anchor" href="#2-the-state-machine" aria-hidden="true">#</a>2. The state machine</h2>
+<p>Each of the 320 rounds derives, from the PRNG/accumulators only:</p>
+<ul>
+<li>a <strong>selector</strong> <code>sel</code> in <code>0..8</code> - chosen by indexing a fixed 10-entry dial built from
+<code>FNV-1a(&quot;a chart is a record of motion, not of place&quot;)</code> with PRNG byte #1;</li>
+<li>two state indices <code>i, j</code> (forced distinct) from accumulator-only arithmetic;</li>
+<li>an operand byte / shift <code>ecx</code> from the PRNG.</li>
+</ul>
+<p>The nine ops observed (implemented and matched byte-for-byte in the solver):</p>
+<table>
+<thead>
+<tr>
+<th>sel</th>
+<th>operation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td>rotate an 8-byte window by <code>(ecx%7)+1</code></td>
+</tr>
+<tr>
+<td>1</td>
+<td>rotate a 4-byte strided window by <code>(ecx%3)+1</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>swap <code>s[i], s[j]</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>s[j] = (s[j] + ((ecx + s[i]) &amp; 0xff)) &amp; 0xff</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>s[j] ^= rol8(s[i], ecx)</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>s[j] = P256[(s[j] ^ ecx) &amp; 0xff]</code> (runtime 256-byte S-box)</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>t=s[i]; s[i]=s[j] ^ P256[(ecx + s[j]) &amp; 0xff]; s[j]=t</code>-style combine</td>
+</tr>
+<tr>
+<td>7</td>
+<td>reverse a 4-byte window (<code>s[base+k] &lt;-&gt; s[base+7-k]</code>)</td>
+</tr>
+<tr>
+<td>8</td>
+<td>no-op at this site</td>
+</tr>
+</tbody></table>
+<h2 id="3-method"><a class="wu-anchor" href="#3-method" aria-hidden="true">#</a>3. Method</h2>
+<ol>
+<li><strong>gdb</strong>-logged the full 320-round op sequence (<code>OP r sel i j ecx r9 r14 edx esi</code>) at the
+dispatch point, plus the runtime 256-byte permutation <code>P256</code> and the final PRNG value
+(<code>EDI = 3162747899</code>).</li>
+<li>Reimplemented the 9 ops in Python. Forward pass with an all-<code>&#39;a&#39;</code> input reproduced the
+binary&#39;s final state <strong>exactly</strong> (<code>forward match: True</code>) - the model is correct.</li>
+<li>Recovered the required pre-XOR final state from the hard-coded target at <code>0x40211c</code>
+and the final xorshift stream (<code>EDI ^ 0xd06f27b5</code>).</li>
+<li>Applied each op&#39;s inverse over <code>reversed(ops)</code> → the 32 middle bytes.</li>
+</ol>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">num ops 320 rounds 0 319
 forward match: True
 mid bytes: b'3v3ry_r0ut3_r3m3mb3rs_1ts_0r1g1n'
-re-fwd match: True
-$ printf 'isfcr{3v3ry_r0ut3_r3m3mb3rs_1ts_0r1g1n}\n' | ./turning_chart
+re-fwd match: True</code></pre>
+      
+    </figure><h2 id="4-proof"><a class="wu-anchor" href="#4-proof" aria-hidden="true">#</a>4. Proof</h2>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">$ printf 'isfcr{3v3ry_r0ut3_r3m3mb3rs_1ts_0r1g1n}\n' | ./turning_chart
 Course: Chart opened. Course restored.
 exit=0</code></pre>
       
-    </figure><p>&quot;Every route remembers its origin&quot;: the transform is a fixed, data-independent op program, so it is trivially invertible. The decoy dial and the missing input dependency are the two traps - the machine is a bijection, not a one-way function.</p>
+    </figure><h2 id="5-files"><a class="wu-anchor" href="#5-files" aria-hidden="true">#</a>5. Files</h2>
+<ul>
+<li><code>solve.py</code> - full forward/inverse emulator + solver (see <code>solve/</code>).</li>
+<li>The 32-byte S-box (<code>p256</code>) and the 320-round op trace are reproduced by the solver.</li>
+</ul>
+<h2 id="6-takeaway"><a class="wu-anchor" href="#6-takeaway" aria-hidden="true">#</a>6. Takeaway</h2>
+<p>&quot;Every route remembers its origin&quot;: the transform is a fixed, data-independent op program,
+so it is trivially invertible. The decoy dial and the missing input dependency are the two
+traps - the machine is a <em>bijection</em>, not a one-way function.</p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-the-state-machine">2. The state machine</a></li><li><a href="#3-method">3. Method</a></li><li><a href="#4-proof">4. Proof</a></li><li><a href="#5-files">5. Files</a></li><li><a href="#6-takeaway">6. Takeaway</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

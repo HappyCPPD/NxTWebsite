@@ -7,7 +7,20 @@
 
 ---
 
-**TL;DR**
+- **Event:** Byteme 2026 (CTF7)
+- **Challenge:** Soul Forge
+- **Author:** Pratik Jadhav
+- **Category:** Cryptography
+- **Difficulty:** Easy (100 pts)
+- **Flag format:** `OWASP{...}`
+
+## Flag
+
+```
+OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4nd0m}
+```
+
+## TL;DR
 
 Two ciphertexts encrypted with the same keystream (two-time pad). XOR the
 ciphertexts to cancel the keystream, then crib-drag the XOR to recover both
@@ -39,7 +52,7 @@ XOR T1 and T2 over their 57-byte overlap:
 
 ```
 X = T1 XOR T2
-  = 00000000000000000000000  (first 12 bytes - shared prefix)
+  = 00000000000000000000000  (first 12 bytes — shared prefix)
     01e00100104137f0075032936701d1c4212097f14
     551f02083d1500424d56053a460b132c0f50045a
     1436115140
@@ -52,15 +65,15 @@ All bytes are below `0x80` - both plaintexts are printable ASCII.
 Starting from the identical prefix, cribs were tested against X to find
 English text in one message and leet-speak flag content in the other.
 
-**Shared prefix (positions 0-11):** Both messages start with `Soul Forge: `
+**Shared prefix (positions 0 - 11):** Both messages start with `Soul Forge: `
 (12 bytes, all-zero XOR confirms identical text).
 
-**Positions 12-17:** XOR bytes `1e 00 10 01 04 13` match the word pair
+**Positions 12 - 17:** XOR bytes `1e 00 10 01 04 13` match the word pair
 `Secret` / `Messag`. The XOR at position 18 is `0x7f`, which forces a
 punctuation/special character pair (`_` / space).
 
-**Positions 20-56:** The crib `:The forge remembers every sacrifice.`
-tested against X produces clean leet-speak output:
+**Positions 20 - 56:** The crib `:The forge remembers every sacrifice.` tested
+against X produces clean leet-speak output:
 
 ```
 P1[20:57] = ":The forge remembers every sacrifice."
@@ -72,18 +85,17 @@ underscores in coherent leet speak ("soul forge primes are never r4n...").
 
 ## 4. Completing the flag
 
-The recovered flag text ends at `...r4n` (position 56) - the overlap
-boundary. T2 has 20 more bytes beyond T1's length, but those can't be
-decrypted from the pair alone since there's no corresponding T1 data and the
-keystream doesn't repeat.
+The recovered flag text ends at `...r4n` (position 56) - the overlap boundary.
+T2 has 20 more bytes beyond T1's length, but those can't be decrypted from the
+pair alone since there's no corresponding T1 data and the keystream doesn't
+repeat.
 
 The partial `r4n` strongly suggests `r4nd0m` ("random"), giving:
 
 > **soul forge primes are never random**
 
 This is cryptographically meaningful - non-random primes break public-key
-cryptography - and fits the challenge's crypto theme. Submitted and
-confirmed:
+cryptography - and fits the challenge's crypto theme. Submitted and confirmed:
 
 ```
 OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4nd0m}
@@ -107,17 +119,18 @@ $ python3 solve.py
 [*] P2 (flag msg)  = Soul Forge: Messag  OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4n
 [+] Verified: keystream re-encrypts both plaintexts to original ciphertexts
 [*] Partial flag from overlap: OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4n
-[*] Ends with 'r4n' - completing as 'r4nd0m' ("random", cryptographically meaningful)
+[*] Ends with 'r4n' — completing as 'r4nd0m' ("random", cryptographically meaningful)
 [+] FLAG: OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4nd0m}
 ```
 
 ## Key takeaways
 
-- Two ciphertexts sharing a prefix = **reused keystream**. XOR them to
-  cancel the key material.
-- **Crib dragging** on `P1 XOR P2`: guess a word in one message, XOR it
-  against X, check if the result is plausible text in the other message.
+- Two ciphertexts sharing a prefix = **reused keystream**. XOR them to cancel
+  the key material.
+- **Crib dragging** on `P1 XOR P2`: guess a word in one message, XOR it against
+  X, check if the result is plausible text in the other message.
 - The `0x7f` XOR byte at position 18 was a constraint that narrowed the
   character pair to `_` / space - useful for bootstrapping the crib drag.
 - When the flag extends beyond the overlap, context and domain knowledge
   ("primes are never random") fill the gap.
+

@@ -67,36 +67,122 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>An arithmetization-oriented permutation on <code>GF(p)^2</code>, p = 2 (mod 3): <code>(x, y) &lt;- ( cbrt(x + y + c_i), x )</code> for <code>i = 0 .. 19</code>. <code>cbrt(v) = v^e</code>, <code>3e = 1 mod (p-1)</code>, so cubing is a bijection and the round map is invertible. <strong>CICO:</strong> find <code>x</code> such that <code>P(x, 0)</code> has second output coordinate <code>0</code>. The flag is AES-GCM sealed under <code>SHA256(str(min_solution))</code>.</p>
-<p><strong>Key observation - flatten the chain:</strong> let <code>x_i</code> denote the first coordinate after round <code>i</code>, starting pair <code>(x_0, y_0) = (x, 0)</code>. Because <code>y_{i+1} = x_i</code>, the round relation becomes a scalar 3-term recurrence <code>x_{i+1}^3 = x_i + x_{i-1} + c_i</code> (with <code>x_{-1} = 0</code>), solvable in either direction: forward <code>x_{i+1} = cbrt(x_i + x_{i-1} + c_i)</code>, backward <code>x_{i-1} = x_{i+1}^3 - x_i - c_i</code>. The CICO constraint <code>P(x,0)[1] = 0</code> is exactly <code>y_20 = x_19 = 0</code>, and the start gives <code>x_{-1} = 0</code>.</p>
-<p><strong>The trick:</strong> encode <code>x_{i-1}</code> as a polynomial in the final coordinate <code>t = x_20</code>, imposing <code>x_19 = 0</code>: <code>P[20] = t, P[19] = 0, P[i-1] = P[i+1]^3 - P[i] - c_i</code>. Then <code>F = P[-1]</code> is the polynomial whose roots <code>t</code> satisfy both boundary conditions. The forward map raises degree by ~3 per round, but the <em>backward</em> recurrence only triples degree every <strong>two</strong> steps: <code>deg P = 1, 0, 3, 3, 9, 9, 27, ..., 3^10</code>, so <code>deg F = 3^10 = 59049</code> - tiny. The CICO reduces to finding GF(p) roots of a degree-59049 polynomial: <code>G = gcd(F, x^p - x)</code>.</p>
-<p>Because <code>p = 2 mod 3</code> the cube root is a bijection, so there is no branching; the gcd came out of degree 2, i.e. <strong>2 CICO solutions</strong>. Walk the chain back to <code>x_0</code> from each <code>t</code>-root, keep the ones landing at <code>x_{-1}=0</code> with <code>P(x_0,0)[1]=0</code>, and take the smallest.</p>
-<figure class="wu-code wu-code-output" data-lines="3">
+<p>Flag: <code>isfcr{b4ckw4rds_1s_h4lf_th3_d3gr33}</code></p>
+<h2 id="the-problem"><a class="wu-anchor" href="#the-problem" aria-hidden="true">#</a>The problem</h2>
+<p>An arithmetization-oriented style permutation on <code>GF(p)^2</code>, p = 2 (mod 3):</p>
+<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">x = 1093395384440720767   (smallest of 2 solutions)
-key = SHA256(&quot;1093395384440720767&quot;)
-flag = isfcr{b4ckw4rds_1s_h4lf_th3_d3gr33}</code></pre>
+      <pre id="code-1"><code class="language-text">(x, y) &lt;- ( cbrt(x + y + c_i), x )        i = 0 .. 19</code></pre>
       
-    </figure><p>Requires <code>python-flint</code> (fast <code>nmod_poly</code>) and <code>pycryptodome</code>:</p>
-<figure class="wu-code wu-code-output" data-lines="3">
+    </figure><p><code>cbrt(v) = v^e</code>, <code>3e = 1 mod (p-1)</code>, so cubing is a bijection and the round map
+is invertible. <strong>CICO:</strong> find <code>x</code> such that <code>P(x, 0)</code> has second output
+coordinate <code>0</code>. The flag is AES-GCM sealed under <code>SHA256(str(min_solution))</code>.</p>
+<h2 id="key-observation-flatten-the-chain"><a class="wu-anchor" href="#key-observation-flatten-the-chain" aria-hidden="true">#</a>Key observation: flatten the chain</h2>
+<p>Let <code>x_i</code> denote the first coordinate after round <code>i</code>, with the starting pair
+<code>(x_0, y_0) = (x, 0)</code>. Because <code>y_{i+1} = x_i</code>, the round relation
+<code>x_{i+1} = cbrt(x_i + y_i + c_i)</code> becomes a scalar 3-term recurrence:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">python3 -m venv /var/tmp/flintenv
+      <pre id="code-2"><code class="language-text">x_{i+1}^3 = x_i + x_{i-1} + c_i          (with x_{-1} = 0)</code></pre>
+      
+    </figure><p>which can be solved <strong>in either direction for free</strong>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">forward :  x_{i+1} = cbrt(x_i + x_{i-1} + c_i)
+backward:  x_{i-1} = x_{i+1}^3 - x_i - c_i</code></pre>
+      
+    </figure><p>The CICO constraint <code>P(x,0)[1] = 0</code> is exactly <code>y_20 = x_19 = 0</code>, and the
+start gives <code>x_{-1} = 0</code>. Two &quot;boundary&quot; coordinates pin the chain.</p>
+<h2 id="what-the-author-does-and-we-replicate"><a class="wu-anchor" href="#what-the-author-does-and-we-replicate" aria-hidden="true">#</a>What the author does (and we replicate)</h2>
+<p>Encode <code>x_{i-1}</code> as a polynomial in the final coordinate <code>t = x_20</code>, imposed
+<code>x_19 = 0</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">P[20] = t ,  P[19] = 0 ,  P[i-1] = P[i+1]^3 - P[i] - c_i</code></pre>
+      
+    </figure><p>Then <code>F = P[-1]</code> is the polynomial whose roots <code>t</code> are the values of <code>x_20</code>
+consistent with both boundary conditions. <code>F = 0</code> is the CICO condition on the
+start <code>x_{-1}=0</code>.</p>
+<p>The forward map raises degree by ~3 per round, but the <em>backward</em> recurrence
+(the cube is the expensive direction in the forward direction - hence the
+&quot;no free lunch&quot; title) only triples degree every <strong>two</strong> steps:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">deg P = 1, 0, 3, 3, 9, 9, 27, ..., 3^10</code></pre>
+      
+    </figure><p>so <strong>deg F = 3^10 = 59049</strong> - tiny. The whole CICO reduces to finding the GF(p)
+roots of a degree-59049 polynomial:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">G = gcd(F, x^p - x)      # squarefree product of the GF(p) roots of F</code></pre>
+      
+    </figure><p>Because p = 2 mod 3 the cube root is a bijection, so there is no branching to
+manage; the gcd came out of degree 2, i.e. <strong>2 CICO solutions</strong> (&quot;twenty cube
+roots&quot; in the blurb, but only two consistent preimages). We then walk the chain
+back to <code>x_0</code> from each <code>t</code>-root, keep the ones landing at <code>x_{-1}=0</code> with
+<code>P(x_0,0)[1]=0</code>, and take the smallest.</p>
+<h2 id="answer"><a class="wu-anchor" href="#answer" aria-hidden="true">#</a>Answer</h2>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">x = 1093395384440720767   (smallest of 2 solutions)
+key = SHA256(&quot;1093395384440720767&quot;)
+flag = isfcr{b4ckw4rds_1s_h4lf_th3_d3gr33}</code></pre>
+      
+    </figure><h2 id="reproduce"><a class="wu-anchor" href="#reproduce" aria-hidden="true">#</a>Reproduce</h2>
+<p>Requires <code>python-flint</code> (fast <code>nmod_poly</code>) and <code>pycryptodome</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">python3 -m venv /var/tmp/flintenv
 /var/tmp/flintenv/bin/pip install python-flint pycryptodome
 /var/tmp/flintenv/bin/python solve.py</code></pre>
       
-    </figure><p>Runs in ~6 s; <code>deg F = 59049</code>, <code>deg gcd = 2</code>. The bit that makes it fast is doing the polynomial recursion <strong>backwards</strong> (cube only every other round) and using FLINT&#39;s <code>pow_mod</code> for <code>x^p mod F</code>.</p>
-<p><strong>Lesson:</strong> &quot;Trivial to evaluate, huge forward degree&quot; is a trap only if you attack the forward direction. The cube-root round is cheap to <em>invert</em>; expressing the condition in the inverse recurrence collapses the degree from <code>~3^19</code> to <code>~3^10</code> and makes the CICO a small root-finding problem.</p>
+    </figure><p>Runs in ~6 s; <code>deg F = 59049</code>, <code>deg gcd = 2</code>. The bit that makes it fast is
+doing the polynomial recursion <strong>backwards</strong> (cube only every other round) and
+using FLINT&#39;s <code>pow_mod</code> for <code>x^p mod F</code>.</p>
+<h2 id="lesson"><a class="wu-anchor" href="#lesson" aria-hidden="true">#</a>Lesson</h2>
+<p>&quot;Trivial to evaluate, huge forward degree&quot; is a trap only if you attack the
+forward direction. The cube-root round is cheap to <em>invert</em>; expressing the
+condition in the inverse recurrence collapses the degree from <code>~3^19</code> to
+<code>~3^10</code> and makes the CICO a small root-finding problem.</p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#the-problem">The problem</a></li><li><a href="#key-observation-flatten-the-chain">Key observation: flatten the chain</a></li><li><a href="#what-the-author-does-and-we-replicate">What the author does (and we replicate)</a></li><li><a href="#answer">Answer</a></li><li><a href="#reproduce">Reproduce</a></li><li><a href="#lesson">Lesson</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

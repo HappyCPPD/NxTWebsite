@@ -7,8 +7,23 @@
 
 ---
 
-**Challenge:** "A memory dump from a Soul Vault process contains traces of a
-recovered fragment. Find the hidden information inside the process data."
+- Event: CTF7 (Byteme 2026)
+- Category: Forensics
+- Author: Pratik Jadhav
+- Points: 100 (Easy)
+- Solves: 96
+- Flag format: `OWASP{...}`
+
+## Flag
+
+```
+OWASP{s0ul_m3m0ry_n3v3r_d13s}
+```
+
+## Challenge
+
+> A memory dump from a Soul Vault process contains traces of a recovered
+> fragment. Find the hidden information inside the process data.
 
 Attachment: `memory_dump.txt` (148 bytes).
 
@@ -16,8 +31,8 @@ Attachment: `memory_dump.txt` (148 bytes).
 
 Despite the "memory dump" framing, the attachment is a small plain-text
 `PROCESS MEMORY EXTRACT` - not a raw hex/core dump. So no volatility /
-binwalk / strings-on-binary stage was needed; a single read reveals the
-whole structure.
+binwalk / strings-on-binary stage was needed; a single read reveals the whole
+structure.
 
 ```
 PROCESS MEMORY EXTRACT
@@ -46,4 +61,5 @@ grep -o 'OWASP{[^}]*}' memory_dump.txt
 
 The `data=` line held the flag in cleartext. The `vault_hint` text is a
 rabbit hole; the real trick is just reading the process-extract artifact
-end-to-end.
+end-to-end. Flag: `OWASP{s0ul_m3m0ry_n3v3r_d13s}`.
+

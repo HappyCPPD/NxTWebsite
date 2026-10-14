@@ -54,7 +54,7 @@
     
     <div class="page-head-body">
       <h1>Writeups</h1>
-      <div class="page-meta">97 writeups across 6 events</div>
+      <div class="page-meta">101 writeups across 6 events</div>
       <p class="page-desc">How each challenge was solved, root cause first and then the exploit. Grouped by event.</p>
       
     </div>
@@ -87,7 +87,7 @@
           <button type="button" class="chip" data-event="tfc-ctf-26" aria-pressed="false">TFC CTF 26</button>
         </div>
       </div>
-      <p class="wu-count" id="wuCount" aria-live="polite">97 writeups</p>
+      <p class="wu-count" id="wuCount" aria-live="polite">101 writeups</p>
     </div>
 
   <div class="wu-groups" id="wuGroups">
@@ -497,7 +497,7 @@
       <span><b>24</b> solves</span>
       <span><b>NxT, TxN</b></span>
         </div>
-        <p class="wu-eventgroup-count" data-count>21 writeups</p>
+        <p class="wu-eventgroup-count" data-count>25 writeups</p>
       </div>
       <ul class="wu-list-rows">
         <li class="wu-row" data-cat="forensics">
@@ -578,6 +578,38 @@
             <span class="wu-cat wu-cat-forensics">forensics</span>
             <span class="wu-row-pts">200 pts</span>
             <span class="wu-row-blurb">One process does not belong: SoulHunt_7F31 spawned from powershell.exe. Its command line and dumped strings show it is a renamed copy of PowerShell.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="writeups/echoes-of-vormir-mem-3.html">
+            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-3</span><span class="wu-row-sub">a painted image cached in memory</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-pts">300 pts</span>
+            <span class="wu-row-blurb">The hint says the answer is something seen. Filescan on the dump lists a cached Sacrifice.png, and dumping it shows a wallpaper with the flag painted on top in black text.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="writeups/echoes-of-vormir-mem-4.html">
+            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-4</span><span class="wu-row-sub">a leftover fragment in command history</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-pts">250 pts</span>
+            <span class="wu-row-blurb">A fragment survives outside the tidy mapped files. Console and heap leftovers in the raw dump carry a hex-encoded OWASP flag from the same family, which decodes with xxd. The value is a reconstruction, not confirmed against the scoreboard.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="writeups/echoes-of-vormir-mem-5.html">
+            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-5</span><span class="wu-row-sub">browser history in the memory dump</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-pts">200 pts</span>
+            <span class="wu-row-blurb">The last trace is browser activity. Carving the mapped History object shows Bing searches for FTK Imager and winpmem, and the dump holds the matching flag in hex and UTF-16LE form.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="writeups/echoes-of-vormir-mem-6.html">
+            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-6</span><span class="wu-row-sub">the forgotten expedition note</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-pts">250 pts</span>
+            <span class="wu-row-blurb">A small expedition.txt note is carved from memory. Its artifact reference is a hex string that decodes straight to the flag.</span>
           </a>
         </li>
         <li class="wu-row" data-cat="forensics">

@@ -67,21 +67,95 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A tiny shared block editor; blocks form a CRDT-like tree ordered by <code>(clock, id)</code>, with two pinned markers (<code>private_start</code>/<code>private_end</code>) defining a confidential range of the linearized document. The UI redacts rows whose linearized <code>index</code> falls inside that range, and <code>/api/export/public</code> is the published view.</p>
-<p><code>GET /api/document</code> returns every block including <code>is_private</code>/<code>content</code> - the redaction is <strong>presentation only</strong>: it&#39;s computed by comparing each block&#39;s <code>index</code> against the pin positions at request time, while the raw content is always shipped. The confidential block (<code>blk_flag</code>, containing the flag) sits at <code>index 10</code>, but the pins currently sit at positions 19 and 22 - the window has drifted away from the content it was meant to protect, because the range is <strong>recomputed on every merge/reinsert</strong> (e.g. inserting a block at the head with a maximal clock value shifts every later block&#39;s index upward) while the protected content&#39;s identity never moves.</p>
-<figure class="wu-code" data-lines="2">
+<p>Target: <a href="https://isfcrpesu-draftpad.chals.io">https://isfcrpesu-draftpad.chals.io</a>
+Category: Web
+Flag: <code>isfcr{merge_shifts_the_wall_not_the_window}</code></p>
+<h2 id="premise"><a class="wu-anchor" href="#premise" aria-hidden="true">#</a>Premise</h2>
+<p>A tiny shared block editor. Blocks form a tree (id + parent_id), ordered
+&quot;linearly&quot; by a (clock, id) scheme reminiscent of a CRDT. Two pinned markers
+(&quot;private_start&quot;/&quot;private_end&quot;) define a confidential <em>range</em> of the linearized
+document. The UI redacts any row whose linearized index falls inside that range.
+The published export at <code>/api/export/public</code> is what gets shared.</p>
+<h2 id="recon"><a class="wu-anchor" href="#recon" aria-hidden="true">#</a>Recon</h2>
+<p>Static Express app. <code>/app.js</code> reveals the full client API surface:</p>
+<ul>
+<li><code>GET  /api/document</code>      -&gt; <code>{ ok, blocks[], pins[] }</code></li>
+<li><code>GET  /api/log</code>           -&gt; recent operation log (seq, op_type, payload, verdict, note)</li>
+<li><code>GET  /api/export/public</code> -&gt; plaintext export</li>
+<li><code>POST /api/ops</code>           -&gt; <code>{type:&quot;insert&quot;|&quot;delete&quot;, ...}</code> mutation</li>
+</ul>
+<p><code>/api/document</code> returns every block with <code>is_private</code> / <code>is_pinned</code> flags and a
+linearized <code>index</code>. The redaction is <em>presentation only</em>: the redaction decision
+is made by comparing each block&#39;s <code>index</code> against the pin positions, while the
+raw <code>content</code> is still shipped to the client.</p>
+<h2 id="the-bug-off-by-position-range-drift"><a class="wu-anchor" href="#the-bug-off-by-position-range-drift" aria-hidden="true">#</a>The bug (off-by-position / range drift)</h2>
+<p>Pins as returned:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">private_start -&gt; blk_pstart  position 19
+private_end   -&gt; blk_pend    position 22</code></pre>
+      
+    </figure><p>Redacted rows are those with <code>19 &lt;= index &lt; 22</code> (indices 19,20,21). But the
+actually confidential block:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">index 10  id blk_flag  content &quot;release flag: isfcr{merge_shifts_the_wall_not_the_window}&quot;</code></pre>
+      
+    </figure><p>sits at index 10 - far <em>outside</em> the [19,22) window. The confidential range was
+&quot;shifted&quot; away from its contents, so <code>blk_flag</code> is served unredacted (is_private
+false), and <code>/api/export/public</code> also dumps it verbatim.</p>
+<p>Root cause: safety is enforced by a positional range that is recomputed on every
+merge/reinsert (a block inserted at the head with a top clock value, e.g.
+<code>wall-test-1</code> clock=1000000 -&gt; <code>expected_index=0</code>, shifts every later block&#39;s
+index upward). The wall moves, the protected content does not. Hence the flag
+text: <em>&quot;merge shifts the wall, not the window.&quot;</em></p>
+<h2 id="exploit"><a class="wu-anchor" href="#exploit" aria-hidden="true">#</a>Exploit</h2>
+<p>Nothing to compute - the leak is the default response:</p>
+<figure class="wu-code" data-lines="5">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
-        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">curl -s https://isfcrpesu-draftpad.chals.io/api/document | grep -o <span class="hljs-string">&#x27;isfcr{[^}]*}&#x27;</span></span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># isfcr{merge_shifts_the_wall_not_the_window}</span></span></span></code></pre>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">curl -s https://isfcrpesu-draftpad.chals.io/api/document | grep -o <span class="hljs-string">&#x27;isfcr{[^}]*}&#x27;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># isfcr{merge_shifts_the_wall_not_the_window}</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">curl -s https://isfcrpesu-draftpad.chals.io/api/export/public</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"><span class="hljs-comment"># ... release flag: isfcr{merge_shifts_the_wall_not_the_window} ...</span></span></span></code></pre>
       
-    </figure><p>The op log confirms the mechanism: front-insertions with high clocks visibly shift <code>expected_index</code>, and a delete attempt on a block whose index has drifted into the pin window is explicitly rejected as &quot;inside the private range&quot; - proving the range really is index-based, not content-based. Fix: never gate confidentiality on a derived positional index; tag protected blocks with an explicit private attribute and redact by identity, server-side, before serialization.</p>
+    </figure><h2 id="notes-corroborating-evidence"><a class="wu-anchor" href="#notes-corroborating-evidence" aria-hidden="true">#</a>Notes / corroborating evidence</h2>
+<ul>
+<li>Op log confirms the mechanism: repeated <code>insert</code> with <code>clock:1000000</code> reports
+<code>expected_index=0</code> (front-insertion shifts everything), and delete of a block
+whose index drifted into the pin window is rejected with
+&quot;block is inside the private range&quot; (seq 48/29) - the range really is
+index-based, not content-based.</li>
+<li>Deleting pinned blocks is blocked (&quot;pinned block cannot be deleted&quot;), and
+clocks are capped (<code>&gt;1000000</code> -&gt; &quot;invalid clock&quot;), so the intended solve path
+is likely a merge that shifts the vertical position of the confidential block
+<em>out</em> of the pinned window - which prior probing already achieved, leaving the
+flag exposed.</li>
+</ul>
+<h2 id="fix"><a class="wu-anchor" href="#fix" aria-hidden="true">#</a>Fix</h2>
+<p>Do not gate confidentiality on a derived positional index. Tag the protected
+blocks with an explicit private attribute (or a stable membership set) and redact
+by identity, server-side, before serialization - never trust a range that any
+peer&#39;s merge can move.</p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#premise">Premise</a></li><li><a href="#recon">Recon</a></li><li><a href="#the-bug-off-by-position-range-drift">The bug (off-by-position / range drift)</a></li><li><a href="#exploit">Exploit</a></li><li><a href="#notes-corroborating-evidence">Notes / corroborating evidence</a></li><li><a href="#fix">Fix</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

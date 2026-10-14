@@ -67,19 +67,184 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>Solved with the <strong>polynomial-time ROS attack</strong> (Benhamouda-Lepoint-Loss-Orrù-Raykova, Eurocrypt 2021): 256 parallel sessions, a few lines of modular arithmetic, ~4.5 s against the live service. No Wagner k-tree, no big memory.</p>
-<p><strong>The service:</strong> <code>wss://one-more.isfcr.xyz</code> is a blind Schnorr signing <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> on secp256k1. Per connection it draws a fresh secret <code>x ← Z_n</code> and publishes <code>X = xG</code>. Protocol: <code>open</code> returns <code>id k R</code> (<code>R = rG</code>); <code>sign &lt;k&gt; &lt;c&gt;</code> returns <code>s = (r + c·x) mod n</code> once per session; <code>submit</code> with a JSON list of signatures wins if <code>good &gt; answered</code>. A submitted signature <code>[m_hex, Rx, Ry, s]</code> counts iff <code>s·G == R + H(R, m)·X</code>. Limits: <code>MAX_SESSIONS=512</code>, <code>MAX_SUBMIT=600</code>.</p>
-<p><strong>Why the &quot;obvious&quot; attack is a trap:</strong> the classical break is Wagner&#39;s <code>(ℓ+1)</code>-sum/k-tree attack on ROS, costing ~2³⁴ hash evaluations and tens of GB RAM for a 256-bit curve - infeasible on a 16 GB machine. Wagner is the <em>generic</em> algorithm, but ROS is not generically hard when the attacker controls the dimension: with <code>ℓ ≈ log₂(n) = 256</code> concurrent sessions, there is a <strong>polynomial-time</strong> solver.</p>
-<p><strong>The math:</strong> open ℓ sessions with nonces <code>R_0..R_{ℓ-1}</code>. For coefficient vector <code>a</code>, <code>R = Σ a_j R_j</code>, <code>s = Σ a_j s_j</code> gives <code>s·G = R + (Σ a_j c_j)·X</code>, valid iff <code>Σ a_j c_j ≡ H(R, m) (mod n)</code>. Use ℓ singletons (<code>a = e_j</code>, forcing <code>c_j = H(R_j, m_j)</code>) plus one aggregate (<code>a = ρ</code>).</p>
-<p><strong>The binary-choice gadget:</strong> for each session, prepare two messages, <code>d_j = (h_j^1 - h_j^0) mod n</code>. Pick <code>ρ_j = 2^j · d_j^{-1} (mod n)</code>. Flipping session <code>j</code>&#39;s message changes the aggregate sum by exactly <code>2^j</code> - each session becomes an independent bit of weight <code>2^j</code>. Fix aggregate nonce <code>R* = Σ ρ_j R_j</code>, target <code>T = H(R*, m*)</code>, baseline <code>L0 = Σ ρ_j h_j^0</code>, <code>v = (T − L0) mod n</code>. Since <code>v &lt; 2^256</code>, its binary expansion directly picks which message/challenge to use per session - no search.</p>
-<p><strong>Assembling the win:</strong> sign each session once (<code>c_j = h_j^{bit_j}</code>), submit 256 singletons + 1 aggregate = 257 valid signatures from 256 sign calls → <code>good = 257 &gt; answered = 256</code> → one more!</p>
-<figure class="wu-code wu-code-output" data-lines="8">
+<h2 id="1-the-service"><a class="wu-anchor" href="#1-the-service" aria-hidden="true">#</a>1. The service</h2>
+<p><code>wss://one-more.isfcr.xyz</code> - about 40 lines of real crypto in <code>server.py</code>. It is a
+<strong>blind Schnorr signing <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> on secp256k1</strong> (group order <code>n</code>, generator <code>G</code>).
+Per <em>connection</em> it draws a fresh secret <code>x ← Z_n</code> and publishes <code>X = xG</code>.</p>
+<p>Protocol (one command per websocket message):</p>
+<figure class="wu-code wu-code-output" data-lines="5">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">X = 6e50692dae1d2014598197dc3bbc46e9...
+      <pre id="code-1"><code class="language-text">server → &quot;X &lt;hex128&gt;&quot;                              # X = xG for this connection
+open                → &quot;id k R &lt;hex128&gt;&quot;            # R = rG, r uniform, ser(P)=x||y (64B)
+sign &lt;k&gt; &lt;c&gt;        → &quot;s &lt;int&gt;&quot;                    # s = (r + c·x) mod n, ONE answer per session
+submit  then &lt;json&gt; → &quot;valid &lt;good&gt; answered &lt;ans&gt;&quot;
+                       + &quot;one more! &lt;FLAG&gt;&quot;  iff good &gt; ans</code></pre>
+      
+    </figure><p>A submitted signature <code>[m_hex, Rx, Ry, s]</code> counts iff</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">s·G == R + H(R, m)·X        with   H(R,m) = SHA256(ser(R) ‖ m) mod n</code></pre>
+      
+    </figure><p>and messages must be <strong>distinct</strong>. Limits: <code>MAX_SESSIONS=512</code>, <code>MAX_SUBMIT=600</code>,
+<code>MAX_COMMANDS=1088</code>, and a 1800 s per-connection timeout.</p>
+<p><strong>Win condition:</strong> hand back strictly <strong>more</strong> valid signatures than the number of
+<code>sign</code> calls the oracle answered.</p>
+<p>This is textbook blind-Schnorr <em>one-more unforgeability</em>. The service even tells you
+the deal: &quot;one signature per session, no exceptions - come back with more than that.&quot;</p>
+<hr>
+<h2 id="2-why-the-obvious-attack-is-a-trap"><a class="wu-anchor" href="#2-why-the-obvious-attack-is-a-trap" aria-hidden="true">#</a>2. Why the &quot;obvious&quot; attack is a trap</h2>
+<p>The classical break is <strong>Wagner&#39;s <code>(ℓ+1)</code>-sum / k-tree attack</strong> on the ROS problem.
+It works, but for a 256-bit curve it costs on the order of <strong>2³⁴ hash evaluations and
+tens of GB of RAM</strong> for the k-tree. Two earlier sessions on this box burned all their
+time trying to shoehorn that k-tree (≈ 29 - 59 GB working set) onto a 16 GB machine with
+NVMe swap. That memory wall was the whole blocker.</p>
+<p>Wagner is the <em>generic</em> algorithm for ROS. But ROS is <strong>not</strong> generically hard when the
+attacker controls the dimension: if you can open <strong>ℓ ≈ log₂(n)</strong> concurrent sessions,
+there is a <strong>polynomial-time</strong> solver (Benhamouda et al. 2021). secp256k1&#39;s order is
+256 bits and the service allows up to 512 sessions - so ℓ = 256 sessions is plenty, and
+the whole thing becomes deterministic linear algebra. That is the intended solution.</p>
+<hr>
+<h2 id="3-the-math"><a class="wu-anchor" href="#3-the-math" aria-hidden="true">#</a>3. The math</h2>
+<h3 id="31-linear-structure-of-combined-signatures"><a class="wu-anchor" href="#31-linear-structure-of-combined-signatures" aria-hidden="true">#</a>3.1 Linear structure of combined signatures</h3>
+<p>Open ℓ sessions with nonces <code>R_0, …, R_{ℓ-1}</code>. We will hand session <code>j</code> a challenge
+<code>c_j</code> and receive <code>s_j = r_j + c_j·x</code>.</p>
+<p>Take any integer coefficient vector <code>a = (a_0,…,a_{ℓ-1})</code> and a message <code>m</code>, and form</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">R = Σ_j a_j R_j        s = Σ_j a_j s_j</code></pre>
+      
+    </figure><p>Then</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">s·G = Σ_j a_j (r_j + c_j·x)·G = (Σ_j a_j R_j) + (Σ_j a_j c_j)·X = R + (Σ_j a_j c_j)·X</code></pre>
+      
+    </figure><p>so <code>(R, s)</code> is a <strong>valid signature on <code>m</code></strong> iff</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">Σ_j a_j c_j  ≡  H(R, m)   (mod n)          (★)</code></pre>
+      
+    </figure><p>We get to choose the <code>a_j</code>, the messages, and (crucially) the challenges <code>c_j</code>.
+Produce ℓ+1 signatures satisfying (★) using only ℓ <code>sign</code> calls and you win.</p>
+<h3 id="32-the-forgeries"><a class="wu-anchor" href="#32-the-forgeries" aria-hidden="true">#</a>3.2 The forgeries</h3>
+<p>Use <strong>ℓ singletons</strong> plus <strong>one aggregate</strong>:</p>
+<ul>
+<li><p><strong>Singleton <code>j</code></strong> (<code>a = e_j</code>): nonce <code>R_j</code>, message <code>m_j</code>. By (★) it is valid iff
+<code>c_j ≡ H(R_j, m_j)</code>. So whatever message we settle on for session <code>j</code> <em>forces</em> the
+challenge we must send: <code>c_j = H(R_j, m_j)</code>.</p>
+</li>
+<li><p><strong>Aggregate</strong> (<code>a = ρ</code>, a vector we design): nonce <code>R* = Σ_j ρ_j R_j</code>, message <code>m*</code>.
+Valid iff <code>Σ_j ρ_j c_j ≡ H(R*, m*)</code>.</p>
+</li>
+</ul>
+<p>The trick is to give each session <strong>two</strong> candidate messages, so each <code>c_j</code> has two
+possible values, and to engineer <code>ρ</code> so those binary choices add up to <em>any</em> target we
+need - with no search.</p>
+<h3 id="33-the-binary-choice-gadget-the-whole-attack"><a class="wu-anchor" href="#33-the-binary-choice-gadget-the-whole-attack" aria-hidden="true">#</a>3.3 The binary-choice gadget (the whole attack)</h3>
+<p>For each session <code>j</code>, prepare two messages and hash them:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">h_j^0 = H(R_j, m_j^0)      h_j^1 = H(R_j, m_j^1)      d_j = (h_j^1 − h_j^0) mod n</code></pre>
+      
+    </figure><p>Pick the aggregate coefficient</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">ρ_j = 2^j · d_j^{-1}   (mod n)</code></pre>
+      
+    </figure><p>Now flipping session <code>j</code> from message 0 to message 1 changes its challenge by <code>d_j</code>, and
+therefore changes the aggregate sum <code>Σ ρ_j c_j</code> by exactly <code>ρ_j · d_j = 2^j</code>. <strong>Each
+session is a clean, independent bit of weight <code>2^j</code> in the aggregate equation.</strong></p>
+<p>Fix the aggregate nonce <code>R* = Σ_j ρ_j R_j</code> (independent of the bit choices), pick any
+<code>m*</code>, and compute</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">T   = H(R*, m*)                      # the target (fixed)
+L0  = Σ_j ρ_j · h_j^0   (mod n)      # baseline: all bits = 0
+v   = (T − L0) mod n                 # v ∈ [0, n) ⊂ [0, 2^256)</code></pre>
+      
+    </figure><p>The aggregate is valid iff <code>Σ_j ρ_j c_j ≡ T</code>, i.e.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">L0 + Σ_{j: bit set} 2^j  ≡  T   (mod n)   ⇔   Σ_{j set} 2^j  ≡  v   (mod n)</code></pre>
+      
+    </figure><p>Because <code>v &lt; 2^256</code> and we have all 256 weights <code>2^0 … 2^255</code>, <strong><code>v</code> is just a 256-bit
+number and its binary expansion tells us exactly which message to pick per session</strong>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-text">bit_j = (v &gt;&gt; j) &amp; 1        c_j = h_j^{bit_j}</code></pre>
+      
+    </figure><p>No search, no birthday, no k-tree. Deterministic.</p>
+<h3 id="34-assembling-the-win"><a class="wu-anchor" href="#34-assembling-the-win" aria-hidden="true">#</a>3.4 Assembling the win</h3>
+<p>Sign each session once with <code>c_j = h_j^{bit_j}</code> → get <code>s_j</code>. Then:</p>
+<ul>
+<li>256 singletons: <code>(m_j^{bit_j}, R_j, s_j)</code> - each valid by construction.</li>
+<li>1 aggregate: <code>(m*, R*, s* = Σ_j ρ_j s_j)</code> - valid because we forced <code>Σ ρ_j c_j ≡ T</code>.</li>
+</ul>
+<p>All 257 messages are distinct (encode <code>j</code> and the bit in each <code>m_j</code>; <code>m*</code> is its own
+tag). Result: <strong>good = 257 &gt; answered = 256 → &quot;one more!&quot;</strong></p>
+<p>Resource budget: 256 <code>open</code> + 256 <code>sign</code> + <code>submit</code> + json = 514 commands ≤ 1088; 257
+signatures ≤ 600. Comfortable.</p>
+<hr>
+<h2 id="4-running-it"><a class="wu-anchor" href="#4-running-it" aria-hidden="true">#</a>4. Running it</h2>
+<figure class="wu-code" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># offline sanity check against the local stdio server (placeholder flag)</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 test_local.py          <span class="hljs-comment"># -&gt; valid 257 answered 256  /  one more! isfcr{placeholder...}</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-comment"># the real thing</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">python3 solve_live.py wss://one-more.isfcr.xyz</span></span></code></pre>
+      
+    </figure><p>Live output:</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-12" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-12"><code class="language-text">X = 6e50692dae1d2014598197dc3bbc46e9...
 opened 256 sessions
 built challenges
 signed 256 sessions
@@ -88,10 +253,61 @@ one more! isfcr{r0s_1s_n0t_h4rd_f0r_l0g_p}
 
 real    0m4.497s</code></pre>
       
-    </figure><p><strong>Takeaways:</strong> ROS is only hard generically - with <code>ℓ ≥ log₂ n</code> concurrent sessions the Benhamouda et al. solver is polynomial. The gadget (per-session binary choice + coefficient <code>ρ_j = 2^j · d_j^{-1}</code>) turns each session into an independent power-of-two bit, solved by reading off the binary expansion. Blind Schnorr is broken in the concurrent setting (reference: Benhamouda, Lepoint, Loss, Orrù, Raykova, <em>On the (in)security of ROS</em>, Eurocrypt 2021).</p>
+    </figure><p>Most of the 4.5 s is network round-trips (512 of them) and the server verifying 257
+signatures; local compute is ~0.7 s, dominated by the 256 scalar-mults for <code>R*</code>.</p>
+<hr>
+<h2 id="5-files"><a class="wu-anchor" href="#5-files" aria-hidden="true">#</a>5. Files</h2>
+<table>
+<thead>
+<tr>
+<th>file</th>
+<th>role</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>solve_ros.py</code></td>
+<td>the attack: <code>build_forgeries(X, nonces)</code> → challenges + finisher</td>
+</tr>
+<tr>
+<td><code>solve_live.py</code></td>
+<td>pipelined websocket driver (open → sign → submit)</td>
+</tr>
+<tr>
+<td><code>test_local.py</code></td>
+<td>end-to-end validation against <code>server.py --stdio</code> before any live run</td>
+</tr>
+<tr>
+<td><code>server.py</code></td>
+<td>the challenge (blind Schnorr oracle)</td>
+</tr>
+</tbody></table>
+<p>The old Wagner tooling (<code>bitksum.c</code>, <code>ksum.c</code>, <code>solve.py</code>, <code>poc_toy_*</code>, the swap/memory
+notes in <code>HANDOFF.md</code>/<code>NOTES.md</code>) is <strong>superseded</strong> - kept only as a record of the dead
+end.</p>
+<hr>
+<h2 id="6-takeaways"><a class="wu-anchor" href="#6-takeaways" aria-hidden="true">#</a>6. Takeaways</h2>
+<ul>
+<li><strong>ROS is only hard generically.</strong> With <code>ℓ ≥ log₂ n</code> concurrent sessions the
+Benhamouda et al. solver is polynomial - Wagner&#39;s k-tree is a huge overkill that this
+challenge dangles to waste your time and RAM.</li>
+<li><strong>The gadget:</strong> per-session binary message choice + coefficient <code>ρ_j = 2^j · d_j^{-1}</code>
+turns each session into an independent power-of-two bit, so the aggregate equation is
+solved by just reading off the binary expansion of <code>(T − L0) mod n</code>. No search.</li>
+<li><strong>Blind Schnorr is broken</strong> in the concurrent setting; real deployments need
+ROS-resistant variants (e.g. Fuchsbauer - Wolf clause-Schnorr).</li>
+<li>Practically: when a &quot;known hard&quot; attack needs 32 GB and 2³⁴ work for a 256-bit CTF
+that resets keys per connection and <em>invites</em> hundreds of sessions, that&#39;s a tell to
+look for the polynomial concurrent attack instead.</li>
+</ul>
+<p><strong>Reference:</strong> Benhamouda, Lepoint, Loss, Orrù, Raykova - <em>On the (in)security of ROS</em>,
+Eurocrypt 2021 - <a href="https://eprint.iacr.org/2020/945">https://eprint.iacr.org/2020/945</a></p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-the-service">1. The service</a></li><li><a href="#2-why-the-obvious-attack-is-a-trap">2. Why the &quot;obvious&quot; attack is a trap</a></li><li><a href="#3-the-math">3. The math</a><ol class="wu-toc-sub"><li><a href="#31-linear-structure-of-combined-signatures">3.1 Linear structure of combined signatures</a></li><li><a href="#32-the-forgeries">3.2 The forgeries</a></li><li><a href="#33-the-binary-choice-gadget-the-whole-attack">3.3 The binary-choice gadget (the whole attack)</a></li><li><a href="#34-assembling-the-win">3.4 Assembling the win</a></li></ol></li><li><a href="#4-running-it">4. Running it</a></li><li><a href="#5-files">5. Files</a></li><li><a href="#6-takeaways">6. Takeaways</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

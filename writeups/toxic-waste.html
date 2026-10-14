@@ -68,20 +68,103 @@
     <div class="wu-layout">
     <article class="wu-article">
 <blockquote>
-<p>Trusted setup done, secret burned. We kept the two ends and binned the middle to save on disk.</p>
+<p>Trusted setup done, secret burned. We kept the two ends and binned the middle
+to save on disk.</p>
 </blockquote>
-<p><code>chall.py</code> runs a KZG-style trusted setup: picks <code>d = 2^44</code>, a prime <code>m</code>, <code>q = d*m + 1</code> prime, a 1024-bit prime <code>P</code> with <code>q | P-1</code>, generator <code>g</code> of the order-<code>q</code> subgroup, and secret <code>tau</code> uniform in <code>[2, q-2]</code>. The full SRS would be <code>g, g^tau, ..., g^(tau^d)</code>; only the two ends are kept: <code>A = g^tau</code> (head), <code>B = g^(tau^d)</code> (tail). The flag key is <code>sha256(str(tau))</code>. The claimed security is <code>sqrt(q)</code> ≈ 2^43.5; both claims are wrong - this is exactly the setup for <strong>Cheon&#39;s attack</strong>.</p>
-<p><strong>Why the two ends are fatal:</strong> Cheon&#39;s attack (J. H. Cheon, 2010) solves, given <code>g, g^alpha, g^(alpha^d)</code> with <code>d | q-1</code>, for <code>alpha</code> in <code>O(sqrt(q/d) + sqrt(d))</code>. Decompose <code>tau = h^(k0 + k1*m) mod q</code> for a generator <code>h</code> of <code>Z_q^*</code>. Since <code>h^(q-1) = 1</code>, <code>tau^d = h^(d*k0) (mod q)</code>, so <code>B</code> leaks <code>k0</code> and <code>A</code> then leaks <code>k1</code> via two BSGS phases.</p>
-<p><strong>Phase 1 (recover k0, ~3.35M steps/side):</strong> <code>k0 = i*N + j</code>. Build baby table <code>{ g^(h^(d*j)) : 0 &lt;= j &lt; N }</code>; walk giant side <code>B^(h^(-d*i*N))</code> until it lands in the table.</p>
-<p><strong>Phase 2 (recover k1, ~4.19M steps/side):</strong> with <code>eta = h^m</code>, <code>A^(h^-k0) = g^(eta^k1)</code>. Same BSGS structure recovers <code>k1</code>.</p>
-<p>Environment quirk: <code>2</code> is not a primitive root mod <code>q</code>; the smallest generator found was <code>h = 3</code>. Complexity ≈ <code>2^22</code> group operations per phase.</p>
-<figure class="wu-code wu-code-output" data-lines="7">
+<h2 id="1-the-scenario"><a class="wu-anchor" href="#1-the-scenario" aria-hidden="true">#</a>1. The scenario</h2>
+<p><code>chall.py</code> runs a KZG-style trusted setup in the multiplicative group of a
+prime field. It picks:</p>
+<ul>
+<li><code>d = 2^44</code>, a prime <code>m</code>, and <code>q = d*m + 1</code> prime (so <code>d | q-1</code>, <code>m</code> prime);</li>
+<li>a 1024-bit prime <code>P</code> with <code>q | P-1</code>, and <code>g</code> a generator of the order-<code>q</code>
+subgroup <code>G ⊆ GF(P)*</code>;</li>
+<li>a secret <code>tau</code> uniformly in <code>[2, q-2]</code>.</li>
+</ul>
+<p>The full structured reference string would be <code>g, g^tau, g^(tau^2), …, g^(tau^d)</code>. To &quot;save disk&quot; the deployment keeps only the <strong>two ends</strong>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">[cheon] generator h = 3
+      <pre id="code-1"><code class="language-text">A = g^tau          # head
+B = g^(tau^d)      # tail   (exponent tau^d reduced mod q)</code></pre>
+      
+    </figure><p>The flag is encrypted with <code>AES-GCM</code>, key <code>sha256(str(tau))</code>, nonce
+<code>b&quot;toxic-waste-&quot;</code>. The tin claims security is <code>sqrt(q)</code>: recovering <code>tau</code>
+&quot;means solving a discrete log in G&quot;. With <code>q</code> 88 bits, <code>sqrt(q) ≈ 2^43.5</code>,
+which sounds safe.</p>
+<p>Both claims are wrong. The tail <code>B = g^(tau^d)</code> is not decoration - supplied
+together with <code>A = g^tau</code>, and with <code>d | q-1</code>, it is precisely the auxiliary
+input that breaks the DLP efficiently via <strong>Cheon&#39;s attack</strong>.</p>
+<h2 id="2-why-the-two-ends-are-fatal-cheon39s-attack"><a class="wu-anchor" href="#2-why-the-two-ends-are-fatal-cheon39s-attack" aria-hidden="true">#</a>2. Why the two ends are fatal: Cheon&#39;s attack</h2>
+<p>Cheon&#39;s attack (&quot;Discrete Logarithm Problems with Auxiliary Inputs&quot;,
+J. H. Cheon, <em>J. Cryptology</em> 23(3), 2010) solves, in a group of order <code>q</code>,</p>
+<blockquote>
+<p>given <code>g</code>, <code>g^alpha</code>, and <code>g^(alpha^d)</code> with <code>d | q-1</code>,</p>
+</blockquote>
+<p>for <code>alpha</code> in time <code>O(sqrt(q/d) + sqrt(d))</code> rather than <code>sqrt(q)</code>. The same
+structure appears in real KZG trusted-setup audits (Kobi Gurkan,
+<em>Cheon&#39;s attack and its effect on the security of big trusted setups</em>;
+ZK Hack III &quot;Power Corrupts&quot; is essentially this puzzle).</p>
+<p>The crux is that <code>alpha</code> lives in <code>Z_q^*</code>, a group of order <code>q-1 = d*m</code>.
+Decompose the <em>exponent</em> <code>alpha</code> using a generator <code>h</code> of <code>Z_q^*</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">tau = h^(k0 + k1*m) mod q,     0 &lt;= k0 &lt; m,   0 &lt;= k1 &lt; d.</code></pre>
+      
+    </figure><p>Because <code>h^(q-1) = 1</code>, raising to the <code>d</code>-th power kills the <code>k1*m</code> part:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">tau^d = h^(d*k0 + k1*(q-1)) = h^(d*k0)   (mod q).</code></pre>
+      
+    </figure><p>So <code>B = g^(tau^d) = g^(h^(d*k0))</code> leaks <code>k0</code>, and <code>A = g^tau</code> then leaks <code>k1</code>.
+Two baby-step/giant-step phases recover them:</p>
+<p><strong>Phase 1 (recover k0, ~3.35M steps/side).</strong> We want <code>k0 = i*N + j</code>. Then
+<code>h^(d*k0) = h^(d*i*N) * h^(d*j)</code>, hence</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">B = g^(h^(d*i*N) * h^(d*j)).</code></pre>
+      
+    </figure><p>Build a baby table <code>{ g^(h^(d*j)) : 0 &lt;= j &lt; N }</code> (each next entry is the
+previous one raised to <code>h^d</code>). Walk the giant side <code>B^(h^(-d*i*N))</code>: when it
+lands in the table we have <code>k0 = i*N + j</code>.</p>
+<p><strong>Phase 2 (recover k1, ~4.19M steps/side).</strong> With <code>eta = h^m</code> (an element of
+order exactly <code>d</code>),</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">tau = h^k0 * eta^k1,   hence   A^(h^-k0) = g^(eta^k1).</code></pre>
+      
+    </figure><p>Same BSGS with baby sequence <code>g^(eta^j)</code> recovers <code>k1 = i*N2 + j</code>.</p>
+<p>Finally <code>tau = h^(k0 + k1*m) mod q</code>.</p>
+<h2 id="3-execution"><a class="wu-anchor" href="#3-execution" aria-hidden="true">#</a>3. Execution</h2>
+<p>Environment quirk: <code>2</code> is <strong>not</strong> a primitive root mod <code>q</code> here, so we search
+for the smallest generator (<code>h = 3</code>). Complexity is <code>sqrt(m) + sqrt(d)</code>, i.e.
+about <code>2^22</code> group operations per phase - utterly feasible.</p>
+<p>The run (<code>solve.py</code>, gmpy2, builtin <code>pow</code> would be ~5x slower):</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">[cheon] generator h = 3
 [cheon] part1: N = 3349947        # baby built in 138s, giant match at i=1.41M
 [cheon] k0 = 4734199638712
 [cheon] part2: N2 = 4194305       # baby built in 186s, giant match at i=2.21M
@@ -89,10 +172,28 @@
 [cheon] RECOVERED tau = 53372121991905014611291611
 FLAG: isfcr{ch30n_8f_th3_c0mpr3ss3d_srs}</code></pre>
       
-    </figure><p>Sanity checks <code>g^(h^(d*k0)) == B</code> and <code>g^tau == A</code> both pass. A two-ended SRS (<code>g^tau</code>, <code>g^(tau^d)</code>) is not &quot;just ends&quot;; it is a full Cheon auxiliary-input instance whenever <code>d | q-1</code>. The real security is <code>O(sqrt(q/d) + sqrt(d))</code>, not <code>sqrt(q)</code>; factoring <code>q-1</code> and noticing the big power-of-two divisor is the audit step that was skipped.</p>
+    </figure><p>Sanity checks embedded in the solver: <code>g^(h^(d*k0)) == B</code> and <code>g^tau == A</code>
+both pass, so <code>tau</code> is exact and the key is right.</p>
+<h2 id="4-takeaways"><a class="wu-anchor" href="#4-takeaways" aria-hidden="true">#</a>4. Takeaways</h2>
+<ul>
+<li>Two-ended SRS (<code>g^tau</code>, <code>g^(tau^d)</code>) is <em>not</em> &quot;just ends&quot;; it is a full
+Cheon auxiliary-input instance whenever <code>d | q-1</code>. The real security is
+<code>O(sqrt(q/d) + sqrt(d))</code>, not <code>sqrt(q)</code>. Here <code>d = 2^44</code> splits the exponent
+group into two ~44-bit halves, collapsing <code>2^43.5</code> work to <code>2^22</code>.</li>
+<li>A &quot;one-way&quot; discrete log is only as hard as the <em>extra structure in the
+exponent group</em> allows; factoring <code>q-1</code> (and noticing a big power-of-two
+divisor) is the audit step that was skipped.</li>
+<li>The 1024-bit modulus <code>P</code> buys nothing: the attack never touches <code>P</code>&#39;s
+structure beyond arithmetic in <code>G</code>.</li>
+</ul>
+<p><strong>Flag:</strong> <code>isfcr{ch30n_8f_th3_c0mpr3ss3d_srs}</code></p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-the-scenario">1. The scenario</a></li><li><a href="#2-why-the-two-ends-are-fatal-cheon39s-attack">2. Why the two ends are fatal: Cheon&#39;s attack</a></li><li><a href="#3-execution">3. Execution</a></li><li><a href="#4-takeaways">4. Takeaways</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

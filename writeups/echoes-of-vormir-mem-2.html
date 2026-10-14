@@ -68,10 +68,9 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>From the Echoes of Vormir memory forensics series. The artifact is <code>soul.zip</code>, containing <code>soul.mem</code>, a 2.6 GB Windows memory dump captured with FTK Imager, reused across all five sub-challenges.</p>
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
 <blockquote>
-<p><em>Among everything running on the machine, something doesn&#39;t belong. Find
-it.</em></p>
+<p>Among everything running on the machine, something doesn&#39;t belong. Find it.</p>
 </blockquote>
 <p>We&#39;re given <code>soul.mem</code>, a Windows memory dump captured with FTK Imager.</p>
 <h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
@@ -85,8 +84,7 @@ it.</em></p>
       </figcaption>
       <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">vol -f soul.mem windows.pslist.PsList</span></span></code></pre>
       
-    </figure><p>Most of the output is standard Windows processes - <code>svchost.exe</code>,
-<code>csrss.exe</code>, <code>explorer.exe</code>, <code>msedge.exe</code>, etc. But one entry stands out:</p>
+    </figure><p>Most of the output is standard Windows processes - <code>svchost.exe</code>, <code>csrss.exe</code>, <code>explorer.exe</code>, <code>msedge.exe</code>, etc. But one entry stands out:</p>
 <figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
@@ -98,45 +96,65 @@ it.</em></p>
       
     </figure><p>A process named <code>SoulHunt_7F31</code> spawned by <code>powershell.exe</code> (PID 6960) - clearly not a legitimate Windows process.</p>
 <h3 id="2-inspect-the-command-line"><a class="wu-anchor" href="#2-inspect-the-command-line" aria-hidden="true">#</a>2. Inspect the command line</h3>
-<figure class="wu-code" data-lines="2">
+<figure class="wu-code" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
         <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">vol -f soul.mem windows.cmdline.CmdLine --pid 2580</span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-string">&quot;C:\Users\nightwatch\Desktop\SoulHunt_7F31.exe&quot;</span> -NoLogo -NoProfile -NoExit -Command Start-Sleep -Seconds 7200</span></span></code></pre>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">vol -f soul.mem windows.cmdline.CmdLine --pid 2580</span></span></code></pre>
       
-    </figure><p>The executable sits on the user <code>nightwatch</code>&#39;s Desktop and was invoked with
-PowerShell-style flags to stay alive silently for 2 hours.</p>
+    </figure><figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">&quot;C:\Users\nightwatch\Desktop\SoulHunt_7F31.exe&quot; -NoLogo -NoProfile -NoExit -Command Start-Sleep -Seconds 7200</code></pre>
+      
+    </figure><p>The executable sits on the user <code>nightwatch</code>&#39;s Desktop and was invoked with PowerShell-style flags to stay alive silently for 2 hours.</p>
 <h3 id="3-confirm-it39s-masquerading"><a class="wu-anchor" href="#3-confirm-it39s-masquerading" aria-hidden="true">#</a>3. Confirm it&#39;s masquerading</h3>
 <p>Dumping the executable from memory and checking its strings:</p>
-<figure class="wu-code" data-lines="4">
+<figure class="wu-code" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
-        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">vol -f soul.mem windows.dumpfiles.DumpFiles --virtaddr 0xdb0f7765f7e0</span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">strings SoulHunt_7F31.exe.img | grep -i powershell</span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">powershell.pdb</span></span>
-<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">&lt;description&gt;PowerShell&lt;/description&gt;</span></span></code></pre>
+      <pre id="code-5"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">vol -f soul.mem windows.dumpfiles.DumpFiles --virtaddr 0xdb0f7765f7e0</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">strings SoulHunt_7F31.exe.img | grep -i powershell</span></span></code></pre>
       
-    </figure><p><code>SoulHunt_7F31.exe</code> is a <strong>renamed copy of PowerShell</strong> - a classic evasion
-technique to disguise malicious activity under an innocuous-looking process
-name.</p>
-
+    </figure><figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">powershell.pdb
+&lt;description&gt;PowerShell&lt;/description&gt;</code></pre>
+      
+    </figure><p><code>SoulHunt_7F31.exe</code> is a <strong>renamed copy of PowerShell</strong> - a classic evasion technique to disguise malicious activity under an innocuous-looking process name.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">OWASP{SoulHunt_7F31}</code></pre>
+      
+    </figure>
     </article>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#solution">Solution</a><ol class="wu-toc-sub"><li><a href="#1-list-running-processes">1. List running processes</a></li><li><a href="#2-inspect-the-command-line">2. Inspect the command line</a></li><li><a href="#3-confirm-it39s-masquerading">3. Confirm it&#39;s masquerading</a></li></ol></li></ol>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#solution">Solution</a><ol class="wu-toc-sub"><li><a href="#1-list-running-processes">1. List running processes</a></li><li><a href="#2-inspect-the-command-line">2. Inspect the command line</a></li><li><a href="#3-confirm-it39s-masquerading">3. Confirm it&#39;s masquerading</a></li></ol></li><li><a href="#flag">Flag</a></li></ol>
       </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">
     <a class="wu-pager-link wu-pager-prev" href="echoes-of-vormir-mem-1.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Echoes of Vormir: Mem-1</span></a>
-    <a class="wu-pager-link wu-pager-next" href="last-memory-of-vormir.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">The Last Memory of Vormir</span></a>
+    <a class="wu-pager-link wu-pager-next" href="echoes-of-vormir-mem-3.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Echoes of Vormir: Mem-3</span></a>
   </nav>
 </main>
 

@@ -67,23 +67,222 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A 12 MiB volume (<code>registry.fvr</code>, 3072 × 4096B pages) plus a static reader <code>fvrctl</code>. <code>fvrctl lsroot</code> shows 8 root slots with epochs 288-291, one marked <code>TORN</code>. The release notes explicitly removed the <code>get</code>/<code>walk</code> subcommands - the tree must be walked by hand. The log shows a policy change re-issuing <code>bay/07/thaw-authority</code> out-of-line at 08:02, then a crash (undervoltage) at 09:14.</p>
-<p><strong>Picking the live root:</strong> the slot array is a ring buffer of the last 8 generations; a slot failing its fnv1a-64 checksum is skipped at mount. The highest <em>verifying</em> slot is epoch 290 (root_pgid 3039) - epoch 291 is the crash-torn commit.</p>
-<p><strong>The descriptor convention - the real puzzle:</strong> <code>ONDISK-NOTES.txt</code> documents format v0 (12-byte descriptor, payload offsets counted forward from page body start) but the volume is v1 (16-byte descriptor, trailing flags word) and - crucially - the release notes admit <code>ONDISK-NOTES.txt</code> was never revised for the v1 change. Examining the actual bytes shows payloads are packed against the <strong>end</strong> of the page with offsets counting <strong>backward</strong>: <code>payload at page[page_size - off]</code>. The flag name <em>backwards_heap</em> confirms this.</p>
-<p><strong>Walking to the record:</strong> descend as a normal B+tree using the v1 convention; the target key sorts into the leftmost subtree, found on DATA page 3030 with an overflow flag. OVERFLOW pages chain <code>{next_pgid, bytes_used, payload}</code> with no fixed stride: <code>966 -&gt; 2675 -&gt; 184 -&gt; 355 -&gt; 0</code>, reassembling to 2372 bytes matching the declared <code>total_len</code>. The stored bytes start <code>78 da</code> (zlib); decompressing yields a FROSTLINE VAULT AUTHORITY RECORD with <code>epoch: 290</code> matching the live root generation.</p>
-<figure class="wu-code wu-code-output" data-lines="1">
+<h2 id="0-prompt"><a class="wu-anchor" href="#0-prompt" aria-hidden="true">#</a>0. Prompt</h2>
+<p>Bay 07&#39;s controller died with the vault and took the vendor reader with it. Survived:
+the registry volume, the docs on the controller image, and <code>fvrctl</code>. Recover the
+authority token from <code>bay/07/thaw-authority</code>. Flag format <code>isfcr{...}</code>.</p>
+<p>Tarball <code>frost-ledger.tar.gz</code> extracts to:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">authority-token: isfcr{stale_cow_67c1_root_fc8fe97f_backwards_heap}</code></pre>
+      <pre id="code-1"><code class="language-text">registry.fvr                         # the volume (12 MiB, 3072 x 4096 B pages)
+usr/sbin/fvrctl                      # static, stripped reader
+usr/share/doc/fvregd/ONDISK-NOTES.txt
+usr/share/doc/fvregd/RELEASE-NOTES.txt
+include/fvr_format.h
+var/log/fvregd.log</code></pre>
       
-    </figure><p><strong>The decoys:</strong> scanning every page for the key (instead of walking the live tree) turns up 291 copies - 289 superseded version-3 records (<code>isfcr{thaw_authority_superseded_at_epoch_6}</code>), the crash-torn generation-291 copy (<code>isfcr{superseded_authority_rev6_0fa710}</code>), and the one genuine generation-290 record. Only the generation-290 record sits in the live tree and corresponds to the logged &quot;commit ok&quot;.</p>
-<p>Reproducible with <code>python3 solve.py</code> (stdlib only).</p>
+    </figure><h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<p><code>fvrctl</code> tells us the shape, then explicitly refuses to do the useful thing:</p>
+<figure class="wu-code wu-code-output" data-lines="18">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">$ ./usr/sbin/fvrctl info registry.fvr
+volume            FVR, on-disk format version 1
+page_size         4096
+page_count        3072
+...
+$ ./usr/sbin/fvrctl lsroot registry.fvr
+slot  epoch       root_pgid  wal_head  fnv1a64
+   0  288         3018       0         ok
+   1  289         3029       0         ok
+   2  290         3039       0         ok
+   3  291         3049       0         TORN
+   ...
+$ ./usr/sbin/fvrctl stat registry.fvr
+  kind INDEX     291
+  kind DATA      2619
+  kind OVERFLOW  34
+  kind other      127
+crc mismatches    127</code></pre>
+      
+    </figure><p>RELEASE-NOTES 1.4.2: <em>&quot;fvrctl: drop the get and walk subcommands... Offline inspection
+is now expected to go through libfvr. Note that libfvr is not installed on controller
+images.&quot;</em> So there is no turnkey reader - the tree must be walked by hand.</p>
+<p>The log is the story of the crash:</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">2026-10-18T08:02:13Z policy change accepted: bay/07 thaw predicates
+2026-10-18T08:02:13Z re-issuing authority record bay/07/thaw-authority
+2026-10-18T08:02:13Z superseded record retained in CoW history
+2026-10-18T08:02:13Z new record stored out of line
+2026-10-18T08:02:14Z commit ok
+2026-10-18T09:14:38Z bay bus undervoltage, 11.2 V
+2026-10-18T09:14:39Z bay bus undervoltage, 9.8 V</code></pre>
+      
+    </figure><p>So: re-issued record committed at 08:02, then a crash at 09:14. The re-issued record
+is the one we want and it is out-of-line (overflow). Everything else (v3 copies) is
+just CoW history.</p>
+<h2 id="2-superblock-and-picking-the-live-root"><a class="wu-anchor" href="#2-superblock-and-picking-the-live-root" aria-hidden="true">#</a>2. Superblock and picking the live root</h2>
+<p>Page 0: magic <code>FVR\x01</code>, u32 page_size=4096, page_count=3072, format_version=1, then
+8 root slots, each 32 B = <code>{u64 epoch, u32 root_pgid, u32 wal_head, u64 reserved, u64 fnv1a-64 over the first 24 bytes}</code>.</p>
+<p>The FVR release notes (1.2.1) tell us exactly what to do with a bad checksum: <em>&quot;a slot
+that fails it is skipped at mount.&quot;</em> The slot array is a <strong>ring buffer</strong> of the last 8
+generations (here 284→291 in slot order 4,5,6,7,0,1,2,3). Slot 3 (epoch 291) is the
+crash-torn commit, so the highest <em>verifying</em> slot - the live generation - is
+<strong>epoch 290, root_pgid 3039</strong>. (fvrctl already flags epoch 291 as TORN.)</p>
+<h2 id="3-the-descriptor-convention-the-real-puzzle"><a class="wu-anchor" href="#3-the-descriptor-convention-the-real-puzzle" aria-hidden="true">#</a>3. The descriptor convention (the real puzzle)</h2>
+<p>ONDISK-NOTES documents format <strong>v0</strong>, but the volume is v1. Release notes 1.3.0:</p>
+<blockquote>
+<p>ON-DISK FORMAT CHANGE: version 0 -&gt; version 1. The DATA and INDEX cell descriptor
+grows from 12 to 16 bytes and gains a trailing u32 flags word... Callers MUST obtain
+payload addresses from <code>fvr_cell_key()</code> / <code>fvr_cell_value()</code> rather than computing
+them; the helpers branch on <code>format_version</code>. ONDISK-NOTES.txt has NOT been revised
+for this change.</p>
+</blockquote>
+<p>v0 (documented): descriptor 12 B, payload offsets counted <strong>forward</strong> from the page
+body start (<code>page[24+off]</code>). v1 (actual): descriptor 16 B, and - once you look at the
+bytes - the payload region is packed against the <strong>end</strong> of the page and the offsets
+count <strong>backward</strong>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">payload at page[page_size - off]</code></pre>
+      
+    </figure><p>Hex of the root INDEX page 3039 body makes it obvious: the first descriptor reads
+<code>koff=0x0c ksize=8 vsize=4 voff=0x10</code>, and the 8-byte keys and 4-byte child pgids live
+at the very end of the page (<code>seg/0052 …seg/0461</code> with children 3030..3037), plus the
+rightmost child <code>0x0bde</code> in the last 4 bytes. With the v0 forward convention you read
+descriptor bytes as &quot;keys&quot;; with the v1 backward convention you get a real B+tree.
+The flag name - <em>backwards_heap</em> - is the author confirming this.</p>
+<h2 id="4-walking-to-the-record"><a class="wu-anchor" href="#4-walking-to-the-record" aria-hidden="true">#</a>4. Walking to the record</h2>
+<p>Descend as a normal B+tree: for every INDEX page, take the N separators&#39; child pgids
+plus the rightmost child (last u32 of the page). Leaf DATA pages hold the records. The
+target sorts before <code>seg/...</code>, so it lives in the leftmost subtree and is found on
+DATA page <strong>3030</strong>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">key   = bay/07/thaw-authority    (ksize 22)
+value = {u64 head_pgid = 966, u32 total_len = 2372}   flags = 0x2 (overflow)</code></pre>
+      
+    </figure><p>Flags bit 0x2 means the value is out of line. OVERFLOW pages are
+<code>{u32 next_pgid, u32 bytes_used, payload…}</code>. Walk the chain, no fixed stride:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">966 -&gt; 2675 -&gt; 184 -&gt; 355 -&gt; 0        (bytes_used 739,662,489,482 = 2372)</code></pre>
+      
+    </figure><p>Reassembled length 2372 == declared <code>total_len</code>. Note the release note&#39;s warning:
+<code>total_len</code> is the <strong>STORED</strong> length (compare before decoding). The stored bytes start
+<code>78 da</code> - a zlib stream. From record-version 4 on the payload is no longer stored
+verbatim; decompress:</p>
+<figure class="wu-code wu-code-output" data-lines="15">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">FROSTLINE VAULT AUTHORITY RECORD
+record-version: 4
+epoch: 290
+bay: 07
+subject: cryogenic-pod-array-07
+issued-by: HALCYON/caretaker
+issuer-key-id: 4164d8399f767c45
+predicate.coolant-pressure: &gt;= 4.10 bar
+predicate.core-temp: &lt;= -196.0 C
+predicate.operator-present: true
+predicate.second-factor: hardware-token
+countersig[0..13]: ...
+authority-token: isfcr{stale_cow_67c1_root_fc8fe97f_backwards_heap}
+notes: representation changed in 1.3; see RELEASE-NOTES.txt
+seal: c3812e29...  (same on every revision)</code></pre>
+      
+    </figure><p><code>epoch: 290</code> matches the live root generation and the logged re-issue commit - this is
+the durable, current record.</p>
+<h2 id="5-the-decoys"><a class="wu-anchor" href="#5-the-decoys" aria-hidden="true">#</a>5. The decoys</h2>
+<p>Scanning <em>every</em> page for the key (rather than walking the live tree) turns up <strong>291</strong>
+copies of the record:</p>
+<table>
+<thead>
+<tr>
+<th>pages</th>
+<th>generation</th>
+<th>record-version</th>
+<th>internal epoch</th>
+<th>token</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>289</td>
+<td>1 - 289</td>
+<td>3 (verbatim)</td>
+<td>6</td>
+<td><code>isfcr{thaw_authority_superseded_at_epoch_6}</code></td>
+</tr>
+<tr>
+<td>1</td>
+<td>290 (<strong>live</strong>)</td>
+<td>4 (zlib)</td>
+<td>290</td>
+<td><code>isfcr{stale_cow_67c1_root_fc8fe97f_backwards_heap}</code></td>
+</tr>
+<tr>
+<td>1</td>
+<td>291 (<strong>torn</strong>)</td>
+<td>4 (zlib)</td>
+<td>326</td>
+<td><code>isfcr{superseded_authority_rev6_0fa710}</code></td>
+</tr>
+</tbody></table>
+<ul>
+<li>The 289 <strong>version-3</strong> copies are the superseded record the log says is &quot;retained in
+CoW history&quot;. A <code>strings</code>/grep shortcut lands here → decoy.</li>
+<li>The <strong>generation-291</strong> copy is the crash-torn commit: its root slot fails fnv1a-64,
+so it is not part of any mounted generation, and its internal epoch (326) matches no
+logged operation. Reading it (&quot;use the highest epoch slot, torn or not&quot;) → decoy.</li>
+<li>Only the <strong>generation-290</strong> record sits in the live tree and corresponds to the
+08:02 &quot;commit ok&quot; → the real authority token.</li>
+</ul>
+<p>Note the torn generation is also where the 127 &quot;kind other&quot; / CRC-mismatch pages came
+from in <code>fvrctl stat</code> - half-written pages from the interrupted commit.</p>
+<h2 id="6-answer"><a class="wu-anchor" href="#6-answer" aria-hidden="true">#</a>6. Answer</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">isfcr{stale_cow_67c1_root_fc8fe97f_backwards_heap}</code></pre>
+      
+    </figure><p>Reproducible with <code>python3 solve.py</code> (stdlib only).</p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#0-prompt">0. Prompt</a></li><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-superblock-and-picking-the-live-root">2. Superblock and picking the live root</a></li><li><a href="#3-the-descriptor-convention-the-real-puzzle">3. The descriptor convention (the real puzzle)</a></li><li><a href="#4-walking-to-the-record">4. Walking to the record</a></li><li><a href="#5-the-decoys">5. The decoys</a></li><li><a href="#6-answer">6. Answer</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

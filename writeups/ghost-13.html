@@ -67,34 +67,210 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A line controller survived a power failure; the maintenance gateway received &quot;two diagnostic writes that should never have looked alike&quot; - the giveaway for <strong>ECDSA nonce reuse</strong>. The solve chains four artifacts: <code>plc_program.bin</code> → active config, <code>plc_firmware.bin</code> → factory constants + pubkey, <code>plc_traffic.pcap</code> → two reused-nonce ECDSA signatures → signing scalar, <code>alarm_buzzer.wav</code> → DTMF keypad digits, finally unsealing <code>maintenance_update.ota</code>.</p>
-<p><strong>Stage 1 - active configuration:</strong> 8 config slots each paired with a commit journal; a slot is activated only if it has a valid matching journal (CRC + commit word valid on both). Two journals are deliberately invalid. Sequence numbers wrap (<code>65533..4</code>), requiring <strong>16-bit serial-number arithmetic</strong> rather than raw comparison to find the highest valid journal - landing on active slot 5.</p>
-<p><strong>Stage 2 - firmware constants:</strong> a section directory in the firmware image yields a 32-byte factory constant and a P-256 public key (<code>PUBK</code> section); a retired v1 recovery key section is unused.</p>
-<p><strong>Stage 3 - signing scalar:</strong> TCP-reassembled Modbus/TCP FC16 writes carry custom <code>G13C</code> fragments (validated by CRC16 + expected register address) that reassemble into padded <code>G13F</code> frames, decrypted with AES-256-CTR under a link key derived from the factory constant and committed ID/salt. Two of the three frames (<code>0x41</code>, <code>0x42</code>) <strong>share the same ECDSA nonce <code>r</code></strong> - textbook nonce-reuse key recovery:</p>
-<figure class="wu-code wu-code-output" data-lines="2">
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>The GHOST-13 line controller survived a brief power failure and, on restart, its
+maintenance gateway received <em>&quot;two diagnostic writes that should never have looked
+alike.&quot;</em> We are given a full plant snapshot and must reconstruct the active
+configuration + reboot sequence, then recover the diagnostic secret sealed in the
+maintenance update.</p>
+<p>The solve is a chain where every artifact feeds the next:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">k = (z1 - z2) / (s1 - s2)  mod n
-d = (s1*k - z1) / r        mod n</code></pre>
+      <pre id="code-1"><code class="language-text">plc_program.bin ──┐ (committed_ID, committed_salt, keypad_trim)
+plc_firmware.bin ─┤ (factory constant, P-256 pubkey, target KDF constant)
+plc_traffic.pcap ─┤ (two ECDSA sigs w/ reused nonce → signing scalar)
+alarm_buzzer.wav ─┤ (DTMF wire code → keypad digits)
+                  └─► maintenance_update.ota  →  HKDF + AES-256-GCM  →  FLAG</code></pre>
       
-    </figure><p>recovering the signing scalar <code>d</code>, verified via <code>d·G == Q</code>.</p>
-<p><strong>Stage 4 - keypad digits:</strong> a Goertzel DTMF decoder on the 8kHz WAV finds two 8-digit groups separated by a service-ready tone; adding the committed <code>keypad_trim</code> (mod 10) to the diagnostic wire-code digits gives the real keypad digits.</p>
-<p><strong>Stage 5 - the sealed update:</strong> apply a sparse binary delta to a factory image (verified against embedded CRC32s and a SHA-256 of the target), then derive an HKDF-SHA256 key from the recovered ECDSA scalar, committed ID/salt, image KDF constant, keypad digits, and hashes of the image/manifest/delta - decrypting an AES-256-GCM blob to:</p>
+    </figure><p>The hint <em>&quot;two diagnostic writes that should never have looked alike&quot;</em> is the giveaway
+for the core vulnerability: <strong>ECDSA nonce reuse</strong>.</p>
+<hr>
+<h2 id="stage-1-active-configuration-plc-programbin-g13l"><a class="wu-anchor" href="#stage-1-active-configuration-plc-programbin-g13l" aria-hidden="true">#</a>Stage 1 - Active configuration (<code>plc_program.bin</code>, G13L)</h2>
+<p>The IEC program image is a header + 8 × 128-byte <code>G13P</code> config slots + 8 × 64-byte
+<code>G13J</code> commit journals.</p>
+<p>Per the field-service excerpt, a slot holds <code>sequence:u16, epoch:u16</code> @4, <code>ID[16]</code> @8,
+<code>salt[16]</code> @24, <code>keypad_trim[8]</code> @84, <code>CRC32(bytes 0..119)</code> @120, and a commit word @124:
+<code>CRC ^ 0x13c0ffee ^ (sequence&lt;&lt;16 | epoch)</code>.</p>
+<p>A journal binds <code>journal_sequence, slot_index, slot_sequence, epoch, slot_CRC</code> @4..15,
+with <code>CRC32(bytes 0..55)</code> @56 and commit @60: <code>CRC ^ 0xa91f0eed ^ (jseq&lt;&lt;16 | jseq)</code>.</p>
+<p><strong>Finding the active slot:</strong></p>
+<ul>
+<li>A slot is <em>activated</em> only if it has a <strong>valid matching journal</strong> (CRC + commit valid on
+both, and the journal&#39;s bound fields equal the slot&#39;s).</li>
+<li>Journals 6 (bad CRC) and 7 (bad commit) are invalid → slots 6 &amp; 7 not activated.</li>
+<li>The sequences wrap (<code>65533, 65534, 65535, 0, 1, 2, 3, 4</code>), so <strong>16-bit serial-number
+arithmetic</strong> gives the ordering. The highest valid activated journal is <code>jseq = 2</code>.</li>
+</ul>
+<p>→ <strong>Active slot = index 5:</strong></p>
+<table>
+<thead>
+<tr>
+<th>field</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>committed_ID</code></td>
+<td><code>75f83e16b7969d3985c35154de9fcb10</code></td>
+</tr>
+<tr>
+<td><code>committed_salt</code></td>
+<td><code>ac0c0f86d58bdde419cd50a98450c012</code></td>
+</tr>
+<tr>
+<td><code>keypad_trim</code></td>
+<td><code>[9, 9, 3, 2, 9, 9, 9, 4]</code></td>
+</tr>
+</tbody></table>
+<p>The reboot sequence in <code>uart_log.txt</code> corroborates this: watchdog exception 0x06 → CPU
+brownout → journal frontier restored after 16-bit rollover.</p>
+<hr>
+<h2 id="stage-2-firmware-constants-plc-firmwarebin-g13w"><a class="wu-anchor" href="#stage-2-firmware-constants-plc-firmwarebin-g13w" aria-hidden="true">#</a>Stage 2 - Firmware constants (<code>plc_firmware.bin</code>, G13W)</h2>
+<p>64-byte header + a directory of 24-byte section entries
+(<code>tag[4], offset, length, crc32, aux, flags</code>, <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button>). Valid sections:</p>
+<ul>
+<li><strong>VMBC</strong> - signing VM program (unused for the flag path)</li>
+<li><strong>KDFD</strong> - <code>G13K</code> + a <strong>32-byte factory constant</strong>, then label strings</li>
+<li><strong>PUBK</strong> - <code>P256</code> + big-endian <code>Qx</code>, <code>Qy</code></li>
+<li><strong>RECV</strong> - retired v1 recovery key (unused)</li>
+</ul>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">factory_constant = bc2163b48216acbd4b0969e34996579006014c0e5f9088d33ef104dc6bbaab74
+Qx = f297360fc8d87390336e36476e024ba73a90aa4119ee085e69a2d8e750f10ad9
+Qy = 0c83ccda933401ceef4543b31a57bfc0b26154d2a272d2cad401ca81f4675e48</code></pre>
+      
+    </figure><hr>
+<h2 id="stage-3-recover-the-signing-scalar-plc-trafficpcap"><a class="wu-anchor" href="#stage-3-recover-the-signing-scalar-plc-trafficpcap" aria-hidden="true">#</a>Stage 3 - Recover the signing scalar (<code>plc_traffic.pcap</code>)</h2>
+<p><strong>Reassembly path:</strong> TCP reassemble → Modbus/TCP <strong>FC16</strong> (write multiple registers) →
+<code>G13C</code> fragments → padded <code>G13F</code> frame.</p>
+<p>Each <code>G13C</code> fragment:
+<code>magic[4], stream_id:u16, index:u8, data_count:u8, frame_len:u16, parity:u8, reserved:u8, payload[40], CRC16/CCITT-FALSE:u16</code>. Register address = <code>0x4200 + 20*index</code> (data) or
+<code>0x4300</code> (parity index 3).</p>
+<ul>
+<li>Validated every fragment by CRC16 <strong>and</strong> expected register address (drops the damaged
+fragment and retransmissions).</li>
+<li>Data slices 0..2 are 40-byte pieces; index 3 is their bytewise XOR parity. Streams 0x41
+and 0x42 were each missing one slice → <strong>restored via XOR parity</strong>.</li>
+<li>Three <code>G13F</code> frames recovered (streams 0x41, 0x42, 0x43).</li>
+</ul>
+<p><strong>Decrypt each frame</strong> (AES-256-CTR, IV = <code>G13F_header[10:26]</code>):</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">link_key = SHA256(&quot;G13/link/v2&quot; || factory_constant || committed_ID || committed_salt)
+body     = state[24] || signature_r[32] || signature_s[32]</code></pre>
+      
+    </figure><p><strong>Signed message / hash</strong> per frame:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">msg = &quot;G13/sign/v2&quot; || G13F_header[26] || state[24] || committed_ID || committed_salt[0:8]
+z   = SHA256(msg)</code></pre>
+      
+    </figure><p><strong>Nonce reuse:</strong> frames <strong>0x41 and 0x42 share the same <code>r</code></strong>. With one reused nonce <code>k</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">k = (z1 - z2) / (s1 - s2)         mod n
+d = (s1*k - z1) / r               mod n</code></pre>
+      
+    </figure><p>→ <code>d = 2f1945b86a823a5bffb808c0f5edc9bd981fb15481696d7c29bde45fb8e1a4cb</code></p>
+<p>Verified: <code>d·G == (Qx, Qy)</code> on P-256. ✓</p>
+<hr>
+<h2 id="stage-4-keypad-digits-alarm-buzzerwav"><a class="wu-anchor" href="#stage-4-keypad-digits-alarm-buzzerwav" aria-hidden="true">#</a>Stage 4 - Keypad digits (<code>alarm_buzzer.wav</code>)</h2>
+<p>8 kHz mono PCM. A Goertzel DTMF decoder finds two 8-key groups separated by a 440 Hz
+service-ready tone:</p>
+<ul>
+<li>Group 1 (power-on self-check): <code>7 0 3 7 2 7 2 0</code></li>
+<li>Group 2 (<strong>diagnostic wire code</strong>): <code>6 4 6 5 8 0 0 3</code></li>
+</ul>
+<p>Add each <code>committed keypad_trim</code> byte mod 10 to the corresponding wire digit:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">wire : 6 4 6 5 8 0 0 3
+trim : 9 9 3 2 9 9 9 4
+sum%10:5 3 9 7 7 9 9 7   →  keypad_digits = &quot;53977997&quot;</code></pre>
+      
+    </figure><hr>
+<h2 id="stage-5-open-the-sealed-update-maintenance-updateota-g13u-v4"><a class="wu-anchor" href="#stage-5-open-the-sealed-update-maintenance-updateota-g13u-v4" aria-hidden="true">#</a>Stage 5 - Open the sealed update (<code>maintenance_update.ota</code>, G13U v4)</h2>
+<p>Layout: 64-byte header, JSON manifest (163 B), <code>G13X</code> v2 sparse delta (388 B), then
+AES-256-GCM ciphertext + 16-byte tag (111 B total). Header CRC32 verified.</p>
+<p><strong>Build the target image:</strong> apply the <code>G13X</code> sparse delta (6 hunks) to a copy of the
+factory image. Verified against the delta&#39;s <code>old_crc32/target_crc32</code>, the header&#39;s
+<code>SHA256(target)[0:16]</code>, and the delta trailing CRC32. ✓
+(The delta also rewrites KDFD, so the target&#39;s KDF constant differs from the factory&#39;s.)</p>
+<p><strong>Derive the GCM key</strong> with HKDF-SHA256:</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">IKM  = recovered_scalar_be32 || committed_ID || committed_salt
+salt = SHA256(target_image_KDF_constant || committed_salt)
+info = &quot;G13/diagnostic/v4&quot; || committed_ID || firmware_version_le16(=0x0003)
+       || keypad_digits_ascii || SHA256(full_target_image)
+       || SHA256(raw_manifest) || SHA256(raw_delta)
+
+nonce = keypad_digits_ascii (8) || header[12:16] (4-byte suffix)
+AAD   = header[0:60] || raw_manifest || raw_delta</code></pre>
+      
+    </figure><p>Decrypt + verify → plaintext = <code>G13D</code> + zlib-compressed JSON:</p>
 <figure class="wu-code" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">json</span>
-        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;diagnostic&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;power-restoration&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;flag&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;isfcr{ghost13_dc8f84a256fa64108b6c75a151a1474d}&quot;</span><span class="hljs-punctuation">}</span></span></span></code></pre>
+      <pre id="code-8"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;diagnostic&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;power-restoration&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;flag&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;isfcr{ghost13_dc8f84a256fa64108b6c75a151a1474d}&quot;</span><span class="hljs-punctuation">}</span></span></span></code></pre>
       
-    </figure><p>Key takeaways: serial-number (wraparound-aware) arithmetic is needed to pick the newest journal; ECDSA nonce reuse across two signatures leaks the private scalar instantly; erasure coding (XOR parity, used elsewhere in the fragment reassembly) lets dropped fragments be rebuilt; every hash/CRC checkpoint in the chain catches a wrong branch before it wastes time.</p>
+    </figure><hr>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">isfcr{ghost13_dc8f84a256fa64108b6c75a151a1474d}</code></pre>
+      
+    </figure><h2 id="key-takeaways"><a class="wu-anchor" href="#key-takeaways" aria-hidden="true">#</a>Key takeaways</h2>
+<ul>
+<li><strong>Serial-number arithmetic</strong> is needed to pick the newest wrapped sequence, not raw <code>&gt;</code>.</li>
+<li><strong>ECDSA nonce reuse</strong> (same <code>r</code>) across two signatures leaks the private scalar instantly.</li>
+<li>Erasure coding (XOR parity) lets you rebuild a dropped fragment.</li>
+<li>Every hash/CRC in the chain is a checkpoint - validating them early catches the damaged
+fragment, the un-activated slots, and a wrong target image before they waste your time.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#stage-1-active-configuration-plc-programbin-g13l">Stage 1 - Active configuration (plc_program.bin, G13L)</a></li><li><a href="#stage-2-firmware-constants-plc-firmwarebin-g13w">Stage 2 - Firmware constants (plc_firmware.bin, G13W)</a></li><li><a href="#stage-3-recover-the-signing-scalar-plc-trafficpcap">Stage 3 - Recover the signing scalar (plc_traffic.pcap)</a></li><li><a href="#stage-4-keypad-digits-alarm-buzzerwav">Stage 4 - Keypad digits (alarm_buzzer.wav)</a></li><li><a href="#stage-5-open-the-sealed-update-maintenance-updateota-g13u-v4">Stage 5 - Open the sealed update (maintenance_update.ota, G13U v4)</a></li><li><a href="#flag">Flag</a></li><li><a href="#key-takeaways">Key takeaways</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

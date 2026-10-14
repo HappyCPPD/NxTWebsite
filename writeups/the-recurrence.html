@@ -67,23 +67,199 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A stripped 64-bit ELF reads exactly 28 bytes and prints <code>CORRECT</code> or <code>nope.</code>. The flag <strong>is</strong> the 28-byte input. The 28 bytes pack into a 224-bit <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> scalar <code>k</code>. A loop runs bit 255 down to bit 0 of <code>k</code>, updating two 256-bit values <code>A</code>, <code>B</code> initialised to <code>A=2</code>, <code>B=P</code> (a constant), using modular add/sub/mul helpers mod <code>M</code>.</p>
-<p><strong>The recurrence:</strong> bit clear → <code>A&#39; = A*A-2, B&#39; = A*B-P</code>; bit set → <code>A&#39; = A*B-P, B&#39; = B*B-2</code>. This is exactly the <strong>double-and-add ladder of a Lucas V-sequence</strong> <code>V_n(P, Q=1)</code>: <code>V_0=2, V_1=P, V_2n=V_n^2-2, V_2n+1=V_n*V_n+1-P</code>. With <code>(A,B)=(V_n,V_n+1)</code>, bit clear → <code>n:=2n</code>, bit set → <code>n:=2n+1</code>. After consuming <code>k</code>, the state is <code>(V_k, V_k+1)</code>.</p>
-<p><strong>The check:</strong> only <code>A</code> is verified against a constant <code>T</code>, so <code>V_k(P,1) ≡ T (mod M)</code>.</p>
-<p><strong>Inverting it:</strong> since <code>Q=1</code>, the characteristic roots <code>α, β = α^-1</code> give <code>V_n = α^n + α^-n</code>. <code>V_k = T</code> becomes a quadratic in <code>α^k</code>: <code>(α^k)² − T·α^k + 1 = 0</code>, solved via Tonelli-Shanks since <code>T²−4</code> is a QR. Recovering <code>k</code> is now a discrete log of <code>α^k</code> base <code>α</code> in <code>F_M*</code>. Factoring <code>M-1</code> shows it is squarefree and <strong>fully smooth</strong> (largest factor 59051), and <code>α</code> is a primitive root - Pohlig-Hellman splits the 247-bit dlog into dlogs per ~16-bit prime, CRT&#39;d together in milliseconds. Two candidate roots give two candidate <code>k</code> values (±k); exactly one lies in <code>[0, 2^224)</code> and yields printable ASCII.</p>
+<p><strong>Binary:</strong> <code>chall</code> - ELF 64-bit x86-64, stripped, dynamically linked
+(<code>sha256 3206437d20a2a6a741753fabbc675a5e7b153c7352f9623f3893df99cb252090</code>)</p>
+<h2 id="0-recon"><a class="wu-anchor" href="#0-recon" aria-hidden="true">#</a>0. Recon</h2>
 <figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">k = 13207006284361456903106593959418730498679199957338452512214440375145
+      <pre id="code-1"><code class="language-text">$ printf 'AAAAAAAAAAAAAAAAAAAAAAAAAAAA' | ./chall
+nope.</code></pre>
+      
+    </figure><p><code>strings</code> reveals the whole game:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">need exactly %d bytes of input
+CORRECT -- the flag is the input you just gave me.
+nope.</code></pre>
+      
+    </figure><p>So there is no embedded flag: <strong>the flag IS the 28-byte input</strong>. We must find
+the unique 28-byte string the program accepts. The binary reads exactly
+<code>0x1c = 28</code> bytes from stdin (<code>fread(buf, 1, 28, stdin)</code>) and bails if it gets
+fewer.</p>
+<h2 id="1-how-the-input-is-consumed"><a class="wu-anchor" href="#1-how-the-input-is-consumed" aria-hidden="true">#</a>1. How the input is consumed</h2>
+<p>At <code>0x4003eb</code> - <code>0x400461</code> the 28 bytes on the stack are packed into a 256-bit
+<button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> integer at <code>[rsp+0x20]</code> (four 64-bit limbs):</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">limb[i&gt;&gt;3] |= input[i] &lt;&lt; ((i &amp; 7) * 8)      for i = 1..27
+limb[0]      = input[0]</code></pre>
+      
+    </figure><p>i.e. <strong>k = int.from_bytes(input, &#39;little&#39;)</strong> - a 224-bit scalar (bits 224..255
+are zero).</p>
+<p>Then a loop runs <code>ebx</code> from <code>255</code> down to <code>0</code>, testing bit <code>ebx</code> of k
+(<code>bt rax, rbx; jae ...</code>) and taking one of two update paths.</p>
+<h2 id="2-the-two-helper-routines"><a class="wu-anchor" href="#2-the-two-helper-routines" aria-hidden="true">#</a>2. The two helper routines</h2>
+<p>Hand-decompiling the small functions:</p>
+<ul>
+<li><strong><code>0x4007c0</code> - modular addition mod M.</strong> 256-bit add of two 4-limb numbers,
+then <code>if result &gt;= M: result -= M</code>, where <code>M</code> is the constant at <code>0x401320</code>.</li>
+<li><strong><code>0x4008f0</code> - modular subtraction mod M.</strong> <code>a - b</code>, or <code>a - b + M</code> when
+<code>a &lt; b</code> (the <code>0x40094d</code> branch computes <code>M - b</code> then adds <code>a</code> via <code>0x4007c0</code>).</li>
+<li><strong><code>0x400860</code> - modular multiplication mod M.</strong> Classic left-to-right
+double-and-add over 256 bits: <code>acc = acc + acc</code> (doubling) then
+<code>acc = acc + rbp</code> when the current mask bit is set, all in the <code>Z_M</code>
+additive group of <code>0x4007c0</code>. Net effect: <code>out = a * mask mod M</code>.</li>
+</ul>
+<h2 id="3-the-recurrence"><a class="wu-anchor" href="#3-the-recurrence" aria-hidden="true">#</a>3. The recurrence</h2>
+<p>The main loop keeps two 4-limb values:
+<code>A</code> at <code>[rsp+0x60]</code> and <code>B</code> at <code>[rsp+0x80]</code>, initialised to</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">A = 2                       (the constant at 0x401340)
+B = P  = value at 0x401300  = 0x2e4407f92792ed6df3991d8de01c294c9f66992d15d54b5f7de0b31a8525a8</code></pre>
+      
+    </figure><p>For each bit of k (MSB→LSB) it applies one of:</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">bit CLEAR (0x4004d0):
+    A' = A*A - 2          (0x400860 then 0x4008f0 with b = 2)
+    B' = A*B - P          (0x400860 then 0x4008f0 with b = P)
+
+bit SET   (0x40058e):
+    A' = A*B - P
+    B' = B*B - 2</code></pre>
+      
+    </figure><p>This is exactly the <strong>double-and-add ladder of a Lucas sequence</strong>
+V_n(P, Q=1):</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">V_0 = 2,  V_1 = P
+V_2n   = V_n^2 - 2
+V_2n+1 = V_n * V_n+1 - P
+V_2n+2 = V_n+1^2 - 2</code></pre>
+      
+    </figure><p>With <code>(A,B) = (V_n, V_{n+1})</code>:</p>
+<ul>
+<li>bit clear → <code>n := 2n</code>   gives <code>(V_2n, V_2n+1)</code></li>
+<li>bit set   → <code>n := 2n+1</code> gives <code>(V_2n+1, V_2n+2)</code></li>
+</ul>
+<p>So after consuming k the state is <code>(V_k, V_{k+1})</code>.</p>
+<h2 id="4-the-check"><a class="wu-anchor" href="#4-the-check" aria-hidden="true">#</a>4. The check</h2>
+<p>Only <code>A</code> is verified (<code>0x40060b</code>, <code>0x400648</code>): the program XORs the four limbs
+of <code>A</code> against the constant at <code>0x4012e0</code> and prints &quot;nope.&quot; on any mismatch.
+Therefore we need</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">V_k(P, 1) ≡ T (mod M)
+T = 0x49e8add02e2a5b87f2de8e6703998b93fbd3872fadce56bb759965f1103100</code></pre>
+      
+    </figure><h2 id="5-inverting-it-lucas-discrete-log-pohlig-hellman"><a class="wu-anchor" href="#5-inverting-it-lucas-discrete-log-pohlig-hellman" aria-hidden="true">#</a>5. Inverting it: Lucas → discrete log → Pohlig - Hellman</h2>
+<p>Since Q = 1, the characteristic roots <code>α, β = α^{-1}</code> of <code>x² - Px + 1</code>
+give the closed form</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">V_n = α^n + α^{-n}</code></pre>
+      
+    </figure><p>(The root exists in F_M because <code>D = P² - 4</code> is a QR mod M.) The condition
+<code>V_k = T</code> becomes</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">α^k + α^{-k} = T
+(α^k)² - T·α^k + 1 = 0
+α^k = (T ± sqrt(T² - 4)) / 2</code></pre>
+      
+    </figure><p><code>T² - 4</code> is also a QR, so both roots live in F_M. Recovering k is now a
+<strong>discrete log of <code>α^k</code> base α</strong> in F_M*.</p>
+<p>Now the crux - is it tractable? Factor the group order:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-text">M - 1 = 2 · 997 · 1399 · 1931 · 2297 · 4003 · 5701 · 7103 · 10211 · 12799 ·
+        14551 · 48271 · 46229 · 47279 · 51263 · 52937 · 53923 · 58771 · 59051</code></pre>
+      
+    </figure><p>Squarefree and <strong>fully smooth</strong> (largest factor 59051). α turns out to be a
+<strong>primitive root</strong> (order = M-1). So Pohlig - Hellman splits the 247-bit dlog
+into one dlog per ~16-bit prime and CRTs them together - milliseconds.</p>
+<p>Two candidate roots → two candidate k values (they are k and −k mod M-1,
+matching <code>V_k = V_{-k}</code>). Exactly one lies in <code>[0, 2^224)</code> and yields
+printable ASCII in little-endian - that is the flag.</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-text">k = 13207006284361456903106593959418730498679199957338452512214440375145
 k.to_bytes(28, 'little') = b'isfcr{p0hlig_h3llman_sm00th}'</code></pre>
       
-    </figure><p>Verified: <code>printf &#39;%s&#39; &#39;isfcr{p0hlig_h3llman_sm00th}&#39; | ./chall</code> → <code>CORRECT</code>. The author conveniently chose a prime <code>M</code> with a fully smooth <code>M-1</code> (the flag name gives it away).</p>
+    </figure><h2 id="6-verification"><a class="wu-anchor" href="#6-verification" aria-hidden="true">#</a>6. Verification</h2>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-12" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-12"><code class="language-text">$ printf '%s' 'isfcr{p0hlig_h3llman_sm00th}' | ./chall
+CORRECT -- the flag is the input you just gave me.
+$ echo $?
+0</code></pre>
+      
+    </figure><p><code>solve.py --verify</code> recomputes everything from the constants and pipes the
+result into <code>./chall</code> to confirm.</p>
+<h2 id="7-takeaway"><a class="wu-anchor" href="#7-takeaway" aria-hidden="true">#</a>7. Takeaway</h2>
+<p>The &quot;recurrence&quot; is a Lucas V-sequence; the <code>-2</code> / <code>-P</code> constants and the
+<code>(V_2n, V_2n+1, V_2n+2)</code> ladder are its fingerprint. Because Q=1 the sequence
+collapses to <code>α^n + α^{-n}</code>, turning the puzzle into a discrete log, and the
+author conveniently chose a prime M with a fully smooth M-1 (the flag name
+<code>p0hlig_h3llman_sm00th</code> gives it away). The rest is plumbing: Tonelli - Shanks
+for the two square roots, Pohlig - Hellman + CRT for the log, and a little-endian
+byte reinterpretation to read off the ASCII flag.</p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#0-recon">0. Recon</a></li><li><a href="#1-how-the-input-is-consumed">1. How the input is consumed</a></li><li><a href="#2-the-two-helper-routines">2. The two helper routines</a></li><li><a href="#3-the-recurrence">3. The recurrence</a></li><li><a href="#4-the-check">4. The check</a></li><li><a href="#5-inverting-it-lucas-discrete-log-pohlig-hellman">5. Inverting it: Lucas → discrete log → Pohlig - Hellman</a></li><li><a href="#6-verification">6. Verification</a></li><li><a href="#7-takeaway">7. Takeaway</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

@@ -68,10 +68,9 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><strong>1. Challenge</strong></p>
+<h2 id="1-challenge"><a class="wu-anchor" href="#1-challenge" aria-hidden="true">#</a>1. Challenge</h2>
 <blockquote>
-<p>Two RSA-encrypted messages. Two public keys. Something went wrong. Recover
-the flag.</p>
+<p>Two RSA-encrypted messages. Two public keys. Something went wrong. Recover the flag.</p>
 </blockquote>
 <p>The handout (<code>challenge.txt</code>) gives two <code>(n, e=65537, c)</code> triples:</p>
 <figure class="wu-code wu-code-output" data-lines="9">
@@ -90,12 +89,13 @@ n = 10916292...3822627
 e = 65537
 c = 88443378...513140</code></pre>
       
-    </figure><p>The title and &quot;something went wrong&quot; strongly hint at <strong>broken key
-generation</strong>, and the &quot;two keys&quot; framing points at once class of bug: a
-<strong>shared prime</strong> between moduli (poor randomness / same keygen seed reused).</p>
+    </figure><p>The title and &quot;something went wrong&quot; strongly hint at <strong>broken key generation</strong>, and
+the &quot;two keys&quot; framing points at once class of bug: a <strong>shared prime</strong> between moduli
+(poor randomness / same keygen seed reused).</p>
 <h2 id="2-recon-factor-with-gcd"><a class="wu-anchor" href="#2-recon-factor-with-gcd" aria-hidden="true">#</a>2. Recon: factor with gcd</h2>
-<p>Two RSA moduli produced with a common prime <code>p</code> satisfy <code>gcd(n1, n2) = p &gt; 1</code>. This is the read-only first move for any multi-key RSA challenge - it
-costs nothing and either finds the factor instantly or rules the class out.</p>
+<p>Two RSA moduli produced with a common prime <code>p</code> satisfy <code>gcd(n1, n2) = p &gt; 1</code>. This is
+the read-only first move for any multi-key RSA challenge - it costs nothing and either
+finds the factor instantly or rules the class out.</p>
 <figure class="wu-code" data-lines="4">
       <figcaption>
         
@@ -138,12 +138,12 @@ costs nothing and either finds the factor instantly or rules the class out.</p>
 <td><code>GAMORA</code></td>
 </tr>
 </tbody></table>
-<p>Key 1 is clearly <strong>base64</strong>. Key 2 is a short ASCII word - &quot;GAMORA&quot; (a
-Marvel Guardians name, and the challenge is flagged OWASP-style) - which is
-exactly the shape of a <strong>one-time-pad / XOR key</strong>.</p>
-<p>That is the &quot;something went wrong&quot; of the title: the same secret material
-(<code>GAMORA</code>) leaked as one plaintext <em>and</em> was reused as the XOR key for the
-other message - a two-time-pad style failure.</p>
+<p>Key 1 is clearly <strong>base64</strong>. Key 2 is a short ASCII word - &quot;GAMORA&quot; (a Marvel
+Guardians name, and the challenge is flagged OWASP-style) - which is exactly the shape
+of a <strong>one-time-pad / XOR key</strong>.</p>
+<p>That is the &quot;something went wrong&quot; of the title: the same secret material (<code>GAMORA</code>)
+leaked as one plaintext <em>and</em> was reused as the XOR key for the other message - a
+two-time-pad style failure.</p>
 <h2 id="4-recover-the-flag"><a class="wu-anchor" href="#4-recover-the-flag" aria-hidden="true">#</a>4. Recover the flag</h2>
 <figure class="wu-code" data-lines="6">
       <figcaption>
@@ -158,7 +158,8 @@ other message - a two-time-pad style failure.</p>
 <span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">flag = <span class="hljs-built_in">bytes</span>(b ^ key[i % <span class="hljs-built_in">len</span>(key)] <span class="hljs-keyword">for</span> i, b <span class="hljs-keyword">in</span> <span class="hljs-built_in">enumerate</span>(b64))</span></span>
 <span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"><span class="hljs-comment"># b&#x27;OWASP{soul_stone_claimed}&#x27;</span></span></span></code></pre>
       
-    </figure><h2 id="5-reproduce"><a class="wu-anchor" href="#5-reproduce" aria-hidden="true">#</a>5. Reproduce</h2>
+    </figure><p><strong>Flag: <code>OWASP{soul_stone_claimed}</code></strong></p>
+<h2 id="5-reproduce"><a class="wu-anchor" href="#5-reproduce" aria-hidden="true">#</a>5. Reproduce</h2>
 <figure class="wu-code" data-lines="1">
       <figcaption>
         
@@ -170,20 +171,17 @@ other message - a two-time-pad style failure.</p>
     </figure><p>Stdlib only. Deterministic, single-shot.</p>
 <h2 id="6-why-it-works-lessons"><a class="wu-anchor" href="#6-why-it-works-lessons" aria-hidden="true">#</a>6. Why it works / lessons</h2>
 <ul>
-<li>Always try <code>gcd(n1, n2)</code> first on multi-key RSA - shared primes are the
-cheapest break.</li>
-<li>A decryptable short plaintext that looks like a word is often the <em>key</em> to
-another layer (here XOR). Read plaintexts as data, not just as candidate
-flags.</li>
-<li>&quot;Something went wrong&quot; + multiple public keys ⇒ keygen/randomness bug, not
-padding <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button>.</li>
+<li>Always try <code>gcd(n1, n2)</code> first on multi-key RSA - shared primes are the cheapest break.</li>
+<li>A decryptable short plaintext that looks like a word is often the <em>key</em> to another layer
+(here XOR). Read plaintexts as data, not just as candidate flags.</li>
+<li>&quot;Something went wrong&quot; + multiple public keys ⇒ keygen/randomness bug, not padding <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button>.</li>
 </ul>
 
     </article>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#2-recon-factor-with-gcd">2. Recon: factor with gcd</a></li><li><a href="#3-decrypt-both-ciphertexts">3. Decrypt both ciphertexts</a></li><li><a href="#4-recover-the-flag">4. Recover the flag</a></li><li><a href="#5-reproduce">5. Reproduce</a></li><li><a href="#6-why-it-works-lessons">6. Why it works / lessons</a></li></ol>
+        <ol><li><a href="#1-challenge">1. Challenge</a></li><li><a href="#2-recon-factor-with-gcd">2. Recon: factor with gcd</a></li><li><a href="#3-decrypt-both-ciphertexts">3. Decrypt both ciphertexts</a></li><li><a href="#4-recover-the-flag">4. Recover the flag</a></li><li><a href="#5-reproduce">5. Reproduce</a></li><li><a href="#6-why-it-works-lessons">6. Why it works / lessons</a></li></ol>
       </nav>
   </div>
 

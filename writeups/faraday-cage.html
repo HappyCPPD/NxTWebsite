@@ -67,35 +67,133 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><strong>Unlock key (16-byte challenge response):</strong> <code>LumosFaradCage01</code></p>
-<p>A 42 KB APK (<code>com.lumos.faraday</code>) whose Java layer collects 32 hex chars and calls <code>native byte[] BulbNative.submit(byte[])</code>. All real logic is in <code>libbulb.so</code> (arm64-v8a).</p>
-<p><strong>Locating native <code>submit</code>:</strong> <code>JNI_OnLoad</code>&#39;s <code>RegisterNatives</code> call points <code>&quot;submit&quot;</code>/<code>&quot;([B)[B&quot;</code> at a thin JNI glue function that calls one core routine, <code>fcn.000043dc</code>.</p>
-<p><strong>The checker is a bytecode VM:</strong> <code>fcn.000043dc</code> branches on a global flag (<code>1</code> = accepted &quot;dev&quot; path) after running a VM whose context is built from a 96-byte <code>.rodata</code> blob and a 0xf0-byte bytecode program. The dispatch table of 48 handlers is built <strong>at runtime</strong>: decrypting a 104-byte rodata blob, XORing against a 6-byte pool, applying a Fisher-Yates shuffle, then mapping shuffled indices through a pointer table - a deliberately obfuscated indirection. A nearby rodata string is the giveaway: <em>&quot;ERRATA L7-003: handler index equals opcode byte for engineering builds. Rebind map is bypassed when LUMOS_DEV=1.&quot;</em></p>
-<p><strong>Decoding the VM:</strong> the 48 handlers implement a small RISC ISA - registers, byte-addressable scratch memory, arithmetic/bitwise ops, an S-box/InvSbox op, a GF(2⁸) <code>gmul</code> helper (polynomial <code>0x11d</code>), a 32-bit matrix-op helper, a stack, and conditional jumps. Reimplementing the whole ISA in Python and validating it byte-for-byte against Unicorn emulation of the real <code>.so</code> confirms correctness.</p>
-<p>Decoding the 60-instruction bytecode reveals 4 rounds of a <strong>custom AES-variant cipher</strong>: SubBytes with a fixed byte permutation stepping by 5, a custom MixColumns matrix <code>M = [[2,3,5,1],[1,2,3,5],[5,1,2,3],[3,5,1,2]]</code> (the 5s and step-by-5 permutation indices are the flag&#39;s &quot;permuted handlers&quot;/&quot;ch4ch4&quot; hint), and AddRoundKey with 4 round keys extracted from the 96-byte blob - the final state must equal a 16-byte device key.</p>
-<p><strong>Inverting:</strong> since every layer is invertible, un-run the 4 rounds from the target (device key) backward: un-AddRoundKey → un-MixColumns (using the inverse matrix) → un-permute + InvSbox.</p>
+<p><strong>Unlock key (16-byte challenge response):</strong> <code>LumosFaradCage01</code>
+<strong>Category:</strong> reverse engineering (Android + native ARM64)</p>
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<p><code>Faraday.apk</code> (42 KB) - manifest package <code>com.lumos.faraday</code>, single activity.
+Decompiling <code>classes.dex</code> with jadx shows almost no logic: the UI collects 32 hex
+chars (16 bytes), requires <strong>PAIR</strong> first, then calls:</p>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
-        <span class="wu-code-lang">output</span>
+        <span class="wu-code-lang">java</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">input = 4c756d6f734661726164436167653031 = &quot;LumosFaradCage01&quot;</code></pre>
+      <pre id="code-1"><code class="language-java">public final class BulbNative { public static native byte[] submit(byte[] b); ... }</code></pre>
       
-    </figure><p>Feeding this back through the reference VM gives <code>result == 1</code>; the accepted branch then builds and returns the flag.</p>
-<figure class="wu-code wu-code-output" data-lines="2">
+    </figure><p><code>submit(...)==null||length==0</code> → &quot;unlock rejected&quot;; otherwise the return value is
+printed as a GATT notification (0xA008). So all the real work is native.</p>
+<p>Two native libs ship: <code>libbulb.so</code> for <code>arm64-v8a</code> and <code>armeabi-v7a</code> (stripped, NDK r26c).
+We worked the arm64 one.</p>
+<h2 id="2-locating-native-submit"><a class="wu-anchor" href="#2-locating-native-submit" aria-hidden="true">#</a>2. Locating native <code>submit</code></h2>
+<p><code>readelf</code> shows only <code>JNI_OnLoad</code> exported. Disassembling <code>JNI_OnLoad</code> shows a
+<code>RegisterNatives</code> call whose <code>JNINativeMethod</code> table lives at <code>0x6938</code> (RELATIVE relocs):
+name→<code>&quot;submit&quot;</code>, sig→<code>&quot;([B)[B&quot;</code>, fn→<strong><code>0x54c8</code></strong>.</p>
+<p><code>0x54c8</code> is thin JNI glue: <code>GetArrayLength</code>, <code>GetByteArrayElements</code>, one core call
+<code>fcn.000043dc(ptr, len, out, 0x80, &amp;outlen)</code>, <code>ReleaseByteArrayElements</code>, and on non-zero
+result <code>NewByteArray(outlen)</code> + <code>SetByteArrayRegion(out)</code>. So <strong><code>fcn.000043dc</code> is the checker</strong>.</p>
+<h2 id="3-the-checker-is-a-bytecode-vm"><a class="wu-anchor" href="#3-the-checker-is-a-bytecode-vm" aria-hidden="true">#</a>3. The checker is a bytecode VM</h2>
+<p><code>fcn.000043dc</code> first calls <code>0x4470</code> then <code>0x4504</code>, then branches on a global at
+<code>ctx+0x348</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">submit() returned: 1   payload length: 53
+      <pre id="code-2"><code class="language-text">w8 = global[ctx+0x348]
+if (w8 == 1) { out = derive(input); return 1 }     // &quot;dev&quot;/accepted path (0x45bc)
+else         { *outlen = 0; return 0 }             // rejected</code></pre>
+      
+    </figure><p><code>0x4470</code> builds a VM context at <code>.bss</code> <code>0x7b10</code>: zeroes 0x360 bytes, copies a <strong>96-byte
+blob</strong> from rodata <code>0x132a</code> to <code>ctx+0x50</code>, records the bytecode pointer <code>0x138a</code>/len <code>0xf0</code>,
+and copies the 16-byte input to <code>ctx+0x248</code>.</p>
+<p><code>0x4504</code> is the dispatch loop: <code>op = bytecode[pc]</code>; <code>handler = table[op]</code>;
+<code>handler(ctx, bc[pc+1], bc[pc+2], bc[pc+3])</code> returns the next <code>pc</code>; it halts when
+<code>ctx+0x34c != 0</code> or <code>op &gt; 0x2f</code>. The handler <strong>table is built at runtime</strong> by <code>0x5058</code>
+(zero-init flag at <code>ctx+0x370</code>): it seeds a 48-byte permutation by decrypting a 104-byte
+rodata blob at <code>0x1322</code>, XORing with a 6-byte pool, applying a helper, then a Fisher - Yates
+shuffle, and finally maps shuffled indices through a 48-entry pointer table in
+<code>.data.rel.ro</code> <code>0x67b8</code> into <code>ctx+0x368</code> (<code>0x7e78</code>). It also builds an inverse-S-box at
+<code>0x7ff8</code> from the AES S-box at <code>0x147a</code>.</p>
+<p>The <code>.rodata</code> holds the tell-tale <code>ERRATA L7-003: handler index equals opcode byte for engineering builds. Rebind map is bypassed when LUMOS_DEV=1.</code> - the rebind map is exactly
+that shuffled handler table.</p>
+<h2 id="4-decoding-the-vm"><a class="wu-anchor" href="#4-decoding-the-vm" aria-hidden="true">#</a>4. Decoding the VM</h2>
+<p>The 48 handlers (at <code>0x4624…0x5058</code>) are a small RISC ISA operating on <code>ctx</code>:
+32-bit registers <code>reg[i] = ctx[4i]</code>, a byte-addressable scratch array <code>mem[j] = ctx[0x40+j]</code>,
+plus add/sub/mul/and/or/xor/shl/lsr/ror, immediates, byte/dword loads-stores, an
+<code>Sbox</code>/<code>InvSbox</code> op, <code>gmul</code> (via helper <code>0x51b8</code> = <strong>GF(2^8) multiply, polynomial 0x11d</strong>),
+a 32-bit matrix-op (helper <code>0x52c0</code>), a stack (<code>push</code>/<code>pop</code>/<code>call</code>/<code>ret</code>), and six
+conditional jumps. Two terminals: <code>halt</code> and <code>set-result-and-halt</code>.</p>
+<p>We reimplemented the whole ISA in Python (<code>solve/vm.py</code>) and validated it byte-for-byte
+against Unicorn running the real <code>.so</code> (identical final <code>mem[0..15]</code> and result).</p>
+<p>Decoding the 60-instruction bytecode yields the program:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">mem[0..15] = input
+repeat 4 rounds:                        # round r
+    mem[i] = sbox(mem[perm[i]])         # SubBytes + a fixed byte permutation
+    for w in 0..3: mem[4w..4w+3] = M * mem[4w..4w+3]   # custom MixColumns (GF(2^8))
+    mem[i] ^= roundkey[r][i]            # AddRoundKey
+# check: mem[0..15] must equal the 16-byte device key at mem[0x10..0x1f]</code></pre>
+      
+    </figure><p>Where (all read from the 96-byte blob <code>0x132a</code>):</p>
+<ul>
+<li><strong>device key</strong> = <code>f809792ec246f0098538517c71c64461</code></li>
+<li><strong>round keys</strong> = <code>ObjectSpacePrime</code>, <code>FaradayCageBuri</code>, <code>nLumosLEDBulbFl</code>, <code>asshTheFlagIsIn</code></li>
+<li><strong>permutation</strong> = <code>[0,5,10,15,4,9,14,3,8,13,2,7,12,1,6,11]</code></li>
+<li><strong>MixColumns matrix</strong> <code>M = [[2,3,5,1],[1,2,3,5],[5,1,2,3],[3,5,1,2]]</code> (note the 5s and the
+fact perm indices step by 5 - hence the flag&#39;s <code>p3rmut3d_h4ndl3rs</code> / <code>ch4ch4</code>.)</li>
+</ul>
+<h2 id="5-inverting-the-cipher"><a class="wu-anchor" href="#5-inverting-the-cipher" aria-hidden="true">#</a>5. Inverting the cipher</h2>
+<p>Because every layer is invertible, we un-run 4 rounds from the target (= device key):
+<code>un-AddRoundKey</code> → <code>un-MixColumns</code> (with <code>M⁻¹ = [[229,255,166,27],[27,229,255,166], [166,27,229,255],[255,166,27,229]]</code>) → <code>un-permute</code> + <code>InvSbox</code>. Result:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">input = 4c756d6f734661726164436167653031 = &quot;LumosFaradCage01&quot;</code></pre>
+      
+    </figure><p>Feeding that back into the reference VM gives <code>result == 1</code>.</p>
+<h2 id="6-getting-the-flag"><a class="wu-anchor" href="#6-getting-the-flag" aria-hidden="true">#</a>6. Getting the flag</h2>
+<p>With <code>result == 1</code>, <code>fcn.000043dc</code> takes the accepted branch and calls <code>0x45bc(input)</code>,
+which builds a 53-byte string and copies it to the output buffer. Running the real native
+code end-to-end in Unicorn (<code>solve/unlock_emulate.py</code>) returns exactly:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">submit() returned: 1   payload length: 53
 FLAG: isfcr{p3rmut3d_h4ndl3rs_v5_cust0m_ch4ch4_1n_th3_c4g3}</code></pre>
       
-    </figure><p>Verification: pure-Python inversion and full ARM64 Unicorn emulation independently agree; all-zero/random/off-by-one keys are rejected; a literal decoy string <code>isfcr{nope_this_is_a_decoy_please_move_on}</code> is present but never returned.</p>
+    </figure><h2 id="7-verification-pitfalls"><a class="wu-anchor" href="#7-verification-pitfalls" aria-hidden="true">#</a>7. Verification / pitfalls</h2>
+<ul>
+<li><strong>Independent paths agree:</strong> pure-Python inversion and full ARM64 emulation both give the
+same key and flag.</li>
+<li><strong>Negative controls:</strong> all-zero, random, and off-by-one keys are rejected (<code>w0=0</code>,
+<code>outlen=0</code>). Only the exact 16 bytes unlock - confirming the cipher comparison is real.</li>
+<li><strong>Decoys:</strong> the string <code>isfcr{nope_this_is_a_decoy_please_move_on}</code> is present but never
+returned by <code>submit</code>.</li>
+<li><strong>Emulator gotcha that cost time:</strong> the VM&#39;s <code>.bss</code> spans <code>0x7b10–0x80f8</code>; an I/O scratch
+buffer placed at <code>0x8000</code> was silently zeroed by the context reset (and RELATIVE relocs
+in <code>.data.rel.ro</code> are zero in the file - they must be applied before the handler table
+is meaningful). Both are noted for reuse.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-locating-native-submit">2. Locating native submit</a></li><li><a href="#3-the-checker-is-a-bytecode-vm">3. The checker is a bytecode VM</a></li><li><a href="#4-decoding-the-vm">4. Decoding the VM</a></li><li><a href="#5-inverting-the-cipher">5. Inverting the cipher</a></li><li><a href="#6-getting-the-flag">6. Getting the flag</a></li><li><a href="#7-verification-pitfalls">7. Verification / pitfalls</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

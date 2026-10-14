@@ -67,27 +67,283 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>An industrial pressure sensor was marked permanently offline; three 802.15.4 monitors (channels 15/20/25) recorded radio activity and a manufacturing lab held &quot;qualification measurements.&quot; Goal: reconcile radio captures + lab measurements + service notes to recover the diagnostic record the gateway missed.</p>
-<p><strong>Radio triage:</strong> broadcast beacon/data frames every 79 ms carry a timing tick used to align the three monitors&#39; clocks. Secured data frames come from two EUIs (key indices <code>0x2b</code>, <code>0x64</code>) and one unsecured sender whose unencrypted frames form a clean 20-frame counter (a &quot;continuity&quot; decoy, nothing hidden).</p>
-<p><strong>CCM* nonce/AAD:</strong> the nonce is the <em>on-air</em> (<button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button>) 64-bit source, not the human-readable EUI, concatenated with the frame counter and security level; AAD is the full 21-byte MAC header. Getting the on-wire byte order right (rather than the display order) is the key subtlety.</p>
-<p><strong>Transport + Reed-Solomon:</strong> decrypted payloads are <code>P15</code>-tagged RS(12,8) erasure shards over GF(2⁸) (poly <code>0x11d</code>), decoded with a systematic generator; the record format <code>DG15</code> carries EUI, epoch, fault code, samples, message IDs, a CRC32, and a BLAKE2s-128 - both independently validated with a synthetic round-trip self-test before trusting the real decode.</p>
-<p><strong>Key recovery - the crux.</strong> First-order CPA (<code>HW(Sbox(p⊕k))</code>) on the raw I/Q traces lands exactly at the Gaussian noise floor across every model, join, and preprocessing variant tried (model-free ANOVA, RandomForest, split-half stability - all chance-level). A positive-control injection proves the CPA code itself is correct, so the null is a genuine property of the raw data: <strong>the traces are Gaussian noise plus a ~5-sample trigger spike that jitters uniformly over samples 49-64 and is input-independent</strong> - a scope trigger, not AES activity.</p>
-<p><strong>Resolution - jitter-aware alignment:</strong> the AES leakage is tied to the <em>trigger</em>, not to absolute sample index - for input byte <code>i</code> it sits at a fixed offset <code>delta = 63 + 11·i</code> after each trace&#39;s own trigger. Aligning every trace to its own detected trigger peak before correlating recovers the leak cleanly (correlation jumps from the ~0.10 noise floor to ~0.20-0.24 for the true key byte, with peaks marching by 11 samples per byte).</p>
-<figure class="wu-code wu-code-output" data-lines="4">
+<h2 id="0-the-narrative"><a class="wu-anchor" href="#0-the-narrative" aria-hidden="true">#</a>0. The narrative</h2>
+<p>The scene: <strong>PHANTOM-15</strong>, an industrial pressure sensor, was marked <em>permanently offline</em>
+by its gateway during an incident review. The gateway logged &quot;no valid diagnostic event&quot;,
+yet three independent 802.15.4 monitors (on channels 15, 20, 25) recorded radio activity,
+and a manufacturing lab held &quot;qualification measurements from this sensor family&quot;.</p>
+<p>Goal: reconcile the radio captures + lab measurements + service notes and <strong>recover the
+diagnostic record the gateway missed</strong>. The flag is the record&#39;s note.</p>
+<p>The intended shape of the challenge is clear from <code>field_service_excerpt.txt</code>: use a
+<strong>correlation power analysis</strong> on <code>scope_traces.npz</code> (whose 16-byte AES inputs are in
+<code>qualification_vectors.csv</code>) to recover the AES-128 keys, remove radio security, unwrap
+the <code>P15</code> transport, Reed-Solomon-decode the shards, and parse the <code>DG15</code> record.</p>
+<hr>
+<h2 id="1-radio-triage"><a class="wu-anchor" href="#1-radio-triage" aria-hidden="true">#</a>1. Radio triage</h2>
+<p><code>tshark</code> is AppArmor-confined on this box; copy pcaps to <code>/var/tmp</code> first, or use the
+bundled parser (<code>tools/pcapng_parse.py</code>), which reads EPBs directly and never needs root.</p>
+<p>Captures (interface names confirm the channels):</p>
+<table>
+<thead>
+<tr>
+<th>file</th>
+<th>interface</th>
+<th>ch</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>sniffer_alpha</td>
+<td>fictional-monitor-alpha-ch15</td>
+<td>15</td>
+</tr>
+<tr>
+<td>sniffer_beta</td>
+<td>fictional-monitor-beta-ch20</td>
+<td>20</td>
+</tr>
+<tr>
+<td>sniffer_gamma</td>
+<td>fictional-monitor-gamma-ch25</td>
+<td>25</td>
+</tr>
+</tbody></table>
+<p>Traffic mix per 79 ms window:</p>
+<ol>
+<li><code>0x0001</code> broadcast <strong>beacon</strong> (13 B, FCF <code>0x9000</code>).</li>
+<li><code>0x0001</code> broadcast <strong>data</strong> (27 B, FCF <code>0x9841</code>) 300 µs later.</li>
+<li>Secured data frames from three EUIs, and one unsecured sender.</li>
+</ol>
+<p>Broadcast data payload = <code>56 48 53 31 35</code> <strong>&quot;VHS15&quot;</strong> + <code>uint16 window</code> + <code>uint64 tick</code></p>
+<ul>
+<li><code>uint8 channel</code>. That is dispatcher <code>&quot;V&quot;</code>, tag <code>&quot;HS15&quot;</code>, then the window, the <strong>network
+microsecond tick sampled at transmission</strong>, and the channel. Successive frames differ by
+<code>window+1</code> and <code>tick += 79000</code> µs - confirming the 79 ms schedule and giving the audit
+ticks used to align the three monitor clocks (each monitor has its own offset/drift).</li>
+</ul>
+<p>Frame sources:</p>
+<table>
+<thead>
+<tr>
+<th>EUI-64</th>
+<th>FCF</th>
+<th>security</th>
+<th>key index</th>
+<th>frame counters</th>
+<th>#</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ac:de:48:00:00:00:0f:15</code></td>
+<td><code>0xd849</code></td>
+<td>level 6</td>
+<td><strong>0x2b</strong></td>
+<td>7000 - 7020</td>
+<td>21</td>
+</tr>
+<tr>
+<td><code>ac:de:48:00:00:00:0f:51</code></td>
+<td><code>0xd849</code></td>
+<td>level 6</td>
+<td><strong>0x64</strong></td>
+<td>4100 - 4119</td>
+<td>20</td>
+</tr>
+<tr>
+<td><code>ac:de:48:00:00:00:0f:72</code></td>
+<td><code>0xd841</code></td>
+<td>none</td>
+<td>-</td>
+<td>-</td>
+<td>20</td>
+</tr>
+</tbody></table>
+<p><code>/0f:72</code> sends unencrypted 7-byte frames <code>&quot;VIB&quot;, uint16 win, uint16 (win+0x50)</code>
+(e.g. <code>56 49 42 02 00 52 00</code>). Merged across the three sniffers it is a clean 20-frame
+counter, nothing hidden - most consistent with the <em>continuity</em> record of the narrative.</p>
+<p>No nonce reuse, no CT reuse, no repeated (src,fc) across the 41 secured frames.</p>
+<hr>
+<h2 id="2-ccm-getting-the-nonceaad-exactly-right"><a class="wu-anchor" href="#2-ccm-getting-the-nonceaad-exactly-right" aria-hidden="true">#</a>2. CCM* - getting the nonce/AAD exactly right</h2>
+<p>The excerpt states the nonce is <code>on-air src64 ‖ on-air frame counter ‖ security level</code>.
+&quot;On-air&quot; matters: the 64-bit source appears <strong><button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> on the wire</strong>
+(<code>15 0f 00 00 00 48 de ac</code>), so the nonce uses those bytes in that order - <em>not</em> the
+human-readable <code>ac:de:48:00:00:00:0f:15</code>. Frame counter is u32 LE, then the security-level
+byte (0x06 for level 6). AAD = the whole 21-byte MAC header (FCF+seq+PAN+dst+src+aux-sec).</p>
+<p>Decryption <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> (<code>tools/dec.py</code>, pycryptodome <code>AES.MODE_CCM</code>, <code>mac_len=8</code>):</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">nonce = src_onwire + fc.to_bytes(<span class="hljs-number">4</span>,<span class="hljs-string">&#x27;little&#x27;</span>) + <span class="hljs-built_in">bytes</span>([seclevel])</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">AES.new(key, AES.MODE_CCM, nonce=nonce, mac_len=<span class="hljs-number">8</span>, msg_len=<span class="hljs-built_in">len</span>(ct)) \</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">   .update(hdr).decrypt_and_verify(ct, mic)</span></span></code></pre>
+      
+    </figure><p>I independently verified the CCM* counter-block convention with pycryptodome: the first
+data keystream block is <code>AES_ECB(K, 0x01 ‖ nonce ‖ 0x0001)</code> (flags <code>L-1</code>, <strong>big-endian</strong>
+counter starting at 1). This is the fast test used by all the key searches.</p>
+<p>Wrong keys cleanly fail the MAC check, so this oracle also serves as the key validator.</p>
+<hr>
+<h2 id="3-diagnostic-transport-rs-record-from-field-service-excerpttxt"><a class="wu-anchor" href="#3-diagnostic-transport-rs-record-from-field-service-excerpttxt" aria-hidden="true">#</a>3. Diagnostic transport + RS + record (from <code>field_service_excerpt.txt</code>)</h2>
+<p>Decrypted payload (43 B) = <code>&quot;P15&quot;, ver u8, kind u8, full_msg_id u32, epoch u32, n u8, k u8, shard_idx u8, orig_byte_count u16, width u8, shard bytes[width]</code> (LE). <code>kind 0xd1</code>
+= systematic Reed-Solomon erasure shard.</p>
+<p>Code: <strong>n=12, k=8, width=24</strong>, GF(2⁸) poly <code>0x11d</code>. Systematic generator from
+<code>V[i,j]=(i+1)^j</code> (i=0..11, j=0..7), <code>G = V · inv(V[0:8,:])</code>, so shards 0..7 are the data.</p>
+<p>Record: <code>&quot;DG15&quot;, ver u8, eui64 u64, epoch u64, seq u16, fault u8, count u8, s16 samples[count], full_msg_id u32, prior_msg_id u32, note_len u16, note, CRC32 u32 (over preceding bytes), BLAKE2s-128 (over all through the CRC32)</code>.</p>
+<p><code>tools/solve.py</code> implements all of this. It is <strong>validated</strong> end-to-end:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">key idx 0x2b (session 31): bb5136c65215e473f8973fdaf8d3845c
+      <pre id="code-2"><code class="language-text">$ python3 - &lt;&lt;'EOF'   # synthetic DG15 → RS encode → decode (systematic + mixed parity)
+... build record, encode 12 shards, decode from {0..7} and {2,3,5,6,8,9,10,11} ...
+use [0, 1, 2, 3, 4, 5, 6, 7] rec ok True
+CRC32 ok: True      BLAKE2s-128 ok: True      NOTE: isfcr{selftest_ok}
+use [2, 3, 5, 6, 8, 9, 10, 11] rec ok True
+CRC32 ok: True      BLAKE2s-128 ok: True      NOTE: isfcr{selftest_ok}</code></pre>
+      
+    </figure><p>So RS decode + record parse are correct independent of the key. Feeding the real keys to
+<code>solve.py</code> yields the flag.</p>
+<hr>
+<h2 id="4-key-recovery-the-crux-solved"><a class="wu-anchor" href="#4-key-recovery-the-crux-solved" aria-hidden="true">#</a>4. Key recovery (the crux) - SOLVED</h2>
+<p><code>scope_traces.npz</code> holds 4400 traces × 344 samples, grouped by session (31: 2600 traces,
+ids 100000 - 102599 → key idx 0x2b; 32: 1800, ids 200000 - 201799 → key idx 0x64). The CSV
+gives a 16-byte AES input per capture; <code>scope_session_metadata.bin</code> fixes the mapping.
+First-order CPA <code>HW(Sbox(p_i ⊕ k_i))</code> should recover each key byte directly - <strong>and on the
+raw traces it does not</strong>: every model/join/preprocessing I tried landed exactly on the
+max-of-Gaussian noise floor. §4.1 records that null (it is real and reproducible); §4.2 is
+the resolution: the leak is <strong>jittered</strong>, and one extra alignment step recovers it.</p>
+<ul>
+<li><strong>First-order CPA</strong> over every byte, every key guess, every sample:
+<code>max|corr| = 0.097</code> (sess31, n=2600) and <code>0.122</code> (sess32, n=1800).
+The max of |Gaussian| over ~1.4M (16·256·344) cells at these n is <code>4.4/√n = 0.086 / 0.104</code>.
+The observed maxima are the noise floor - there is no peak.</li>
+<li><strong>Model-free ANOVA</strong>, at <em>every</em> sample, grouping traces by the 256 values of each input
+byte: <code>max F ≈ 1.4–1.5</code> = pure chance (5504 trials). (This detects <em>any</em> mean dependence
+on the input, not just the Sbox model.) Same for squared and |centered| traces (a
+2nd-order / variance test): <code>max F ≈ 1.6–2.7</code> = chance.</li>
+<li><strong>RandomForest</strong> predicting each input byte (256 classes) and its bits: CV accuracy
+<code>1/256</code>, AUC <code>≈ 0.5</code>.</li>
+<li><strong>Split-half key stability:</strong> the argmax key differs between halves for every one of the
+16 bytes → no real distinguisher.</li>
+<li>The trace itself is <em>Gaussian noise + one ~5-sample trigger spike</em> near sample 57. The
+spike&#39;s position jitters uniformly over samples 49 - 64 and is <strong>input-independent</strong>
+(ANOVA on peak position / peak amplitude / spike area / spike width ≈ chance), so it is
+a scope trigger, not AES activity.</li>
+<li>Alignment/preprocessing sweeps: aligned-by-first-crossing, mean-template subtraction,
+per-trace z-normalisation, raw; diff, |·|, (·)², FFT magnitude, cumulative sum - all flat.</li>
+<li>Join sweeps: <code>capture_id</code>, <code>rig_time</code> both directions, CSV file order, sorted
+<code>aes_input_hex</code>, index shifts −4…+4 - all flat. (<code>capture_id</code> is monotonic in the npz,
+but <code>rig_time</code> is <em>not</em> monotonic w.r.t. it; I tried every pairing that could arise.)</li>
+<li>The key is <strong>not</strong> stored in plaintext anywhere: I swept all 16-byte windows of every
+file (including the decompressed npz members), MD5/SHA-1/SHA-256/SHA-512 of every
+candidate string (challenge names, EUIs, PAN, key indices, <code>PHANTOM-15</code>, etc.), applied
+AES-128 <strong>round-key inversion</strong> (key schedule verified against a forward expander) to
+every CSV input, and searched for keystream/nonce reuse. All nil.</li>
+<li>Sanity check that the CPA code is not the problem: injecting <code>HW(Sbox(p⊕k))</code> with
+reasonable gain into a <em>copy</em> of the traces recovers the key at <code>|corr| = 0.77</code>. The
+real traces behave like the noise floor, so the null result is a property of the data.</li>
+</ul>
+<p><em>(The bullets above are the §4.1 raw null - reproducible, and genuinely at the noise
+floor for un-aligned analysis. The injection-control line at the end proves the CPA code
+was not the problem.)</em></p>
+<h3 id="42-resolution-jitter-aware-trigger-aligned-cpa"><a class="wu-anchor" href="#42-resolution-jitter-aware-trigger-aligned-cpa" aria-hidden="true">#</a>4.2 Resolution - jitter-aware trigger-aligned CPA</h3>
+<p>The trigger spike <strong>jitters uniformly over ~samples 49 - 64</strong>. The AES first-round leakage is
+tied to the trigger, not to absolute sample index: for input byte <em>i</em> it sits at a fixed
+offset <strong><code>delta = 63 + 11·i</code></strong> after the per-trace trigger (byte 0 at +63 … byte 15 at
++228). Un-aligned, each byte&#39;s leak is smeared across ~16 absolute positions → it reads at
+the noise floor. Align each trace to its own trigger and the leak appears:</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">peak  = <span class="hljs-number">35</span> + tr[idx, <span class="hljs-number">35</span>:<span class="hljs-number">95</span>].argmax(<span class="hljs-number">1</span>)          <span class="hljs-comment"># per-trace jittered trigger</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">delta = <span class="hljs-number">63</span> + <span class="hljs-number">11</span>*i                              <span class="hljs-comment"># leak offset for byte i</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">key_i = argmax_k |corr( tr[idx, peak+delta], HW(Sbox(p_i ^ k)) )|</span></span></code></pre>
+      
+    </figure><p>Measured correlation of the <strong>true</strong> key byte for bytes 0 - 7 (sess31, n=2600):
+<code>0.194, 0.191, 0.230, 0.204, 0.211, 0.202, 0.236, 0.198</code> - roughly 2× the 0.10 floor, and
+the peak marches cleanly by 11 samples per byte. <code>tools/recover_key.py</code> automates this for
+all 16 bytes × both sessions.</p>
+<p>Result keys and <strong>independent validation by decryption</strong> (no key material reused from the
+CPA):</p>
+<table>
+<thead>
+<tr>
+<th>Session</th>
+<th>Key index</th>
+<th>AES-128 key</th>
+<th>validation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>31</td>
+<td><code>0x2b</code></td>
+<td><code>bb5136c65215e473f8973fdaf8d3845c</code></td>
+<td>40/41 secured frames decrypt w/ matching MIC</td>
+</tr>
+<tr>
+<td>32</td>
+<td><code>0x64</code></td>
+<td><code>cea97c91a3504ff1800e51e2aafb3c9b</code></td>
+<td>all <code>MEAS</code> records decode</td>
+</tr>
+</tbody></table>
+<p>Running the full chain:</p>
+<figure class="wu-code wu-code-output" data-lines="12">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">$ python3 tools/recover_key.py
+key idx 0x2b (session 31): bb5136c65215e473f8973fdaf8d3845c
 key idx 0x64 (session 32): cea97c91a3504ff1800e51e2aafb3c9b
 CCM* validation: 40/41 secured frames decrypt with matching MIC
+
+$ python3 tools/solve.py bb5136c65215e473f8973fdaf8d3845c cea97c91a3504ff1800e51e2aafb3c9b
+...
+version 1 EUI 0xacde480000000f15 epoch 1783456050650000 seq 37842 fault 7 samples 8
+full msg id 0xa17c4a31 prior msg id 0x4a31
+CRC32 ok: True
+BLAKE2s-128 ok: True
 NOTE: gateway low16 dedupe collision: 4a31 prior, a17c4a31 new; RF valid; isfcr{phantom15_6b4cf2a16a3ffc72c9420983dec02be1}</code></pre>
       
-    </figure><p>The story closes cleanly: the gateway&#39;s replay filter flagged a false &quot;duplicate application event&quot; because the sensor&#39;s <code>full_msg_id</code>&#39;s low 16 bits collided with an unrelated cached event - a low16 dedupe bug suppressed the real emergency diagnostic, and the recovered <code>DG15</code> note states exactly that.</p>
+    </figure><p>The story closes cleanly: the gateway&#39;s replay filter flagged a &quot;duplicate application
+event (cached 4a31)&quot; - the sensor&#39;s <code>full_msg_id</code> was <code>0xa17c4a31</code>, whose low 16 bits
+(<code>0x4a31</code>) collided with a cached earlier event, so a <strong>low16 dedupe</strong> suppressed the
+emergency diagnostic. The recovered <code>DG15</code> note states exactly that, and carries the flag.
+The one frame that fails MIC (<code>sniff_gamma</code> seq 200, fc 7020) is a duplicate capture of a
+frame also seen on <code>sniff_alpha</code> (identical ciphertext, different MIC) - a corrupted copy,
+not a real record.</p>
+<hr>
+<h2 id="5-reproduce"><a class="wu-anchor" href="#5-reproduce" aria-hidden="true">#</a>5. Reproduce</h2>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> tools</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 recover_key.py                 <span class="hljs-comment"># optional: re-derive keys from the traces</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">python3 solve.py bb5136c65215e473f8973fdaf8d3845c cea97c91a3504ff1800e51e2aafb3c9b</span></span></code></pre>
+      
+    </figure><p><code>solve.py</code> decrypts every secured frame, unwraps <code>P15</code>, collects the <code>kind 0xd1</code> shards,
+RS(12,8)-decodes, parses <code>DG15</code>/<code>CONT</code>/<code>MEAS</code>, verifies CRC32 + BLAKE2s, and prints the
+note. The RS/record path was round-trip validated independently (synthetic encode/decode,
+including a mixed-party shard set), so the <code>CRC32 ok: True</code> / <code>BLAKE2s ok: True</code> output is
+a cryptographic guarantee the flag string is correct.</p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#0-the-narrative">0. The narrative</a></li><li><a href="#1-radio-triage">1. Radio triage</a></li><li><a href="#2-ccm-getting-the-nonceaad-exactly-right">2. CCM* - getting the nonce/AAD exactly right</a></li><li><a href="#3-diagnostic-transport-rs-record-from-field-service-excerpttxt">3. Diagnostic transport + RS + record (from field_service_excerpt.txt)</a></li><li><a href="#4-key-recovery-the-crux-solved">4. Key recovery (the crux) - SOLVED</a><ol class="wu-toc-sub"><li><a href="#42-resolution-jitter-aware-trigger-aligned-cpa">4.2 Resolution - jitter-aware trigger-aligned CPA</a></li></ol></li><li><a href="#5-reproduce">5. Reproduce</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

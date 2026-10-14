@@ -68,7 +68,7 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><strong>1. First look</strong></p>
+<h2 id="1-first-look"><a class="wu-anchor" href="#1-first-look" aria-hidden="true">#</a>1. First look</h2>
 <p>The handout is a single 16 KB file:</p>
 <figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
@@ -131,8 +131,7 @@ instruction&#39;s opcode being mistaken for text) leaves:</p>
       
     </figure><p>Concatenating gives <code>OWASP{th3_s0ul_sl_st0n3_wh1sp3r}</code> - visibly <em>almost</em>
 right but with a duplicated <code>sl</code>. That seam is the tell: the pieces are
-overlapping, and reading them naively is a trap. Time to read the actual
-code.</p>
+overlapping, and reading them naively is a trap. Time to read the actual code.</p>
 <h2 id="3-main-the-gate"><a class="wu-anchor" href="#3-main-the-gate" aria-hidden="true">#</a>3. main() - the gate</h2>
 <figure class="wu-code" data-lines="9">
       <figcaption>
@@ -156,9 +155,9 @@ which is why it doesn&#39;t appear as its own entry in <code>strings</code>.</p>
 <p>So the &quot;secret phrase&quot; the vault is guarding is literally <code>soul</code>. A match
 falls through to <code>soul_stone()</code>.</p>
 <h2 id="4-soul-stone-where-the-flag-actually-lives"><a class="wu-anchor" href="#4-soul-stone-where-the-flag-actually-lives" aria-hidden="true">#</a>4. soul_stone() - where the flag actually lives</h2>
-<p><code>soul_stone()</code> assembles the flag from four 64-bit <code>movabs</code> immediates
-written to overlapping <code>rbp</code>-relative slots, copies 29 bytes (<code>0x00..0x1C</code>)
-into a local buffer, NUL-terminates it, then <code>printf(&quot;Flag: %s&quot;)</code>:</p>
+<p><code>soul_stone()</code> assembles the flag from four 64-bit <code>movabs</code> immediates written
+to overlapping <code>rbp</code>-relative slots, copies 29 bytes (<code>0x00..0x1C</code>) into a
+local buffer, NUL-terminates it, then <code>printf(&quot;Flag: %s&quot;)</code>:</p>
 <figure class="wu-code" data-lines="9">
       <figcaption>
         
@@ -205,12 +204,12 @@ into a local buffer, NUL-terminates it, then <code>printf(&quot;Flag: %s&quot;)<
 <td><code>rbp-0x5b</code></td>
 </tr>
 </tbody></table>
-<p>The third write sits at <code>-0x63</code>, three bytes <strong>into</strong> the second write&#39;s
-slot. It re-lands <code>l</code>, <code>_</code>, <code>s</code> over the exact same <code>l</code>, <code>_</code>, <code>s</code> that
-<code>3_s0ul_s</code> already ends with - a deliberate overlap that reproduces the seam
-we saw in <code>strings</code>. Same values, so nothing is corrupted; it just exists to
-make linear/naive reconstruction produce the wrong <code>...sl...</code> result.
-Reading from <code>-0x70</code> upward with later writes winning:</p>
+<p>The third write sits at <code>-0x63</code>, three bytes <strong>into</strong> the second write&#39;s slot.
+It re-lands <code>l</code>, <code>_</code>, <code>s</code> over the exact same <code>l</code>, <code>_</code>, <code>s</code> that <code>3_s0ul_s</code>
+already ends with - a deliberate overlap that reproduces the seam we saw in
+<code>strings</code>. Same values, so nothing is corrupted; it just exists to make
+linear/naive reconstruction produce the wrong <code>...sl...</code> result. Reading from
+<code>-0x70</code> upward with later writes winning:</p>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
@@ -222,44 +221,51 @@ Reading from <code>-0x70</code> upward with later writes winning:</p>
     </figure><p>→ <code>OWASP{th3_s0ul_st0n3_wh1sp3r}</code></p>
 <h2 id="5-solve"><a class="wu-anchor" href="#5-solve" aria-hidden="true">#</a>5. Solve</h2>
 <p>Fastest path - the binary prints the flag once you know the gate word:</p>
-<figure class="wu-code" data-lines="5">
+<figure class="wu-code" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
         <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-9"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">echo</span> <span class="hljs-string">&#x27;soul&#x27;</span> | ./soul_whisper</span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">[+] The stone recognizes your soul.</span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">[+] Access granted.</span></span>
-<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"></span></span>
-<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">Flag: OWASP{th3_s0ul_st0n3_wh1sp3r}</span></span></code></pre>
+      <pre id="code-9"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">echo</span> <span class="hljs-string">&#x27;soul&#x27;</span> | ./soul_whisper</span></span></code></pre>
+      
+    </figure><figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-text">[+] The stone recognizes your soul.
+[+] Access granted.
+
+Flag: OWASP{th3_s0ul_st0n3_wh1sp3r}</code></pre>
       
     </figure><p>Static path, no execution - decode the immediates directly:</p>
 <figure class="wu-code" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
-        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-10"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 solve.py     <span class="hljs-comment"># OWASP{th3_s0ul_st0n3_wh1sp3r}</span></span></span></code></pre>
+      <pre id="code-11"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 solve.py     <span class="hljs-comment"># OWASP{th3_s0ul_st0n3_wh1sp3r}</span></span></span></code></pre>
       
     </figure><h2 id="6-takeaways"><a class="wu-anchor" href="#6-takeaways" aria-hidden="true">#</a>6. Takeaways</h2>
 <ul>
 <li>&quot;Not stripped&quot; is a gift: <code>nm</code> handed over <code>main</code> and <code>soul_stone</code>.</li>
 <li>A stack-built <code>strcmp</code> constant is a cheap way to hide a password from
 <code>strings</code>; recognize the <code>mov DWORD PTR [...], imm</code> + <code>strcmp</code> idiom.</li>
-<li>Overlapping <code>movabs</code> immediates are a classic obfuscation: the fragments
-in <code>strings</code> <em>look</em> almost right but duplicate a seam character. Trust the
+<li>Overlapping <code>movabs</code> immediates are a classic obfuscation: the fragments in
+<code>strings</code> <em>look</em> almost right but duplicate a seam character. Trust the
 disassembly&#39;s memory layout, not the string dump.</li>
-<li>Two independent methods (live run, static decode) agree - high
-confidence.</li>
+<li>Two independent methods (live run, static decode) agree - high confidence.</li>
 </ul>
+<p><strong>Flag:</strong> <code>OWASP{th3_s0ul_st0n3_wh1sp3r}</code></p>
 
     </article>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#2-leaking-fragments-with-strings">2. Leaking fragments with strings</a></li><li><a href="#3-main-the-gate">3. main() - the gate</a></li><li><a href="#4-soul-stone-where-the-flag-actually-lives">4. soul_stone() - where the flag actually lives</a></li><li><a href="#5-solve">5. Solve</a></li><li><a href="#6-takeaways">6. Takeaways</a></li></ol>
+        <ol><li><a href="#1-first-look">1. First look</a></li><li><a href="#2-leaking-fragments-with-strings">2. Leaking fragments with strings</a></li><li><a href="#3-main-the-gate">3. main() - the gate</a></li><li><a href="#4-soul-stone-where-the-flag-actually-lives">4. soul_stone() - where the flag actually lives</a></li><li><a href="#5-solve">5. Solve</a></li><li><a href="#6-takeaways">6. Takeaways</a></li></ol>
       </nav>
   </div>
 

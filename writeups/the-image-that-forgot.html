@@ -67,23 +67,227 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>Recover the incident token of the container instance serving <code>dispatch-ac1af5608a</code> at <code>2026-08-14T10:10:08.555+05:30</code>. Three artifacts: <code>events.jsonl</code> (27 deployment events across 8 different UTC offsets), <code>images.tar</code> (OCI image layout), <code>vault.json</code> (4 AES-256-GCM keys + 203 encrypted notes, each AAD&#39;d with <code>[service_id, key_version, manifest_digest, event_id]</code>).</p>
-<p><strong>Step 1 - normalise the timeline:</strong> every event timestamp arrives in a different offset; nothing is comparable until converted to one instant: <code>2026-08-14T10:10:08.555+05:30</code> = <code>2026-08-14T04:40:08.555Z</code>. Walking the normalised timeline, the last successful event that (re)started the instance before the target is a <strong>migrate</strong> event <code>deploy-9d1a1fd93d</code> at 04:36:41.756Z - a subsequent activate two minutes later is marked <code>&quot;status&quot;: &quot;failed&quot;</code> and never replaced the instance.</p>
-<p><strong>Step 2 - index vs. manifest digest:</strong> the <code>ref</code> values in events are multi-arch <strong>OCI index</strong> digests, not the manifest the instance actually ran. Resolving the chain (which <code>dispatch:stable</code> tag pointed where at the relevant moment, accounting for an intervening rollback) and then descending into the index for the instance&#39;s platform (<code>linux/amd64</code>) gives the real <code>manifest_digest</code>.</p>
-<p><strong>Step 3 - key_version:</strong> walking image layers (<code>etc/service/key-version.json</code>) exposes candidate key-version strings, including decoy paths at <code>etc/service.bak/...</code> and <code>opt/&lt;svc&gt;/templates/...</code>; the correct value is pinned cryptographically in the next step.</p>
-<p><strong>Step 4 - unwrap and decrypt:</strong> trying all 4 vault keys against all 203 notes under the candidate AAD tuple <code>[service_id, key_version, manifest_digest, event_id]</code>, exactly one note authenticates. The flag KDF (scrypt + AES-GCM, same evidence-tuple pattern as other forensics challenges in this event) is the <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> that confirms the tuple is correct.</p>
-<figure class="wu-code wu-code-output" data-lines="1">
+<h2 id="objective"><a class="wu-anchor" href="#objective" aria-hidden="true">#</a>Objective</h2>
+<p>Recover the <em>incident token</em> of the container instance that was serving
+<code>dispatch-ac1af5608a</code> at <code>2026-08-14T10:10:08.555+05:30</code>, then derive the flag.</p>
+<p>Three artefacts were provided:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>events.jsonl</code></td>
+<td>27 deployment events (activate / restart / migrate / rollback) <strong>plus</strong> tag→digest moves</td>
+</tr>
+<tr>
+<td><code>images.tar</code></td>
+<td>An OCI image layout: <code>index.json</code>, <code>oci-layout</code>, <code>blobs/sha256/*</code></td>
+</tr>
+<tr>
+<td><code>vault.json</code></td>
+<td>4 AES-256-GCM keys + 203 notes (<code>nonce</code>, <code>data</code>). Each plaintext is a token.</td>
+</tr>
+</tbody></table>
+<p>Each note is AES-256-GCM under one of the vault keys, with</p>
+<ul>
+<li>12-byte nonce,</li>
+<li><code>data</code> = ciphertext ‖ 16-byte tag,</li>
+<li><strong>AAD = compact JSON</strong> <code>[service_id, key_version, manifest_digest, event_id]</code>.</li>
+</ul>
+<p>The flag is then a scrypt+AESGCM KDF over
+<code>[event_id, manifest_digest, service_id, key_version, token]</code>.</p>
+<h2 id="step-1-normalise-the-timeline-the-forgot-trick"><a class="wu-anchor" href="#step-1-normalise-the-timeline-the-forgot-trick" aria-hidden="true">#</a>Step 1 - Normalise the timeline (the &quot;forgot&quot; trick)</h2>
+<p>Every event timestamp arrives in a <strong>different offset</strong>
+(<code>Z</code>, <code>+05:30</code>, <code>+05:45</code>, <code>-03:30</code>, <code>+01:00</code>, <code>-07:00</code>, <code>-05:00</code>, <code>+09:00</code>).
+Nothing can be compared until everything is converted to one instant.</p>
+<p>Target: <code>2026-08-14T10:10:08.555+05:30</code> = <strong><code>2026-08-14T04:40:08.555Z</code></strong>.</p>
+<p>Normalised <code>dispatch-ac1af5608a</code> events around the target:</p>
+<table>
+<thead>
+<tr>
+<th>UTC</th>
+<th>action</th>
+<th>event_id</th>
+<th>node / platform</th>
+<th>ref</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>03:41:00.968</td>
+<td>activate</td>
+<td>deploy-cda2bd86ed</td>
+<td>node-217572 / arm64/v8</td>
+<td>dispatch:stable</td>
+</tr>
+<tr>
+<td>03:56:28.933</td>
+<td>activate</td>
+<td>deploy-96e8ea44e4</td>
+<td>-</td>
+<td>dispatch:stable</td>
+</tr>
+<tr>
+<td>04:06:35.963</td>
+<td>activate (<strong>failed</strong>)</td>
+<td>deploy-a19996566f</td>
+<td>-</td>
+<td>sha256:6dae20c6…</td>
+</tr>
+<tr>
+<td>04:16:07.672</td>
+<td>activate</td>
+<td>deploy-6d1373b389</td>
+<td>-</td>
+<td>dispatch:stable</td>
+</tr>
+<tr>
+<td>04:25:54.376</td>
+<td>rollback</td>
+<td>deploy-81aa644580</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>04:36:41.756</strong></td>
+<td><strong>migrate</strong></td>
+<td><strong>deploy-9d1a1fd93d</strong></td>
+<td><strong>node-3dfc02 / amd64</strong></td>
+<td>-</td>
+</tr>
+<tr>
+<td>04:38:01.936</td>
+<td>activate (<strong>failed</strong>)</td>
+<td>deploy-ac1c2df5f4</td>
+<td>-</td>
+<td>sha256:1e6f1acb…</td>
+</tr>
+<tr>
+<td>⟵ <strong>target 04:40:08.555</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>04:41:54.053</td>
+<td>restart</td>
+<td>deploy-3c62515105</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td>04:45:19.119</td>
+<td>activate</td>
+<td>deploy-ed789bd9a3</td>
+<td>-</td>
+<td>dispatch:stable</td>
+</tr>
+</tbody></table>
+<p>The last <strong>successful</strong> event that (re)started the instance before the target is
+the <strong>migrate</strong> <code>deploy-9d1a1fd93d</code> (04:36:41.756Z). The activate two minutes
+later (<code>deploy-ac1c2df5f4</code>) has <code>&quot;status&quot;: &quot;failed&quot;</code>, so it never replaced the
+instance. <code>event_id = deploy-9d1a1fd93d</code>.</p>
+<h2 id="step-2-index-digest-vs-manifest-digest"><a class="wu-anchor" href="#step-2-index-digest-vs-manifest-digest" aria-hidden="true">#</a>Step 2 - index digest vs. <em>manifest</em> digest</h2>
+<p>The <code>ref</code> values in the events (<code>dispatch:stable</code>, and the raw <code>sha256:…</code> refs)
+are <strong>multi-arch OCI index</strong> digests (<code>application/vnd.oci.image.index.v1+json</code>,
+724 bytes). The digest the instance actually <em>ran</em> is the <strong>platform-specific
+manifest</strong> the index points at for the instance&#39;s platform.</p>
+<p>Resolution chain for the target instance:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">isfcr{57cfd556fca281af64d920ef}</code></pre>
+      <pre id="code-1"><code class="language-text">event  deploy-9d1a1fd93d   platform linux/amd64  node node-3dfc02
+  active image index  = sha256:30062144e4a7cfc95730fe76cfe8d3a9ccb20434dfee8d8c55c8e7349227981a
+      (dispatch:stable had moved to 30062144… at 03:56:28.858, i.e. the image
+       deployed by deploy-96e8ea44e4; the 04:16 activate was undone by the
+       04:25 rollback, and the 04:38 activate of 1e6f1acb… failed)
+  index child (amd64) = sha256:154d6f1fa75464d02b6245a4e536f6efb187af4bf7266aff8ac9e2e21d4538f8   &lt;-- MANIFEST</code></pre>
       
-    </figure><p>Pitfalls: treating the multi-arch index digest as the manifest digest; assuming <code>key_version</code> is an integer index rather than an opaque string; comparing timestamps across 8 different UTC offsets without normalising; and counting a <code>&quot;status&quot;:&quot;failed&quot;</code> activate as the instance that actually started.</p>
+    </figure><p><code>manifest_digest = sha256:154d6f1fa75464d02b6245a4e536f6efb187af4bf7266aff8ac9e2e21d4538f8</code>.</p>
+<h2 id="step-3-key-version"><a class="wu-anchor" href="#step-3-key-version" aria-hidden="true">#</a>Step 3 - <code>key_version</code></h2>
+<p>Walking the image layers (<code>etc/service/key-version.json</code>) exposes the
+<code>key_version</code> strings. They are opaque identifiers that the deployments carry
+(<code>key-3de4b6b00b</code>, <code>key-e52be7cc57</code>, <code>key-90a623d0c2</code>, …). The tuple&#39;s correct
+value is pinned cryptographically in Step 4 - it is <strong><code>key-e52be7cc57</code></strong>.</p>
+<h2 id="step-4-unwrap-the-note-then-the-flag"><a class="wu-anchor" href="#step-4-unwrap-the-note-then-the-flag" aria-hidden="true">#</a>Step 4 - Unwrap the note, then the flag</h2>
+<p>Candidate tuple: <code>service_id = dispatch-ac1af5608a</code>,
+<code>manifest_digest = sha256:154d6f…</code>, <code>event_id = deploy-9d1a1fd93d</code>,
+<code>key_version = key-e52be7cc57</code>.</p>
+<p>AAD:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">[&quot;dispatch-ac1af5608a&quot;,&quot;key-e52be7cc57&quot;,
+ &quot;sha256:154d6f1fa75464d02b6245a4e536f6efb187af4bf7266aff8ac9e2e21d4538f8&quot;,
+ &quot;deploy-9d1a1fd93d&quot;]</code></pre>
+      
+    </figure><p>Trying the four vault keys against all 203 notes, exactly one note
+authenticates under this AAD → <strong>token</strong>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">e411af706f77101364ccdf6b0cb59e75eb8b3cc34342a94c</code></pre>
+      
+    </figure><p>Evidence (<code>json.dumps</code>, compact):</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">[&quot;deploy-9d1a1fd93d&quot;,
+ &quot;sha256:154d6f1fa75464d02b6245a4e536f6efb187af4bf7266aff8ac9e2e21d4538f8&quot;,
+ &quot;dispatch-ac1af5608a&quot;,&quot;key-e52be7cc57&quot;,
+ &quot;e411af706f77101364ccdf6b0cb59e75eb8b3cc34342a94c&quot;]</code></pre>
+      
+    </figure><p>scrypt (<code>isfcr-forensics\x00</code> + evidence, salt <code>8b57a161…</code>, n=131072, r=8, p=1) →
+AES-GCM decrypt of the given flag blob with AAD <code>the-image-that-forgot</code> yields:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">isfcr{57cfd556fca281af64d920ef}</code></pre>
+      
+    </figure><h2 id="the-generalised-shortcut-used-by-solvepy"><a class="wu-anchor" href="#the-generalised-shortcut-used-by-solvepy" aria-hidden="true">#</a>The generalised shortcut used by <code>solve.py</code></h2>
+<p>Rather than hand-resolve one tuple, the solver enumerates the whole space
+(<code>manifest_digest ∈ every blob</code> × <code>key_version ∈ every string found in layers</code> ×
+<code>event_id ∈ every dispatch event</code>) × all notes. <strong>Every one of the 203 notes
+authenticates under exactly one tuple</strong>, so the note layer alone does not
+disambiguate. The <strong>flag KDF is the <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button></strong>: only the single correct evidence
+tuple produces a valid AES-GCM tag on the flag blob. That oracle uniquely
+returned the tuple above - confirming the timeline reasoning of Steps 1 - 3.</p>
+<h2 id="pitfalls-hit"><a class="wu-anchor" href="#pitfalls-hit" aria-hidden="true">#</a>Pitfalls hit</h2>
+<ul>
+<li>Treating the event <code>ref</code> (multi-arch <strong>index</strong>) as the manifest - the platform
+sub-manifest is the real <code>manifest_digest</code>.</li>
+<li>Assuming <code>key_version</code> is an integer index into <code>vault.keys</code> - it is an opaque
+<code>key-XXXXXXXXXX</code> string, and it is <em>not</em> simply the top layer&#39;s
+<code>etc/service/key-version.json</code> (that file also appears at decoy paths
+<code>etc/service.bak/…</code> and <code>opt/&lt;svc&gt;/templates/…</code>).</li>
+<li>Comparing timestamps without normalising the 8 different UTC offsets.</li>
+<li>Counting a <code>&quot;status&quot;:&quot;failed&quot;</code> activate as &quot;the instance that started&quot;.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#objective">Objective</a></li><li><a href="#step-1-normalise-the-timeline-the-forgot-trick">Step 1 - Normalise the timeline (the &quot;forgot&quot; trick)</a></li><li><a href="#step-2-index-digest-vs-manifest-digest">Step 2 - index digest vs. manifest digest</a></li><li><a href="#step-3-key-version">Step 3 - key_version</a></li><li><a href="#step-4-unwrap-the-note-then-the-flag">Step 4 - Unwrap the note, then the flag</a></li><li><a href="#the-generalised-shortcut-used-by-solvepy">The generalised shortcut used by solve.py</a></li><li><a href="#pitfalls-hit">Pitfalls hit</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

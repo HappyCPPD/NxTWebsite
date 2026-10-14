@@ -7,7 +7,7 @@
 
 ---
 
-**1. First look**
+## 1. First look
 
 The handout is a single 16 KB file:
 
@@ -57,8 +57,7 @@ OWASP{th  3_s0ul_s  l_st0n3_  wh1sp3r}
 
 Concatenating gives `OWASP{th3_s0ul_sl_st0n3_wh1sp3r}` - visibly *almost*
 right but with a duplicated `sl`. That seam is the tell: the pieces are
-overlapping, and reading them naively is a trap. Time to read the actual
-code.
+overlapping, and reading them naively is a trap. Time to read the actual code.
 
 ## 3. main() - the gate
 
@@ -83,9 +82,9 @@ falls through to `soul_stone()`.
 
 ## 4. soul_stone() - where the flag actually lives
 
-`soul_stone()` assembles the flag from four 64-bit `movabs` immediates
-written to overlapping `rbp`-relative slots, copies 29 bytes (`0x00..0x1C`)
-into a local buffer, NUL-terminates it, then `printf("Flag: %s")`:
+`soul_stone()` assembles the flag from four 64-bit `movabs` immediates written
+to overlapping `rbp`-relative slots, copies 29 bytes (`0x00..0x1C`) into a
+local buffer, NUL-terminates it, then `printf("Flag: %s")`:
 
 ```asm
 movabs rax, 0x68747b505341574f   ; "OWASP{th"
@@ -108,12 +107,12 @@ Laying the writes out by `rbp` offset:
 | `0x5f336e3074735f6c`     | `l_st0n3_`          | `rbp-0x63`  |
 | `0x7d72337073316877`     | `wh1sp3r}`          | `rbp-0x5b`  |
 
-The third write sits at `-0x63`, three bytes **into** the second write's
-slot. It re-lands `l`, `_`, `s` over the exact same `l`, `_`, `s` that
-`3_s0ul_s` already ends with - a deliberate overlap that reproduces the seam
-we saw in `strings`. Same values, so nothing is corrupted; it just exists to
-make linear/naive reconstruction produce the wrong `...sl...` result.
-Reading from `-0x70` upward with later writes winning:
+The third write sits at `-0x63`, three bytes **into** the second write's slot.
+It re-lands `l`, `_`, `s` over the exact same `l`, `_`, `s` that `3_s0ul_s`
+already ends with - a deliberate overlap that reproduces the seam we saw in
+`strings`. Same values, so nothing is corrupted; it just exists to make
+linear/naive reconstruction produce the wrong `...sl...` result. Reading from
+`-0x70` upward with later writes winning:
 
 ```
 O W A S P { t h 3 _ s 0 u l _ s t 0 n 3 _ w h 1 s p 3 r }
@@ -127,6 +126,9 @@ Fastest path - the binary prints the flag once you know the gate word:
 
 ```bash
 echo 'soul' | ./soul_whisper
+```
+
+```
 [+] The stone recognizes your soul.
 [+] Access granted.
 
@@ -144,8 +146,10 @@ python3 solve.py     # OWASP{th3_s0ul_st0n3_wh1sp3r}
 - "Not stripped" is a gift: `nm` handed over `main` and `soul_stone`.
 - A stack-built `strcmp` constant is a cheap way to hide a password from
   `strings`; recognize the `mov DWORD PTR [...], imm` + `strcmp` idiom.
-- Overlapping `movabs` immediates are a classic obfuscation: the fragments
-  in `strings` *look* almost right but duplicate a seam character. Trust the
+- Overlapping `movabs` immediates are a classic obfuscation: the fragments in
+  `strings` *look* almost right but duplicate a seam character. Trust the
   disassembly's memory layout, not the string dump.
-- Two independent methods (live run, static decode) agree - high
-  confidence.
+- Two independent methods (live run, static decode) agree - high confidence.
+
+**Flag:** `OWASP{th3_s0ul_st0n3_wh1sp3r}`
+

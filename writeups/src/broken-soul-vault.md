@@ -7,11 +7,25 @@
 
 ---
 
-**Description:** "The Soul Vault suffered metadata corruption during a
-recovery operation. Identify the valid recovered block and decode its
-contents."
+- Event: ByteMe CTF 26 (OWASP PCCOE, Pune) - 09 Oct 2026
+- Category: Forensics
+- Difficulty: Easy (100 pts)
+- Author: Pratik Jadhav
+- Flag format: `OWASP{...}`
+
+## Flag
+
+```
+OWASP{br0k3n_s0ul_v4ult_r3c0v3r3d}
+```
+
+## Description
+
+> The Soul Vault suffered metadata corruption during a recovery operation.
+> Identify the valid recovered block and decode its contents.
 
 ## Attachments
+
 - `metadata.bin.txt` (87 bytes)
 - `vault.log` (133 bytes)
 
@@ -37,8 +51,8 @@ block and decode it.
 
 ### 2. Inspect the metadata
 
-`metadata.bin.txt` is plain text despite the `.bin` name - always verify
-with `file` / `xxd` first:
+`metadata.bin.txt` is plain text despite the `.bin` name - always verify with
+`file` / `xxd` first:
 
 ```
 00ff11aa
@@ -69,8 +83,8 @@ story and the challenge name (Broken-Soul-Vault).
 
 ### 4. Automate it
 
-`solve.py` performs the same steps (parse the lines, hex-decode each
-candidate, validate against the `OWASP{...}` pattern):
+`solve.py` performs the same steps (parse the lines, hex-decode each candidate,
+validate against the `OWASP{...}` pattern):
 
 ```
 python3 solve.py metadata.bin.txt
@@ -83,8 +97,8 @@ python3 solve.py metadata.bin.txt
 ## Key takeaways
 
 - A `.bin` extension does not mean binary - check with `file` / `xxd`.
-- "Corrupted metadata + valid block" prompts usually mean: parse the
-  container, validate each candidate against the flag format, and keep the
-  one that fits.
+- "Corrupted metadata + valid block" prompts usually mean: parse the container,
+  validate each candidate against the flag format, and keep the one that fits.
 - Hex-dumping the guard values (`00ff11aa`, `deadbeef`) shows they are
   sentinels, not data - the only decodable payload is the middle line.
+

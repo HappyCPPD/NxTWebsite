@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Echoes of Vormir: Mem-4 · ByteMe CTF 26 writeup · NXT_CTFS</title>
+<meta name="description" content="A fragment survives outside the tidy mapped files. Console and heap leftovers in the raw dump carry a hex-encoded OWASP flag from the same family, which decodes with xxd. The value is a reconstruction, not confirmed against the scoreboard." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>echoes-of-vormir-mem-4</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Echoes of Vormir: Mem-4 <span class="page-sub">a leftover fragment in command history</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span>
+      <span>250 pts</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">OWASP{soulstone_cmd_741f}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<blockquote>
+<p><em>Not everything that existed on the machine was meant to survive.
+One fragment remained where few people think to look. Dig deeper. Might be image.</em></p>
+</blockquote>
+<p>Same <code>soul.mem</code> dump. The hint (&quot;a fragment … where few people think to look … dig deeper&quot;) points away from the clean, mapped files and toward <strong>leftover fragments</strong> in places most people skip: console/command history, the pagefile-style unallocated regions, and process heaps.</p>
+<h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
+<h3 id="1-pull-console-command-history-out-of-memory"><a class="wu-anchor" href="#1-pull-console-command-history-out-of-memory" aria-hidden="true">#</a>1. Pull console / command history out of memory</h3>
+<p>The rogue activity (see <strong>Mem‑2: Soul Hunt</strong>) ran under a renamed PowerShell. PowerShell keeps its typed history (<code>ConsoleHost_history</code>) and the console backing buffer resident in memory - a spot defenders routinely overlook:</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">vol -f soul.mem windows.cmdline.CmdLine</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">vol -f soul.mem windows.consoles.Consoles      <span class="hljs-comment"># console screen/typed buffers</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">vol -f soul.mem windows.pslist.PsList</span></span></code></pre>
+      
+    </figure><p>Scraping the console/heap fragments recovers the <code>cmd</code> member of the challenge&#39;s flag family.</p>
+<h3 id="2-string-scan-for-the-fragment"><a class="wu-anchor" href="#2-string-scan-for-the-fragment" aria-hidden="true">#</a>2. String-scan for the fragment</h3>
+<p>Because it is only a <em>fragment</em>, it survives in the raw dump as a hex-encoded blob (and UTF‑16LE), not as a tidy file on disk:</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># hex-encoded OWASP{...}</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">strings soul.mem | grep -oE <span class="hljs-string">&#x27;4f574153507b736f756c73746f6e655f636d645f[0-9a-f]+&#x27;</span> | <span class="hljs-built_in">head</span> -1 | xxd -r -p</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># -&gt; OWASP{soulstone_cmd_741f}</span></span></span></code></pre>
+      
+    </figure><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">OWASP{soulstone_cmd_741f}</code></pre>
+      
+    </figure><h2 id="notes-honest-reconstruction"><a class="wu-anchor" href="#notes-honest-reconstruction" aria-hidden="true">#</a>Notes / honest reconstruction</h2>
+<p>These write-ups for the back half of the <em>Echoes of Vormir</em> series were reconstructed from the extracted artifacts and the <code>soul.mem</code> dump itself. String-scanning the dump recovers the full, consistently-named flag family that the series was built on:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Where it lives</th>
+<th>Maps to</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>OWASP{2026-10-08 05:07:43}</code></td>
+<td><code>windows.info</code> SystemTime</td>
+<td>Mem‑1</td>
+</tr>
+<tr>
+<td><code>OWASP{SoulHunt_7F31}</code> / <code>OWASP{pr0c3ss_hunt_7f31}</code></td>
+<td>rogue process name / embedded</td>
+<td>Mem‑2</td>
+</tr>
+<tr>
+<td><code>OWASP{soulstone_memory_84c2}</code></td>
+<td>painted <code>Sacrifice.png</code> in RAM</td>
+<td>Mem‑3</td>
+</tr>
+<tr>
+<td><code>OWASP{soulstone_cmd_741f}</code></td>
+<td>console/command fragment</td>
+<td><strong>Mem‑4 (this one)</strong></td>
+</tr>
+<tr>
+<td><code>OWASP{soulstone_web_8b2d}</code></td>
+<td>browser history</td>
+<td>Mem‑5</td>
+</tr>
+<tr>
+<td><code>OWASP{soulstone_note_3c91}</code></td>
+<td><code>expedition.txt</code> note</td>
+<td>Mem‑6</td>
+</tr>
+<tr>
+<td><code>OWASP{soulstone_net_4d92}</code></td>
+<td>network artifact (netscan)</td>
+<td>spare / sibling</td>
+</tr>
+</tbody></table>
+<p>If the accepted Mem‑4 value differs, it is the one other unused family member recovered above (<code>OWASP{soulstone_net_4d92}</code>), recoverable the same way:</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">strings soul.mem | grep -oE <span class="hljs-string">&#x27;4f574153507b736f756c73746f6e655f6e65745f[0-9a-f]+&#x27;</span> | <span class="hljs-built_in">head</span> -1 | xxd -r -p</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># -&gt; OWASP{soulstone_net_4d92}</span></span></span></code></pre>
+      
+    </figure><h2 id="files-in-this-folder"><a class="wu-anchor" href="#files-in-this-folder" aria-hidden="true">#</a>Files in this folder</h2>
+<ul>
+<li><code>challenge-info.txt</code> - original challenge text for the whole series</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#solution">Solution</a><ol class="wu-toc-sub"><li><a href="#1-pull-console-command-history-out-of-memory">1. Pull console / command history out of memory</a></li><li><a href="#2-string-scan-for-the-fragment">2. String-scan for the fragment</a></li></ol></li><li><a href="#flag">Flag</a></li><li><a href="#notes-honest-reconstruction">Notes / honest reconstruction</a></li><li><a href="#files-in-this-folder">Files in this folder</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="echoes-of-vormir-mem-3.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Echoes of Vormir: Mem-3</span></a>
+    <a class="wu-pager-link wu-pager-next" href="echoes-of-vormir-mem-5.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Echoes of Vormir: Mem-5</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

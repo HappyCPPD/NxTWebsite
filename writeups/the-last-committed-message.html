@@ -67,26 +67,148 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>Recover a note and its attachment record as they stood when export <code>export-07abca69cd99</code> was acknowledged. Rule: a note replacement, its attachment-record upsert, and its operation record commit together; an acknowledged export describes the state immediately after its operation committed.</p>
-<p>The export log has two entries for the export id: one <code>timeout</code>, one <code>acknowledged</code> with <code>operation_id = op-09e0d79b4b14</code>. The handout (<code>case.db</code> + <code>case.db-wal</code>) contains a 824,400-byte WAL with 1,538 frames split into <strong>three generations</strong> distinguished by salt values (0: frames 1-108/6 commits; 1: frames 109-725/30 commits; 2: frames 726-1538/41 commits). SQLite only reads frames matching the WAL header&#39;s current salt (generation 0); the target operation does not exist in the final database state - it was overwritten by later operations and must be recovered by replaying earlier generations.</p>
-<p><strong>Replay:</strong> apply generation 0 on top of the base database, then replay generation 1 transaction-by-transaction. The target operation first appears at commit 18 of generation 1, where <code>note-7211098c21a6</code> has <code>operation_id = op-09e0d79b4b14</code>. At each commit boundary (<code>commit_size &gt; 0</code>), snapshot the database and query it.</p>
-<p><strong>Evidence extracted:</strong> <code>note_id = note-7211098c21a6</code>, <code>revision = 5</code>, an SFTP destination URL, and the attachment&#39;s SHA-256.</p>
-<figure class="wu-code" data-lines="5">
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<p>Recover a note and its attachment record as they stood when export <code>export-07abca69cd99</code> was acknowledged, then use the four evidence fields to derive an AES-GCM key and decrypt the flag.</p>
+<p><strong>Key rules:</strong></p>
+<ul>
+<li>A note replacement, its attachment-record upsert, and its operation record commit together.</li>
+<li>An acknowledged export describes the state immediately after its operation committed.</li>
+</ul>
+<h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
+<h3 id="step-1-identify-the-target-operation"><a class="wu-anchor" href="#step-1-identify-the-target-operation" aria-hidden="true">#</a>Step 1: Identify the Target Operation</h3>
+<p>The export log contains two entries for <code>export-07abca69cd99</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">{&quot;export_id&quot;:&quot;export-07abca69cd99&quot;,&quot;operation_id&quot;:&quot;op-c46dc0e04bdd&quot;,&quot;status&quot;:&quot;timeout&quot;}
+{&quot;export_id&quot;:&quot;export-07abca69cd99&quot;,&quot;operation_id&quot;:&quot;op-09e0d79b4b14&quot;,&quot;status&quot;:&quot;acknowledged&quot;}</code></pre>
+      
+    </figure><p>The acknowledged entry has <code>operation_id</code> = <code>op-09e0d79b4b14</code>. We need the database state immediately after this operation committed.</p>
+<h3 id="step-2-extract-the-handout"><a class="wu-anchor" href="#step-2-extract-the-handout" aria-hidden="true">#</a>Step 2: Extract the Handout</h3>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">unzip handout.zip -d handout</span></span></code></pre>
+      
+    </figure><p>This gives us <code>case.db</code> (SQLite) and <code>case.db-wal</code> (Write-Ahead Log). The WAL contains historical transaction states that are not visible in the final database.</p>
+<h3 id="step-3-parse-the-wal-file"><a class="wu-anchor" href="#step-3-parse-the-wal-file" aria-hidden="true">#</a>Step 3: Parse the WAL File</h3>
+<p>The WAL file (824,400 bytes, 1,538 frames) contains three generations distinguished by salt values:</p>
+<table>
+<thead>
+<tr>
+<th>Generation</th>
+<th>Salt1</th>
+<th>Frames</th>
+<th>Commits</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0 (newest)</td>
+<td><code>0x3e895953</code></td>
+<td>1 - 108</td>
+<td>6</td>
+</tr>
+<tr>
+<td>1 (middle)</td>
+<td><code>0x3e895952</code></td>
+<td>109 - 725</td>
+<td>30</td>
+</tr>
+<tr>
+<td>2 (oldest)</td>
+<td><code>0x3e895951</code></td>
+<td>726 - 1538</td>
+<td>41</td>
+</tr>
+</tbody></table>
+<p>SQLite only reads frames matching the WAL header&#39;s salt values (generation 0). The target operation <code>op-09e0d79b4b14</code> does not exist in the final database state - it was overwritten by later operations. To find it, we must replay earlier WAL generations.</p>
+<h3 id="step-4-replay-wal-transactions"><a class="wu-anchor" href="#step-4-replay-wal-transactions" aria-hidden="true">#</a>Step 4: Replay WAL Transactions</h3>
+<p>By applying generation 0 on top of the base database, then replaying generation 1 transaction-by-transaction, the target operation first appears at commit 18 of generation 1. At that point, <code>note-7211098c21a6</code> has <code>operation_id = op-09e0d79b4b14</code>.</p>
+<p>The replay works by:</p>
+<ol>
+<li>Starting from the base <code>case.db</code> page data.</li>
+<li>Overwriting pages as each WAL frame specifies (page number → new page content).</li>
+<li>At each commit boundary (<code>commit_size &gt; 0</code>), snapshotting the database and querying it.</li>
+</ol>
+<h3 id="step-5-extract-the-evidence"><a class="wu-anchor" href="#step-5-extract-the-evidence" aria-hidden="true">#</a>Step 5: Extract the Evidence</h3>
+<p>At the target state:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>note_id</code></td>
+<td><code>note-7211098c21a6</code></td>
+</tr>
+<tr>
+<td><code>revision</code></td>
+<td><code>5</code></td>
+</tr>
+<tr>
+<td><code>destination</code></td>
+<td><code>sftp://drop-edef61bb364d.example.invalid/inbox/f34143e1/...5ec4921ffe4835a0.bin?ticket=a638d0e59bf0b87a8d34c22020f0555d</code></td>
+</tr>
+<tr>
+<td><code>attachment sha256</code></td>
+<td><code>b89d5c5695803071522614060828e31e9bb4bc25813fdbc5d516db06ac4c2d58</code></td>
+</tr>
+</tbody></table>
+<h3 id="step-6-decrypt-the-flag"><a class="wu-anchor" href="#step-6-decrypt-the-flag" aria-hidden="true">#</a>Step 6: Decrypt the Flag</h3>
+<figure class="wu-code" data-lines="17">
       <figcaption>
         
         <span class="wu-code-lang">python</span>
-        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">evidence = [note_id, <span class="hljs-string">&quot;5&quot;</span>, destination, sha256]</span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">E = json.dumps(evidence, ensure_ascii=<span class="hljs-literal">True</span>, separators=(<span class="hljs-string">&quot;,&quot;</span>, <span class="hljs-string">&quot;:&quot;</span>)).encode(<span class="hljs-string">&quot;ascii&quot;</span>)</span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">key = hashlib.scrypt(<span class="hljs-string">b&quot;isfcr-forensics\x00&quot;</span> + E, salt=..., n=<span class="hljs-number">131072</span>, r=<span class="hljs-number">8</span>, p=<span class="hljs-number">1</span>, maxmem=<span class="hljs-number">2</span>**<span class="hljs-number">28</span>, dklen=<span class="hljs-number">32</span>)</span></span>
-<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">flag = AESGCM(key).decrypt(nonce, ct, <span class="hljs-string">b&quot;the-last-committed-message&quot;</span>)</span></span>
-<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">isfcr{a03a410f1b87dbc115dd1ef6}</span></span></code></pre>
+      <pre id="code-3"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> json, hashlib</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">from</span> cryptography.hazmat.primitives.ciphers.aead <span class="hljs-keyword">import</span> AESGCM</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">evidence = [note_id, <span class="hljs-string">&quot;5&quot;</span>, destination, sha256]</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">E = json.dumps(evidence, ensure_ascii=<span class="hljs-literal">True</span>, separators=(<span class="hljs-string">&quot;,&quot;</span>, <span class="hljs-string">&quot;:&quot;</span>)).encode(<span class="hljs-string">&quot;ascii&quot;</span>)</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">key = hashlib.scrypt(</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    <span class="hljs-string">b&quot;isfcr-forensics\x00&quot;</span> + E,</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    salt=<span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&quot;a3845b1a904c5ee73abe7329b5d735d7&quot;</span>),</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">    n=<span class="hljs-number">131072</span>, r=<span class="hljs-number">8</span>, p=<span class="hljs-number">1</span>, maxmem=<span class="hljs-number">2</span>**<span class="hljs-number">28</span>, dklen=<span class="hljs-number">32</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">)</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">flag = AESGCM(key).decrypt(</span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">    <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&quot;ca98cff993b27fd3bb352436&quot;</span>),</span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc">    <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&quot;3fa8b9049b01fb8d12df130b404352f9c678c272cccb7e6c034554c902f1ca4d574fc04db8892fead1ad394735e021&quot;</span>),</span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc">    <span class="hljs-string">b&quot;the-last-committed-message&quot;</span></span></span>
+<span class="wu-line" data-line="17"><span class="wu-ln">17</span><span class="wu-lc">)</span></span></code></pre>
       
-    </figure><p>Key techniques: SQLite WAL frames preserve historical database states across checkpoint generations; replaying frames in order and stopping at the right commit boundary reconstructs any intermediate state; WAL frame-header salt values identify which generation a frame belongs to; frames with <code>commit_size &gt; 0</code> mark atomic transaction boundaries.</p>
+    </figure><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">isfcr{a03a410f1b87dbc115dd1ef6}</code></pre>
+      
+    </figure><h2 id="key-techniques"><a class="wu-anchor" href="#key-techniques" aria-hidden="true">#</a>Key Techniques</h2>
+<ul>
+<li><strong>SQLite WAL forensics</strong>: The WAL file preserves historical database states across multiple checkpoint generations. By replaying frames in order and stopping at the right commit boundary, we can reconstruct any intermediate state.</li>
+<li><strong>WAL generation tracking</strong>: Salt values in WAL frame headers identify which checkpoint generation each frame belongs to. Only frames matching the WAL header salts are read by SQLite normally; older generations require manual replay.</li>
+<li><strong>Transaction boundary detection</strong>: Frames with <code>commit_size &gt; 0</code> mark the end of atomic transactions. The database is consistent only at these boundaries.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#solution">Solution</a><ol class="wu-toc-sub"><li><a href="#step-1-identify-the-target-operation">Step 1: Identify the Target Operation</a></li><li><a href="#step-2-extract-the-handout">Step 2: Extract the Handout</a></li><li><a href="#step-3-parse-the-wal-file">Step 3: Parse the WAL File</a></li><li><a href="#step-4-replay-wal-transactions">Step 4: Replay WAL Transactions</a></li><li><a href="#step-5-extract-the-evidence">Step 5: Extract the Evidence</a></li><li><a href="#step-6-decrypt-the-flag">Step 6: Decrypt the Flag</a></li></ol></li><li><a href="#flag">Flag</a></li><li><a href="#key-techniques">Key Techniques</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

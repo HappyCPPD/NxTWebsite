@@ -7,11 +7,9 @@
 
 ---
 
-**Challenge Description**
+## Challenge Description
 
-> The fragments carry memories distorted by the collapse of Vormir. Sixteen
-> pieces remain, but each has been twisted from its original orientation.
-> Restore the memories and reveal what the Stone is trying to tell you.
+> The fragments carry memories distorted by the collapse of Vormir. Sixteen pieces remain, but each has been twisted from its original orientation. Restore the memories and reveal what the Stone is trying to tell you.
 
 A Google Drive link provides a file: `pieces_1.zip`.
 
@@ -19,41 +17,30 @@ A Google Drive link provides a file: `pieces_1.zip`.
 
 ### Step 1 - Extract the archive
 
-The zip is password-protected (PK v5.1, requires 7zip). The password is
-`OWASP`.
+The zip is password-protected (PK v5.1, requires 7zip). The password is `OWASP`.
 
 ```bash
 7z x pieces_1.zip -pOWASP
 ```
 
-This produces 16 grayscale PNG files (`piece_001.png` through
-`piece_016.png`), each 300x300 pixels with strictly binary pixel values (0
-or 255).
+This produces 16 grayscale PNG files (`piece_001.png` through `piece_016.png`), each 300x300 pixels with strictly binary pixel values (0 or 255).
 
 ### Step 2 - Identify the puzzle
 
-Sixteen 300x300 tiles forming a 1200x1200 image - this is a QR code split
-into a 4x4 grid. The challenge says each piece has been "twisted from its
-original orientation," meaning:
+Sixteen 300x300 tiles forming a 1200x1200 image - this is a QR code split into a 4x4 grid. The challenge says each piece has been "twisted from its original orientation," meaning:
 
 - Each piece is **rotated** by some multiple of 90 degrees
 - The pieces are also **shuffled** out of their correct grid positions
 
 ### Step 3 - Solve with edge-matching + QR validation
 
-Since the images are strictly black-and-white, adjacent tiles must share
-identical pixel values along their shared edge. This gives an exact
-constraint for backtracking.
+Since the images are strictly black-and-white, adjacent tiles must share identical pixel values along their shared edge. This gives an exact constraint for backtracking.
 
 The solver:
-1. Precomputes all 4 rotations of each piece and their edge signatures
-   (top/right/bottom/left pixel rows)
-2. Builds a compatibility graph - for each (piece, rotation), which other
-   (piece, rotation) pairs can sit to its right or below
-3. Backtracks through all 16 grid positions, placing pieces that match their
-   left and top neighbors exactly
-4. When all 16 positions are filled, tests the assembled image with
-   OpenCV's QR decoder
+1. Precomputes all 4 rotations of each piece and their edge signatures (top/right/bottom/left pixel rows)
+2. Builds a compatibility graph - for each (piece, rotation), which other (piece, rotation) pairs can sit to its right or below
+3. Backtracks through all 16 grid positions, placing pieces that match their left and top neighbors exactly
+4. When all 16 positions are filled, tests the assembled image with OpenCV's QR decoder
 5. Stops on the first assembly that decodes successfully
 
 ```python
@@ -119,7 +106,7 @@ def solve(pos):
 solve(0)
 ```
 
-## Result
+### Result
 
 The decoded QR code reads:
 
@@ -129,12 +116,8 @@ SOUL STONE // SHATTERED MEMORIES // OWASP{Sh4tt3r3d_m3m0r13s}
 
 ## Key Takeaways
 
-- Password-protected zips in CTFs often use the competition name or a
-  previous flag as the password
-- Binary (black/white) image edges enable exact matching - no tolerance
-  needed
-- Edge-matching alone produces multiple valid assemblies (trivial matches on
-  all-white/all-black edges), so QR decoder validation is needed to find the
-  correct one
-- Backtracking with pruning makes the search space tractable despite
-  16! x 4^16 theoretical combinations
+- Password-protected zips in CTFs often use the competition name or a previous flag as the password
+- Binary (black/white) image edges enable exact matching - no tolerance needed
+- Edge-matching alone produces multiple valid assemblies (trivial matches on all-white/all-black edges), so QR decoder validation is needed to find the correct one
+- Backtracking with pruning makes the search space tractable despite 16! x 4^16 theoretical combinations
+

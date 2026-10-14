@@ -67,45 +67,219 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>An imaged device ran an in-house vault app &quot;SilverGate.&quot; Two files: <code>silvergate.apk</code> (the staging build) and <code>base.odex</code> (the device&#39;s actual optimized ART OAT file, <code>ART-OPT/13.0.0-r43</code>). The apk&#39;s <code>assets/notes.txt</code> is a planted decoy (&quot;staging flag format… replace before shipping&quot;) - the odex is what actually ran on the device and is the file of interest.</p>
-<p><strong>Three compiled methods</strong> live in the odex: <code>checkFlag_v1_LEGACY</code>, <code>checkFlag_v2</code>, <code>finalizeFlag</code>.</p>
-<p><code>checkFlag_v1_LEGACY</code> requires 32-byte input and does a straight <code>memcmp</code> against a 32-byte constant that is itself a SHA-256 hash - a deliberately unsolvable, one-way dead end (confirmed: no known passphrase from <code>notes.txt</code> hashes to it).</p>
-<p><code>checkFlag_v2</code> is the real checker - a tiny stack-less bytecode VM requiring 24-byte input. Decoding its 2-bytes-per-instruction program (opcode=hi nibble, dst=lo nibble, operand byte) against three 24-byte constant tables shows the same 9-instruction block repeated 24 times, reducing to one constraint per byte:</p>
-<figure class="wu-code wu-code-output" data-lines="1">
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<blockquote>
+<p>A device belonging to a person of interest was imaged last week. It was running
+an in-house vault app called SilverGate. Two files came back from the image.
+See what you can pull out of them.
+Attachment: <code>silvergate.apk</code>, <code>base.odex</code>. Flag format: <code>isfcr{...}</code>.</p>
+</blockquote>
+<p>Two artifacts:</p>
+<ul>
+<li><code>silvergate.apk</code> - the <strong>staging</strong> build (<code>com.silvergate.vault</code>, <code>classes.dex</code>,
+compiler metadata <code>&quot;version&quot;:&quot;8.2.2-dev&quot;</code>).</li>
+<li><code>base.odex</code> - the <strong>optimized (real) app code</strong> for the device, an ART OAT file
+(<code>oat\n243</code>, <code>ART-OPT/13.0.0-r43</code>, <code>art.compiler.filter=speed-profile</code>, tag
+<code>ARM64-A75-v4.3</code>). The odex is the file of interest: it is what actually ran.</li>
+</ul>
+<p>The apk&#39;s <code>assets/notes.txt</code> is a planted in-fiction artefact that both hints and
+misleads (&quot;staging flag format … replace before shipping&quot;, &quot;SHA256 constant …
+derived from the lowercased passphrase&quot;, two strings <code>isfcr{</code> / <code>oatmeal</code> labelled
+&quot;known-benign&quot;). Treat it as narrative, not ground truth.</p>
+<h2 id="structure-of-baseodex"><a class="wu-anchor" href="#structure-of-baseodex" aria-hidden="true">#</a>Structure of <code>base.odex</code></h2>
+<figure class="wu-code wu-code-output" data-lines="13">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">rol8( ((in[k] + A_k) &amp; 0xff) ^ B_k , 3 ) == C_k</code></pre>
+      <pre id="code-1"><code class="language-text">0x000  OatHeader + key/value store
+0x180  3 x 24-byte constant tables (T0,T1,T2)  &lt;- bytecode VM keystream sources
+0x1c8  32-byte EXPECTED = 42b39944397bbbe271c695b40844f3f41c3a2b5a8d1c0400ce733878dbc44bb2
+0x1e8  &quot;isfcr{%016llx}\0&quot;                       &lt;- THE REAL FLAG TEMPLATE
+0x1ff  &quot;[dbg] checkFlag_v2 entered: %d bytes\n&quot;
+0x221  &quot;isfcr{dev_overlay_do_not_submit_18ca3b}&quot;   &lt;- decoy
+0x245  &quot;isfcr{preprod_token_v3_40df11a0ce9c}&quot;      &lt;- decoy
+0x290  bytecode program for checkFlag_v2 (0x212 bytes)
+0x4b0  LockActivity.checkFlag_v2        (ARM64, bytecode interpreter)
+0x7e0  LockActivity.checkFlag_v1_LEGACY (ARM64)
+0x820  LockActivity.finalizeFlag        (ARM64)
+0x890  4096-byte blob beginning &quot;dex\n035&quot; with an encrypted body
+0x1890 &quot;compiled by art-opt v13.0.0-r43 (sr) do not distribute&quot;</code></pre>
       
-    </figure><p>directly invertible:</p>
+    </figure><p>The odex names exactly three methods: <code>checkFlag_v1_LEGACY</code>, <code>checkFlag_v2</code>,
+<code>finalizeFlag</code>.</p>
+<h2 id="the-three-compiled-methods"><a class="wu-anchor" href="#the-three-compiled-methods" aria-hidden="true">#</a>The three compiled methods</h2>
+<h3 id="checkflag-v1-legacy-0x7e0-decoy-dead-end"><a class="wu-anchor" href="#checkflag-v1-legacy-0x7e0-decoy-dead-end" aria-hidden="true">#</a><code>checkFlag_v1_LEGACY</code> @0x7e0 - decoy / dead end</h3>
+<p>Requires input length <code>0x20</code> (32) and does a straight <code>memcmp(input, EXPECTED)</code>
+against the 32-byte SHA-256 constant at 0x1c8. Since EXPECTED is a SHA-256 hash,
+this path is one-way - deliberately unsolvable. (And <code>sha256(&quot;art_image_took_the_cake!&quot;)</code>
+≠ EXPECTED, confirming EXPECTED belongs to a <em>different</em>, unrecoverable &quot;staging&quot;
+passphrase named in <code>notes.txt</code>.)</p>
+<h3 id="checkflag-v2-0x4b0-the-real-checker-a-tiny-stack-less-bytecode-vm"><a class="wu-anchor" href="#checkflag-v2-0x4b0-the-real-checker-a-tiny-stack-less-bytecode-vm" aria-hidden="true">#</a><code>checkFlag_v2</code> @0x4b0 - the real checker (a tiny stack-less bytecode VM)</h3>
+<p>Requires input length <code>0x18</code> (24). It walks the bytecode at 0x290, 2 bytes per
+instruction: <code>op = hi nibble</code>, <code>dst = lo nibble</code>, plus one operand byte.</p>
+<table>
+<thead>
+<tr>
+<th>op</th>
+<th>handler</th>
+<th>semantics</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><code>ldrb w12,[x27,op]</code></td>
+<td><code>r[dst] = input[op]</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>const from T0</td>
+<td><code>r[dst] = T0[op] ^ ((op*0xa7)^0x5c &amp; 0xff)</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>const from T1</td>
+<td><code>r[dst] = T1[op] ^ (((op+0x18)*0xa7)^0x5c &amp; 0xff)</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>const from T2</td>
+<td><code>r[dst] = T2[op] ^ (((op+0x30)*0xa7)^0x5c &amp; 0xff)</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>mov w12,w11</code></td>
+<td><code>r[dst] = imm(op)</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>add</code></td>
+<td><code>r[dst] = r[dst] + r[op]</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>eor</code></td>
+<td><code>r[dst] = r[dst] ^ r[op]</code></td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>lsl/lsr</code></td>
+<td><code>r[dst] = rol8(r[dst], op &amp; 7)</code></td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>cmp</code>+<code>b.ne fail</code></td>
+<td><strong>assert <code>r[dst] == r[op]</code></strong></td>
+</tr>
+<tr>
+<td>a</td>
+<td><code>mov w0,#1; ret</code></td>
+<td>return true</td>
+</tr>
+</tbody></table>
+<p>The program runs 24 identical blocks <code>(MOVI/XOR into r7 — dead), LD r0=in[k], LDC0 r1=A, ADD, LDC1 r1=B, XOR, ROL 3, LDC2 r1=C, CMPEQ</code>. So for each of the 24
+bytes the constraint is</p>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">in[k] = ( ror8(C_k,3) ^ B_k ) - A_k   (mod 256)</code></pre>
+      <pre id="code-2"><code class="language-text">rol8( ((in[k] + A_k) &amp; 0xff) ^ B_k , 3 ) == C_k</code></pre>
       
-    </figure><p>giving the 24-byte secret <code>art_image_took_the_cake!</code>, forward-verified against all 24 constraints.</p>
-<p><code>finalizeFlag</code> is a straightforward <button type="button" class="wu-gloss" data-def="A simple, fast non-cryptographic hash: XOR each input byte into a running value, then multiply by a fixed prime.">FNV-1a</button>-64 over the secret, XORed with a constant:</p>
-<figure class="wu-code wu-code-output" data-lines="5">
+    </figure><p>Invert:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-3"><code class="language-text">h = 0xcbf29ce484222325
-for b in secret: h ^= b; h = (h * 0x100000001b3) &amp; 2**64-1
-h ^= 0xa55a96693c3cd2ad
-finalizeFlag(&quot;art_image_took_the_cake!&quot;) = 0x5958fbb07efd243b
+      <pre id="code-3"><code class="language-text">in[k] = ( ror8(C_k,3) ^ B_k ) - A_k   (mod 256)</code></pre>
+      
+    </figure><p>Result: <strong><code>art_image_took_the_cake!</code></strong> (24 bytes). All 24 constraints
+forward-verify (<code>solve.py</code>).</p>
+<h3 id="finalizeflag-0x820-the-flag-producer"><a class="wu-anchor" href="#finalizeflag-0x820-the-flag-producer" aria-hidden="true">#</a><code>finalizeFlag</code> @0x820 - the flag producer</h3>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">h = 0xcbf29ce484222325            ; FNV-1a-64 offset basis
+for b in input[0:24]:
+    h ^= b
+    h  = (h * 0x100000001b3) &amp; 2**64-1   ; FNV prime
+h ^= 0xa55a96693c3cd2ad           ; movk-built constant
+return h</code></pre>
+      
+    </figure><p>Called with the 24-byte secret. (It also loads <code>x4 = 0x1e8</code> but never uses it -
+that address is exactly the <code>&quot;isfcr{%016llx}&quot;</code> string, the author&#39;s fingerprint
+that finalizeFlag&#39;s uint64 is formatted by that template.)</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">finalizeFlag(&quot;art_image_took_the_cake!&quot;)
+  = fnv1a64(...) ^ 0xa55a96693c3cd2ad
+  = 0x5958fbb07efd243b
 =&gt;  isfcr{5958fbb07efd243b}</code></pre>
       
-    </figure><p>Decoys: two literal self-labelled decoy strings in the odex, a <code>deriveFlag</code>-produced &quot;staging&quot; hex blob that <code>notes.txt</code> explicitly says to replace before shipping, and the one-way SHA-256 constant from <code>v1_LEGACY</code>. Method note: a real device runs the compiled odex, not the marketing APK - when both are present, the odex is authoritative.</p>
+    </figure><h2 id="decoys-do-not-submit"><a class="wu-anchor" href="#decoys-do-not-submit" aria-hidden="true">#</a>Decoys (do not submit)</h2>
+<table>
+<thead>
+<tr>
+<th>value</th>
+<th>origin</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>isfcr{dev_overlay_do_not_submit_18ca3b}</code></td>
+<td>literal, self-labelled decoy in odex</td>
+</tr>
+<tr>
+<td><code>isfcr{preprod_token_v3_40df11a0ce9c}</code></td>
+<td>literal, self-labelled decoy in odex</td>
+</tr>
+<tr>
+<td><code>isfcr{3427210a3c383432300a213a3a3e0a213d300a36343e3074}</code></td>
+<td><code>LockActivity.deriveFlag</code> of the secret - the <strong>staging</strong> format the apk ships and <code>notes.txt</code> says to replace</td>
+</tr>
+<tr>
+<td><code>42b399…44bb2</code> (SHA-256)</td>
+<td><code>v1_LEGACY</code> constant, one-way</td>
+</tr>
+</tbody></table>
+<h2 id="reproduce"><a class="wu-anchor" href="#reproduce" aria-hidden="true">#</a>Reproduce</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">python3 solve.py          # -&gt; &quot;FLAG: isfcr{5958fbb07efd243b}&quot;</code></pre>
+      
+    </figure><p>Pure stdlib; parses the tables/program straight out of <code>base.odex</code>.</p>
+<h2 id="method-notes"><a class="wu-anchor" href="#method-notes" aria-hidden="true">#</a>Method notes</h2>
+<ul>
+<li><code>silvergate.apk</code> is the marketing/staging build; the <strong>odex is authoritative</strong>.
+A real device runs the compiled odex, and the odex&#39;s embedded dex body is
+encrypted (<code>dex\n035</code> magic in the clear, body high-entropy) - the real
+<code>LockActivity</code> lives behind it. The three compiled methods are enough to solve:
+one dead-end hash check, one invertible VM, one flag finaliser.</li>
+<li>The planted <code>notes.txt</code> steers you to <code>deriveFlag</code>/<code>EXPECTED</code> (both decoys).</li>
+<li>ARM64 via capstone; the VM program was decoded by hand from its interpreter.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#structure-of-baseodex">Structure of base.odex</a></li><li><a href="#the-three-compiled-methods">The three compiled methods</a><ol class="wu-toc-sub"><li><a href="#checkflag-v1-legacy-0x7e0-decoy-dead-end">checkFlag_v1_LEGACY @0x7e0 - decoy / dead end</a></li><li><a href="#checkflag-v2-0x4b0-the-real-checker-a-tiny-stack-less-bytecode-vm">checkFlag_v2 @0x4b0 - the real checker (a tiny stack-less bytecode VM)</a></li><li><a href="#finalizeflag-0x820-the-flag-producer">finalizeFlag @0x820 - the flag producer</a></li></ol></li><li><a href="#flag">Flag</a></li><li><a href="#decoys-do-not-submit">Decoys (do not submit)</a></li><li><a href="#reproduce">Reproduce</a></li><li><a href="#method-notes">Method notes</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

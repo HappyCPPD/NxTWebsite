@@ -67,25 +67,289 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A stripped ELF64 reads exactly 32 bytes; <code>mmap</code>+<code>mprotect</code>+<code>memcmp</code> is the classic JIT fingerprint - the program manufactures machine code at runtime, executes it, and <code>memcmp</code>s a buffer. No flag string in the binary.</p>
-<p><strong>What the checker does:</strong> four JIT blocks run in sequence. Each packs 8 input bytes into a 64-bit <code>word</code>, computes <code>seed = word ^ state</code> (state starts at a fixed constant), and <strong>synthesises a function</strong>: <code>code[i] = TEMPLATE[b][i] ^ byte_lane(splitmix64(seed + (g+1)*GOLDEN))</code>. The code is guarded by a splitmix64 chain hash that must match a stored 64-bit constant <code>E[b]</code>, then <code>mprotect</code>+called with the working buffer. After each block, <code>state</code> updates from a chain hash of the generated code - each block eats the previous block&#39;s tail, hence <em>Ouroboros</em>. After all four, <code>memcmp</code> against a 32-byte target.</p>
-<p><strong>Why the guard looks unbreakable (and isn&#39;t):</strong> the guard is a 64-bit preimage - brute force is <code>2^64</code> per block. <strong>The way in is to recover the CODE, not the word.</strong> Since <code>code = template XOR keystream</code>, and the first 8 bytes of every generated function are the fixed prologue <code>endbr64; push rbp; mov rbp,rsp</code>, that&#39;s free known-plaintext against the keystream: <code>K0 = code[0:8] XOR template[b][0:8]</code>, <code>seed = mixinv(V0) - GOLDEN</code> (splitmix64 finalizer is a bijection). From <code>seed</code> the entire keystream - hence the entire generated program, hence <code>word[b] = seed ^ state</code> - follows with no search.</p>
-<p><strong>The four generated programs</strong> turn out to be a fixed invertible byte mixing of the 32-byte buffer: XOR with <code>7*(i-13)</code>, in-place forward addition with neighbor, rotate-left-3, XOR with <code>31*i+0x3c</code>.</p>
-<figure class="wu-code wu-code-output" data-lines="4">
+<h2 id="1-triage"><a class="wu-anchor" href="#1-triage" aria-hidden="true">#</a>1. Triage</h2>
+<figure class="wu-code wu-code-output" data-lines="5">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">block 0  isfcr{c0
+      <pre id="code-1"><code class="language-text">$ file chall
+chall: ELF 64-bit LSB executable, x86-64, dynamically linked, stripped
+$ printf 'A%.0s' {1..32} | ./chall ; echo $?
+nope.
+1</code></pre>
+      
+    </figure><p><code>strings</code>/imports give the whole story:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">/lib64/ld-linux-x86-64.so.2   stdin  fread  mmap  mprotect  memcmp  puts  sysconf
+need exactly %d bytes of input
+nope.
+CORRECT</code></pre>
+      
+    </figure><p><code>mmap</code> + <code>mprotect</code> + <code>memcmp</code> is the classic <strong>JIT</strong> fingerprint: the program
+manufactures machine code at runtime, makes it executable, runs it, and then
+<code>memcmp</code>s a buffer. There is no flag string in the binary - nothing to grep.</p>
+<hr>
+<h2 id="2-what-the-checker-does"><a class="wu-anchor" href="#2-what-the-checker-does" aria-hidden="true">#</a>2. What the checker does</h2>
+<p><code>.text</code> is tiny (0x4a6 bytes). The whole checker lives at <code>0x400400</code>.</p>
+<h3 id="21-read-scratch-buffer"><a class="wu-anchor" href="#21-read-scratch-buffer" aria-hidden="true">#</a>2.1 Read + scratch buffer</h3>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">fread(rsp+0x20, 1, 0x20, stdin)      ; 32 input bytes
+cmp rax, 0x20 ; jne &quot;need exactly 32 bytes&quot;
+
+; keep a copy of the input as the working buffer, reachable by the JIT code
+movaps [rsp+0x40], input[0:16]       ; rdi for every generated call = rsp+0x40
+movaps [rsp+0x50], input[16:32]</code></pre>
+      
+    </figure><h3 id="22-four-jit-blocks-0x4004dc-0x400704"><a class="wu-anchor" href="#22-four-jit-blocks-0x4004dc-0x400704" aria-hidden="true">#</a>2.2 Four JIT blocks (0x4004dc .. 0x400704)</h3>
+<p><code>sysconf(_SC_PAGESIZE)</code> sizes an anonymous RWX page (via <code>mmap</code>, prot=3). Then a
+loop runs four times, <code>rbx = 0..3</code>. Each iteration:</p>
+<ol>
+<li><p>packs <code>input[8*rbx : 8*rbx+8]</code> into a 64-bit <code>word</code>;</p>
+</li>
+<li><p>computes <code>seed = word ^ state</code> (state starts at <code>0x1f0d1e5cafeb00b5</code>, r9);</p>
+</li>
+<li><p><strong>synthesises a function</strong> into the mmap page:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">for i in 0 .. len[b]-1:
+    g   = i / 8
+    V   = splitmix64( seed + (g+1)*GOLDEN )      # GOLDEN = 0x9e3779b97f4a7c15
+    code[i] = TEMPLATE[b][i] ^ byte_{i%8}(V)      # byte-lane of V</code></pre>
+      
+    </figure><p>So the generated code is <code>template[b] XOR keystream(seed)</code>. The keystream is a
+splitmix64 stream whose mix inputs are an arithmetic progression <code>seed+2G, seed+3G, …</code>;</p>
+</li>
+<li><p><strong>guards</strong> the code with a splitmix chain hash:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">h = 0xc0ffeebadc0de5
+for c in code: h = mix( (c ^ h) + GOLDEN )        # mix = splitmix64 finalizer
+assert h == E[b]                                   # else &quot;nope.&quot;</code></pre>
+      
+    </figure></li>
+<li><p><code>mprotect(page, RX)</code>, <code>call page</code> with <code>rdi = rsp+0x40</code> (the working buffer),</p>
+</li>
+<li><p>updates <code>state = chain_hash(code, state)</code> - <strong>the code feeds the next block&#39;s
+key</strong>. Hence <em>Ouroboros</em>: each block eats the previous block&#39;s tail. This is
+the &quot;self-reference&quot; the name points at.</p>
+</li>
+</ol>
+<p>After all four blocks:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">memcmp(rsp+0x40, 0x401380, 0x20)     ; buffer must equal the 32-byte target</code></pre>
+      
+    </figure><p>Table locations in <code>.rodata</code>:</p>
+<table>
+<thead>
+<tr>
+<th>b</th>
+<th>template ptr</th>
+<th>len</th>
+<th>guard target E[b]</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td>0x401520</td>
+<td>85</td>
+<td>0xb82e45fb0800fccb</td>
+</tr>
+<tr>
+<td>1</td>
+<td>0x4014c0</td>
+<td>93</td>
+<td>0x1ac4e085b6b2582a</td>
+</tr>
+<tr>
+<td>2</td>
+<td>0x401460</td>
+<td>96</td>
+<td>0x6d0da43dd8bb68ea</td>
+</tr>
+<tr>
+<td>3</td>
+<td>0x401400</td>
+<td>85</td>
+<td>0x375dcfb81ce4e98e</td>
+</tr>
+</tbody></table>
+<p>The memcmp target (<code>.rodata 0x401380</code>) is
+<code>61fe0ffd8b2d62e9b00fa3299ef2c8b631edefb71365e23fb53f744312821488</code>.</p>
+<hr>
+<h2 id="3-why-the-guard-looks-unbreakable-and-isn39t"><a class="wu-anchor" href="#3-why-the-guard-looks-unbreakable-and-isn39t" aria-hidden="true">#</a>3. Why the guard looks unbreakable (and isn&#39;t)</h2>
+<p>The guard is a 64-bit preimage: for a random word the chain hash matches <code>E[b]</code>
+with probability 2⁻⁶⁴, and the unknown word is 64 bits. So there is exactly one
+word per block, and brute force is 2⁶⁴ per block - infeasible.</p>
+<p><strong>The way in is the opposite direction: recover the CODE, not the word.</strong> The
+generated code is a normal compiled C function, and all four functions share the
+same prologue. Recover the code and the keystream falls out, which gives the
+word directly.</p>
+<h3 id="31-known-plaintext-on-the-jit"><a class="wu-anchor" href="#31-known-plaintext-on-the-jit" aria-hidden="true">#</a>3.1 Known-plaintext on the JIT</h3>
+<p>Because <code>code = template XOR keystream</code>, and the first 8 bytes of every generated
+function are the fixed prologue</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">f3 0f 1e fa 55 48 89 e5      endbr64 ; push rbp ; mov rbp,rsp</code></pre>
+      
+    </figure><p>we know keystream <strong>group 0</strong>:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">K0 = code[0:8] XOR template[b][0:8]
+V0 = int_le(K0)
+seed = mixinv(V0) - GOLDEN</code></pre>
+      
+    </figure><p><code>mix</code> is the splitmix64 finalizer - a bijection - so <code>mixinv</code> is exact. From
+<code>seed</code> the <em>entire</em> keystream follows (<code>V_g = mix(seed + (g+1)*GOLDEN)</code>), hence
+the <em>entire</em> generated program, hence</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">word[b] = seed ^ state</code></pre>
+      
+    </figure><p>No search at all. <code>state</code> is carried across blocks exactly as the binary does:
+<code>state = chain_hash(code, state)</code>. Run this for b = 0..3 and the four words spell
+the flag. Every recovered block&#39;s chain hash matches its stored <code>E[b]</code>, which is
+independent proof the recovery is exact.</p>
+<hr>
+<h2 id="4-the-four-generated-programs"><a class="wu-anchor" href="#4-the-four-generated-programs" aria-hidden="true">#</a>4. The four generated programs</h2>
+<p>Disassembling the recovered code (all share prologue/epilogue and loop <code>i&lt;32</code>)
+gives a clean four-stage byte transform of the 32-byte buffer <code>B</code>:</p>
+<table>
+<thead>
+<tr>
+<th>b</th>
+<th>len</th>
+<th>operation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td>85</td>
+<td><code>B[i] ^= (7*(i-13)) &amp; 0xff</code></td>
+</tr>
+<tr>
+<td>1</td>
+<td>93</td>
+<td><code>B[i]  = (B[i] + B[(i+1) &amp; 31]) &amp; 0xff</code>  (in-place, forward)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>96</td>
+<td><code>B[i]  = rotl8(B[i], 3)</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>85</td>
+<td><code>B[i] ^= (31*i + 0x3c) &amp; 0xff</code></td>
+</tr>
+</tbody></table>
+<p>Applying these four in order to the flag reproduces the <code>.rodata</code> target byte
+for byte:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-text">input = isfcr{c0d3_th4t_3ats_1ts_t41l!!}
+final = 61fe0ffd8b2d62e9b00fa3299ef2c8b631edefb71365e23fb53f744312821488  &lt;-- == target</code></pre>
+      
+    </figure><p>So the acceptance condition is fully explained: the JIT blocks perform a fixed
+invertible byte mixing of the input, and the flag is the input whose mixing lands
+on the stored 32-byte constant.</p>
+<hr>
+<h2 id="5-the-flag"><a class="wu-anchor" href="#5-the-flag" aria-hidden="true">#</a>5. The flag</h2>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-text">block 0  isfcr{c0
 block 1  d3_th4t_
 block 2  3ats_1ts
 block 3  _t41l!!}</code></pre>
       
-    </figure><p>Concatenated: <code>isfcr{c0d3_th4t_3ats_1ts_t41l!!}</code> - &quot;code that eats its tail!!&quot;. Verified two ways: all four JIT guard hashes match the stored constants, and the original binary prints <code>CORRECT</code>. JIT + <code>mprotect</code> + <code>memcmp</code> is a code-generation challenge, and generated code almost always has a fixed prologue - free known-plaintext against any <code>template XOR keystream</code> scheme.</p>
+    </figure><p>Concatenated: <code>isfcr{c0d3_th4t_3ats_1ts_t41l!!}</code> - leetspeak for
+<em>&quot;code that eats its tail!!&quot;</em> - which is precisely an <strong>ouroboros</strong>, and exactly
+what the program does: the generated code&#39;s hash seeds the next block&#39;s code
+generator.</p>
+<hr>
+<h2 id="6-verification-the-only-oracle-that-counts"><a class="wu-anchor" href="#6-verification-the-only-oracle-that-counts" aria-hidden="true">#</a>6. Verification (the only oracle that counts)</h2>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-12" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-12"><code class="language-text">$ python3 solve.py
+recovered 32 bytes : b'isfcr{c0d3_th4t_3ats_1ts_t41l!!}'
+flag               : isfcr{c0d3_th4t_3ats_1ts_t41l!!}
+...
+binary says        : CORRECT (exit 0)
+
+$ printf 'isfcr{c0d3_th4t_3ats_1ts_t41l!!}' | ./chall
+CORRECT</code></pre>
+      
+    </figure><p>Two independent confirmations: (a) all four JIT guard hashes match the stored
+constants, and (b) the original binary prints <code>CORRECT</code>.</p>
+<hr>
+<h2 id="7-takeaways"><a class="wu-anchor" href="#7-takeaways" aria-hidden="true">#</a>7. Takeaways</h2>
+<ul>
+<li><strong>JIT + <code>mprotect</code> + <code>memcmp</code> is a code-generation challenge, and the generated
+code almost always has a fixed prologue.</strong> That prologue is free known-plaintext
+against any <code>template XOR keystream</code> scheme. Recover the keystream, and the
+&quot;key&quot; (<code>seed</code>) - and therefore the input word - falls out with no search.</li>
+<li>The scary 2⁻⁶⁴ hash guard is defence <em>in the wrong direction</em>: it stops you
+guessing the word, but the word is derivable from the code, so the guard is
+never brute-forced at all.</li>
+<li>Keep the recovered semantics as a second, independent check: replaying the four
+byte transforms reproduces the <code>.rodata</code> <code>memcmp</code> constant exactly.</li>
+</ul>
+<p><strong>FLAG: <code>isfcr{c0d3_th4t_3ats_1ts_t41l!!}</code></strong></p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-triage">1. Triage</a></li><li><a href="#2-what-the-checker-does">2. What the checker does</a><ol class="wu-toc-sub"><li><a href="#21-read-scratch-buffer">2.1 Read + scratch buffer</a></li><li><a href="#22-four-jit-blocks-0x4004dc-0x400704">2.2 Four JIT blocks (0x4004dc .. 0x400704)</a></li></ol></li><li><a href="#3-why-the-guard-looks-unbreakable-and-isn39t">3. Why the guard looks unbreakable (and isn&#39;t)</a><ol class="wu-toc-sub"><li><a href="#31-known-plaintext-on-the-jit">3.1 Known-plaintext on the JIT</a></li></ol></li><li><a href="#4-the-four-generated-programs">4. The four generated programs</a></li><li><a href="#5-the-flag">5. The flag</a></li><li><a href="#6-verification-the-only-oracle-that-counts">6. Verification (the only oracle that counts)</a></li><li><a href="#7-takeaways">7. Takeaways</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

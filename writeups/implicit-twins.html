@@ -67,28 +67,104 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<blockquote>
-<p>Two 1280-bit RSA keys, separated at birth. Neither of them will talk alone.</p>
-</blockquote>
-<p><code>chall.py</code> builds two moduli <code>N1 = p1*q1</code>, <code>N2 = p2*q2</code> where <code>p1</code>, <code>p2</code> are 1024-bit primes sharing a run of low bits (<code>p1 ≡ p2 (mod 2^T)</code>, <code>T = 530/531</code>), and <code>q1</code>, <code>q2</code> are independent 256-bit primes. No common factor, no small primes, no close <code>q</code>. The only weakness is the shared low-bit block of <code>p1</code> and <code>p2</code>. This is the <strong>Implicit Factorization Problem</strong> (May-Ritzenhofen / Sarkar-Maitra); the unbalanced primes (1024-bit <code>p</code> vs 256-bit <code>q</code>) make an elementary two-dimensional lattice attack enough.</p>
-<p><strong>The trick:</strong> <code>N1 = p1*q1, N2 = p2*q2, p1 - p2 = 2^T * k</code>. Substitute and cross-multiply: <code>q1*N2 - q2*N1 = q1*q2*(p1 - p2) = 2^T * k * q1 * q2</code>, so <code>q1*N2 ≡ q2*N1 (mod 2^T)</code>. Both <code>q1, q2 &lt; 2^256</code>, tiny compared to <code>2^T ≈ 2^530</code>. Consider the 2-D lattice <code>L = { (a, b) in Z^2 : a*N2 - b*N1 ≡ 0 (mod 2^T) }</code>. <code>det(L) = 2^T</code>, so its shortest vector is <code>≈ 2^(T/2) ≈ 2^265</code> by Minkowski. The target vector <code>(q1, q2)</code> has length <code>≈ 2^256.5</code> - shorter than the generic shortest vector, so it <em>is</em> the shortest vector. A plain <strong>2-D Gauss reduction</strong> finds it.</p>
-<p>A basis is <code>{ (2^T, 0), (N1 * N2^-1 mod 2^T, 1) }</code>. <code>solve.py</code> sweeps <code>T</code> downward from 700 and stops on the first short vector that actually divides <code>N1</code> and <code>N2</code> - it fires at <code>T = 531</code>.</p>
-<figure class="wu-code wu-code-output" data-lines="5">
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">$ python3 solve.py
+      <pre id="code-1"><code class="language-text">Two 1280-bit RSA keys, separated at birth. Neither of them will talk alone.</code></pre>
+      
+    </figure><p><code>chall.py</code> builds two moduli:</p>
+<ul>
+<li><code>N1 = p1*q1</code>, <code>N2 = p2*q2</code></li>
+<li><code>p1</code>, <code>p2</code> are 1024-bit primes drawn from one broken generator: they share a run
+of low bits. <code>q1</code>, <code>q2</code> are independent 256-bit primes (from <code>nextprime</code>).</li>
+<li><code>p1 ≡ p2 (mod 2^T)</code>, with <code>T = 530</code> (secret in the flavour text, but the
+distributed generator source pins it; the recovered instance was even a touch
+luckier at <code>T = 531</code>).</li>
+<li>Flag is textbook RSA (<code>e = 65537</code>) under <code>N1</code>.</li>
+</ul>
+<p>No common factor, no small primes, no close <code>q</code>. The only weakness is the shared
+low-bit block of <code>p1</code> and <code>p2</code>.</p>
+<p>This is the <strong>Implicit Factorization Problem</strong> (May - Ritzenhofen / Sarkar - Maitra).
+The twist here is that the two primes of each modulus are wildly unbalanced
+(<code>p</code> 1024-bit vs <code>q</code> 256-bit), which makes an <em>elementary two-dimensional
+lattice</em> attack enough - no Coppersmith/<button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button> over a big lattice required.</p>
+<h2 id="the-trick"><a class="wu-anchor" href="#the-trick" aria-hidden="true">#</a>The trick</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">N1 = p1*q1,   N2 = p2*q2,   p1 - p2 = 2^T * k</code></pre>
+      
+    </figure><p>Substitute and cross-multiply:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">q1*N2 - q2*N1 = q1*q2*(p1 - p2) = 2^T * k * q1 * q2</code></pre>
+      
+    </figure><p>so</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">q1*N2 ≡ q2*N1   (mod 2^T)</code></pre>
+      
+    </figure><p>Both <code>q1, q2 &lt; 2^256</code>, i.e. tiny compared to the modulus <code>2^T ≈ 2^530</code>.
+Consider the 2-D lattice</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">L = { (a, b) in Z^2 : a*N2 - b*N1 ≡ 0  (mod 2^T) }</code></pre>
+      
+    </figure><p><code>det(L) = 2^T</code>, so its shortest vector is <code>≈ 2^(T/2) ≈ 2^265</code> by Minkowski.
+The target vector <code>(q1, q2)</code> has length <code>≈ 2^256.5</code> - <strong>shorter</strong> than the
+generic shortest vector, so it <em>is</em> the shortest vector (given <code>T</code> is large
+enough, <code>T ≳ 513</code>). A plain <strong>2-D Gauss reduction</strong> finds it.</p>
+<p>A basis is <code>{ (2^T, 0), (N1 * N2^-1 mod 2^T, 1) }</code> (valid since <code>N2</code> is odd and
+invertible mod <code>2^T</code>). Reduce, take the short vector <code>(±q1, ±q2)</code>, then
+<code>p1 = N1/q1</code>, <code>phi = (p1-1)(q1-1)</code>, standard RSA decrypt.</p>
+<p><code>solve.py</code> simply sweeps <code>T</code> downward from 700 and stops on the first short
+vector that actually divides <code>N1</code> and <code>N2</code> - so it does not need <code>T</code> to be
+leaked. It fires at <code>T = 531</code>.</p>
+<h2 id="solve"><a class="wu-anchor" href="#solve" aria-hidden="true">#</a>Solve</h2>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">$ python3 solve.py
 [+] hit at T=531:  q1=64786...93731
                    q2=101170...328241
 [+] shared low bits confirmed (&gt;=200)
 [+] flag: b'isfcr{1mpl1c1t_f4ct0r1ng_0f_tw1ns}'</code></pre>
       
-    </figure><p>Because <code>bits(q) &lt;&lt; bits(p)</code>, the shared-bit run <code>T</code> exceeds <code>bits(q)</code>, turning a hard bivariate Coppersmith problem into a textbook 2-D lattice reduction. With balanced primes you would need the full May-Ritzenhofen lattice and many more samples.</p>
+    </figure><p>Full flag file: <code>flag.txt</code>. Reproducible from the two distributed files alone.</p>
+<h2 id="why-the-unbalanced-primes-matter"><a class="wu-anchor" href="#why-the-unbalanced-primes-matter" aria-hidden="true">#</a>Why the unbalanced primes matter</h2>
+<p>Because <code>bits(q) &lt;&lt; bits(p)</code>, the shared-bit run <code>T</code> exceeds <code>bits(q)</code>. That
+turns a hard bivariate Coppersmith problem into &quot;find the small kernel vector of
+a linear congruence mod <code>2^T</code>&quot; - a textbook 2-D lattice reduction. With balanced
+primes you would need the full May - Ritzenhofen lattice and many more samples.</p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#the-trick">The trick</a></li><li><a href="#solve">Solve</a></li><li><a href="#why-the-unbalanced-primes-matter">Why the unbalanced primes matter</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

@@ -6,14 +6,16 @@
 
 ---
 
-**Challenge:** "A seemingly ordinary Soul Stone fragment contains a secret hidden inside its pixels. Extract the concealed message."
+## Challenge
+"A seemingly ordinary Soul Stone fragment contains a secret hidden inside its
+pixels. Extract the concealed message."
 
 - Attachment: `soul_fragment.png`
-- 80×80, 8-bit RGB, non-interlaced PNG (19,353 bytes - large for only 19,200 px, a mild hint that low-order bits are doing work).
+- 80×80, 8-bit RGB, non-interlaced PNG (19,353 bytes - large for only 19,200 px,
+  a mild hint that low-order bits are doing work).
 - Flag format: `OWASP{...}`
 
 ## Solution
-
 Classic LSB steganography in the colour channels.
 
 Triage:
@@ -45,11 +47,20 @@ The extractor is dependency-light (Pillow only) and does not rely on zsteg:
 it reads the LSB of each R/G/B sample in row-major order and repacks
 bits→bytes. Both methods agree.
 
-## Dead ends
-- Appended/embedded archive after IEND: none (binwalk finds only the PNG IHDR zlib stream).
-- EXIF / textual metadata chunks (tEXt/zTXt/iTXt): none.
-- Passphrase-protected steghide/outguess: N/A - payload is raw LSB, no key.
+## Evidence
+- `soul_fragment.png` - original attachment
+  sha256 `ebf0aaaeda9d05a25bd269c0f22c08b91176d3fbda25f3c853e08255beca5bfa`
+- `solve.py` - independent extractor + verifier
+- `zsteg_output.txt` - raw `zsteg -a` output (hit at `b1,rgb,lsb,xy`)
+- `extract.log` - solve.py run log
 
-**Difficulty notes:** Single-pass solve: `zsteg -a` on the first look. The only
-"trick" is that the message is bit-plane 1 of the *RGB* channels (not a single
-channel), so a naive single-channel LSB dump misses it.
+## Negatives (do not re-derive)
+- Appended/embedded archive after IEND: **none** (binwalk finds only the PNG IHDR
+  zlib stream).
+- EXIF / textual metadata chunks (tEXt/zTXt/iTXt): **none**.
+- Passphrase-protected steghide/outguess: **N/A** - payload is raw LSB, no key.
+
+## Difficulty notes
+Single-pass solve: `zsteg -a` on the first look. The only "trick" is that the
+message is bit-plane 1 of the *RGB* channels (not a single channel), so a naive
+single-channel LSB dump misses it.

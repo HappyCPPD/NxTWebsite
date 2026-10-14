@@ -67,26 +67,137 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A black box evaluated a secret sparse polynomial <code>F(X) = sum_{i=1..T} c_i * X^(e_i) (mod p)</code> over <code>GF(p)</code>, <code>p</code> 61-bit prime, <code>T = 24</code> sparse terms with distinct exponents. Only 48 samples given: <code>log[j] = F(g^j)</code> for <code>j = 0..47</code>, <code>g</code> a generator of <code>GF(p)*</code>. The flag key is <code>sha256(&quot;;&quot;.join(f&quot;{e}:{c}&quot;))</code> over the true term list sorted by exponent. The challenge rules out interpolating a degree-<code>p-2</code> polynomial (needs <code>p-1</code> points) and guessing exponents (<code>C(p-1,24) ~ 10^421</code>).</p>
-<p><strong>Key insight:</strong> substituting <code>a_i = g^(e_i) mod p</code> gives <code>log[j] = sum_i c_i * a_i^j</code> - a sum of <code>T</code> exponentials in <code>j</code> (Prony&#39;s problem, 1795). Any such sequence satisfies a linear recurrence of order <code>T</code> whose characteristic polynomial <code>C(X) = prod_i (X - a_i)</code> has <code>sum_k u_k * log[j+k] = 0</code>. With exactly <code>2T = 48</code> samples (the Berlekamp-Massey/Prony minimum), set up the <code>T x T</code> Hankel system and solve by one Gaussian elimination mod <code>p</code>.</p>
-<p><strong>Recovering the exponents:</strong> the roots of <code>C</code> over <code>GF(p)</code> are exactly the <code>a_i = g^{e_i}</code>. Split <code>C</code> into linear factors with Cantor-Zassenhaus (degree 24, instant). Each exponent is then a discrete log base <code>g</code>; <code>p - 1 = 2 · 281833 · 784577 · 2614081</code> (all &lt; 2^22), so Pohlig-Hellman reduces each dlog to a subgroup of order &lt; 2^22, solved by BSGS, then CRT.</p>
-<p><strong>Recovering the coefficients:</strong> with <code>a_i</code> known, <code>log[j] = sum_i c_i a_i^j</code> is a 24×24 Vandermonde system solved mod <code>p</code>. Pitfall: the mapping <code>a_i -&gt; e_i</code> is not order preserving, so the Vandermonde solution must be matched to roots in the <em>same order they came out</em>, not sorted independently - sorting roots and exponents separately silently mismatches pairs and fails the tag check. Verification: the recovered term list reproduces all 48 published evaluations exactly.</p>
-<figure class="wu-code wu-code-output" data-lines="5">
+<h2 id="the-challenge"><a class="wu-anchor" href="#the-challenge" aria-hidden="true">#</a>The challenge</h2>
+<p>We are given <code>chall.py</code> and <code>output.json</code>. A black box evaluated a secret
+polynomial</p>
+<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">key = sha256(&quot;;&quot;.join(f&quot;{e}:{c}&quot; for (e,c) in terms_sorted_by_e))
-isfcr{pr0ny_kn3w_1t_1n_1795}
-cd sparse-change
+      <pre id="code-1"><code class="language-text">F(X) = sum_{i=1..T} c_i * X^(e_i)   (mod p)</code></pre>
+      
+    </figure><p>over <code>GF(p)</code> with <code>p</code> a 61-bit prime, <code>T = 24</code> <strong>sparse</strong> terms, distinct
+exponents <code>e_i</code> in <code>[1, p-2]</code>, nonzero coefficients. We only got 48 samples:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">log[j] = F(g^j)   for j = 0 .. 2T-1 = 47</code></pre>
+      
+    </figure><p>where <code>g</code> is a generator of <code>GF(p)*</code>. The flag is AES-GCM encrypted under
+<code>sha256(&quot;;&quot;.join(f&quot;{e}:{c}&quot;))</code> over the true term list (sorted by exponent),
+with the ciphertext/tag/nonce published.</p>
+<p>The challenge text explicitly rules out the two obvious dead ends:
+interpolating a degree-<code>p-2</code> polynomial needs <code>p-1</code> points (we have 48), and
+guessing which 24 of the <code>p-1</code> exponents are live is <code>C(p-1,24) ~ 10^421</code>.</p>
+<h2 id="the-key-insight-it-is-a-sum-of-exponentials-a-linear-recurrence"><a class="wu-anchor" href="#the-key-insight-it-is-a-sum-of-exponentials-a-linear-recurrence" aria-hidden="true">#</a>The key insight: it is a sum of exponentials → a linear recurrence</h2>
+<p>Substitute <code>a_i = g^(e_i) mod p</code>. Then</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">log[j] = F(g^j) = sum_i c_i * (g^{e_i})^j = sum_i c_i * a_i^j</code></pre>
+      
+    </figure><p>This is a <strong>sum of <code>T</code> exponentials in <code>j</code></strong> (Prony&#39;s problem, 1795). Any such
+sequence satisfies a linear recurrence of order <code>T</code> whose characteristic
+polynomial is</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">C(X) = prod_i (X - a_i) = X^T + u_{T-1} X^{T-1} + ... + u_1 X + u_0</code></pre>
+      
+    </figure><p>i.e. <code>sum_{k=0}^{T} u_k * log[j+k] = 0</code> with <code>u_T = 1</code>.</p>
+<p>We have exactly <code>2T = 48</code> samples, which is the minimum needed (Berlekamp - Massey
+/ Prony). Setting up the <code>T x T</code> Hankel system for <code>j = 0..T-1</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">[ log[0]   log[1]   ... log[T-1]   ] [u_0]     [ -log[T]   ]
+[ log[1]   log[2]   ... log[T]     ] [u_1]  =  [ -log[T+1] ]
+[ ...                              ] [ ... ]    [ ...       ]
+[ log[T-1] log[T]   ... log[2T-2]  ] [u_{T-1}] [ -log[2T-1] ]</code></pre>
+      
+    </figure><p>One Gaussian elimination mod <code>p</code> gives <code>C</code>.</p>
+<h2 id="recovering-the-exponents-root-finding-pohlig-hellman"><a class="wu-anchor" href="#recovering-the-exponents-root-finding-pohlig-hellman" aria-hidden="true">#</a>Recovering the exponents: root finding + Pohlig - Hellman</h2>
+<p>The roots of <code>C</code> over <code>GF(p)</code> are exactly the <code>a_i = g^{e_i}</code> (they are all in
+the base field, so <code>gcd(C, X^p - X) = C</code>). We split <code>C</code> into linear factors with
+Cantor - Zassenhaus (random <code>r</code>, <code>gcd(C, (X+r)^((p-1)/2) - 1)</code>), isolating each
+<code>a_i</code>. Degree is only 24, so this is instant.</p>
+<p>Then, since <code>a_i = g^{e_i}</code>, each exponent is a <strong>discrete log</strong> base <code>g</code>. The
+challenge deliberately built <code>p-1</code> from small primes so this is easy:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">p - 1 = 2 · 281833 · 784577 · 2614081        (all &lt; 2^22)</code></pre>
+      
+    </figure><p>Pohlig - Hellman reduces each discrete log to a subgroup of order &lt; 2^22, solved
+by baby-step giant-step (~2048 steps each), then CRT. All 24 exponents recovered.</p>
+<h2 id="recovering-the-coefficients"><a class="wu-anchor" href="#recovering-the-coefficients" aria-hidden="true">#</a>Recovering the coefficients</h2>
+<p>With the <code>a_i</code> known, <code>log[j] = sum_i c_i a_i^j</code> is again a linear system - a
+24×24 Vandermonde matrix <code>V[j][i] = a_i^j</code> - solved mod <code>p</code>.</p>
+<p>Important pitfall: the mapping <code>a_i -&gt; e_i = dlog(a_i)</code> is <strong>not order
+preserving</strong>, so you must solve the Vandermonde for coefficients in the <em>same
+order</em> the roots came out, then attach each coefficient to its own exponent via
+<code>dlog</code>, and only then sort by exponent. Sorting the root values and the
+exponents independently (a natural-looking shortcut) silently mismatches the
+pairs and fails the AES-GCM tag check.</p>
+<p>Verification: the recovered term list reproduces <em>all 48</em> published evaluations
+exactly (<code>verify recurrence: True</code>).</p>
+<h2 id="unsealing-the-flag"><a class="wu-anchor" href="#unsealing-the-flag" aria-hidden="true">#</a>Unsealing the flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">key = sha256(&quot;;&quot;.join(f&quot;{e}:{c}&quot; for (e,c) in terms_sorted_by_e))</code></pre>
+      
+    </figure><p>AES-GCM decrypt with the published nonce/tag yields:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">isfcr{pr0ny_kn3w_1t_1n_1795}</code></pre>
+      
+    </figure><p>The flag is a nod to Gaspard de Prony, who solved exactly this problem
+(sum of exponentials from sparse samples) in 1795.</p>
+<h2 id="reproduce"><a class="wu-anchor" href="#reproduce" aria-hidden="true">#</a>Reproduce</h2>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">cd sparse-change
 /usr/bin/python3 solve.py
 # -&gt; FLAG: b'isfcr{pr0ny_kn3w_1t_1n_1795}'</code></pre>
       
-    </figure><p>Runtime &lt; 1 second. The flag is a nod to Gaspard de Prony, who solved exactly this problem in 1795.</p>
+    </figure><p>Runtime: &lt; 1 second (sympy for <code>factorint</code>, pycryptodome for AES-GCM; the
+polynomial / dlog code is pure Python since sizes are tiny).</p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#the-challenge">The challenge</a></li><li><a href="#the-key-insight-it-is-a-sum-of-exponentials-a-linear-recurrence">The key insight: it is a sum of exponentials → a linear recurrence</a></li><li><a href="#recovering-the-exponents-root-finding-pohlig-hellman">Recovering the exponents: root finding + Pohlig - Hellman</a></li><li><a href="#recovering-the-coefficients">Recovering the coefficients</a></li><li><a href="#unsealing-the-flag">Unsealing the flag</a></li><li><a href="#reproduce">Reproduce</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

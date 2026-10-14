@@ -67,10 +67,13 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><strong>Challenge:</strong> &quot;A seemingly ordinary Soul Stone fragment contains a secret hidden inside its pixels. Extract the concealed message.&quot;</p>
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<p>&quot;A seemingly ordinary Soul Stone fragment contains a secret hidden inside its
+pixels. Extract the concealed message.&quot;</p>
 <ul>
 <li>Attachment: <code>soul_fragment.png</code></li>
-<li>80×80, 8-bit RGB, non-interlaced PNG (19,353 bytes - large for only 19,200 px, a mild hint that low-order bits are doing work).</li>
+<li>80×80, 8-bit RGB, non-interlaced PNG (19,353 bytes - large for only 19,200 px,
+a mild hint that low-order bits are doing work).</li>
 <li>Flag format: <code>OWASP{...}</code></li>
 </ul>
 <h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
@@ -113,21 +116,31 @@ that terminates at <code>}</code> followed by binary noise.</p>
     </figure><p>The extractor is dependency-light (Pillow only) and does not rely on zsteg:
 it reads the LSB of each R/G/B sample in row-major order and repacks
 bits→bytes. Both methods agree.</p>
-<h2 id="dead-ends"><a class="wu-anchor" href="#dead-ends" aria-hidden="true">#</a>Dead ends</h2>
+<h2 id="evidence"><a class="wu-anchor" href="#evidence" aria-hidden="true">#</a>Evidence</h2>
 <ul>
-<li>Appended/embedded archive after IEND: none (binwalk finds only the PNG IHDR zlib stream).</li>
-<li>EXIF / textual metadata chunks (tEXt/zTXt/iTXt): none.</li>
-<li>Passphrase-protected steghide/outguess: N/A - payload is raw LSB, no key.</li>
+<li><code>soul_fragment.png</code> - original attachment
+sha256 <code>ebf0aaaeda9d05a25bd269c0f22c08b91176d3fbda25f3c853e08255beca5bfa</code></li>
+<li><code>solve.py</code> - independent extractor + verifier</li>
+<li><code>zsteg_output.txt</code> - raw <code>zsteg -a</code> output (hit at <code>b1,rgb,lsb,xy</code>)</li>
+<li><code>extract.log</code> - solve.py run log</li>
 </ul>
-<p><strong>Difficulty notes:</strong> Single-pass solve: <code>zsteg -a</code> on the first look. The only
-&quot;trick&quot; is that the message is bit-plane 1 of the <em>RGB</em> channels (not a single
-channel), so a naive single-channel LSB dump misses it.</p>
+<h2 id="negatives-do-not-re-derive"><a class="wu-anchor" href="#negatives-do-not-re-derive" aria-hidden="true">#</a>Negatives (do not re-derive)</h2>
+<ul>
+<li>Appended/embedded archive after IEND: <strong>none</strong> (binwalk finds only the PNG IHDR
+zlib stream).</li>
+<li>EXIF / textual metadata chunks (tEXt/zTXt/iTXt): <strong>none</strong>.</li>
+<li>Passphrase-protected steghide/outguess: <strong>N/A</strong> - payload is raw LSB, no key.</li>
+</ul>
+<h2 id="difficulty-notes"><a class="wu-anchor" href="#difficulty-notes" aria-hidden="true">#</a>Difficulty notes</h2>
+<p>Single-pass solve: <code>zsteg -a</code> on the first look. The only &quot;trick&quot; is that the
+message is bit-plane 1 of the <em>RGB</em> channels (not a single channel), so a naive
+single-channel LSB dump misses it.</p>
 
     </article>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#solution">Solution</a></li><li><a href="#reproduce">Reproduce</a></li><li><a href="#dead-ends">Dead ends</a></li></ol>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#solution">Solution</a></li><li><a href="#reproduce">Reproduce</a></li><li><a href="#evidence">Evidence</a></li><li><a href="#negatives-do-not-re-derive">Negatives (do not re-derive)</a></li><li><a href="#difficulty-notes">Difficulty notes</a></li></ol>
       </nav>
   </div>
 

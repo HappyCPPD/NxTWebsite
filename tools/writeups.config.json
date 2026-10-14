@@ -498,6 +498,42 @@
           "blurb": "One process does not belong: SoulHunt_7F31 spawned from powershell.exe. Its command line and dumped strings show it is a renamed copy of PowerShell."
         },
         {
+          "slug": "echoes-of-vormir-mem-3",
+          "name": "Echoes of Vormir: Mem-3",
+          "category": "forensics",
+          "subtitle": "a painted image cached in memory",
+          "points": 300,
+          "flag": "OWASP{soulstone_memory_84c2}",
+          "blurb": "The hint says the answer is something seen. Filescan on the dump lists a cached Sacrifice.png, and dumping it shows a wallpaper with the flag painted on top in black text."
+        },
+        {
+          "slug": "echoes-of-vormir-mem-4",
+          "name": "Echoes of Vormir: Mem-4",
+          "category": "forensics",
+          "subtitle": "a leftover fragment in command history",
+          "points": 250,
+          "flag": "OWASP{soulstone_cmd_741f}",
+          "blurb": "A fragment survives outside the tidy mapped files. Console and heap leftovers in the raw dump carry a hex-encoded OWASP flag from the same family, which decodes with xxd. The value is a reconstruction, not confirmed against the scoreboard."
+        },
+        {
+          "slug": "echoes-of-vormir-mem-5",
+          "name": "Echoes of Vormir: Mem-5",
+          "category": "forensics",
+          "subtitle": "browser history in the memory dump",
+          "points": 200,
+          "flag": "OWASP{soulstone_web_8b2d}",
+          "blurb": "The last trace is browser activity. Carving the mapped History object shows Bing searches for FTK Imager and winpmem, and the dump holds the matching flag in hex and UTF-16LE form."
+        },
+        {
+          "slug": "echoes-of-vormir-mem-6",
+          "name": "Echoes of Vormir: Mem-6",
+          "category": "forensics",
+          "subtitle": "the forgotten expedition note",
+          "points": 250,
+          "flag": "OWASP{soulstone_note_3c91}",
+          "blurb": "A small expedition.txt note is carved from memory. Its artifact reference is a hex string that decodes straight to the flag."
+        },
+        {
           "slug": "last-memory-of-vormir",
           "name": "The Last Memory of Vormir",
           "category": "forensics",
@@ -917,10 +953,21 @@
       "tag": "solo",
       "status": "active",
       "order": 2,
-      "focus": ["Forensics", "OSINT", "Crypto"],
+      "focus": [
+        "Forensics",
+        "OSINT",
+        "Crypto"
+      ],
       "bio": "Forensics and OSINT by habit, crypto when a lattice is involved. Runs the occasional CTF solo under the handle NxT.",
       "linkedin": "https://www.linkedin.com/in/ashton-ang-wu-zun-846999353/",
-      "events": ["cryovault-ctf-2026", "byteme-ctf-26", "skillbit-flash-ctf-2026-09", "tisc-2026", "tfc-ctf-26", "kaspersky-ctf-2026"]
+      "events": [
+        "cryovault-ctf-2026",
+        "byteme-ctf-26",
+        "skillbit-flash-ctf-2026-09",
+        "tisc-2026",
+        "tfc-ctf-26",
+        "kaspersky-ctf-2026"
+      ]
     },
     {
       "slug": "txn",
@@ -930,10 +977,17 @@
       "status": "active",
       "role": "Team lead",
       "order": 1,
-      "focus": ["Web", "Pwn", "Reverse"],
+      "focus": [
+        "Web",
+        "Pwn",
+        "Reverse"
+      ],
       "bio": "Team lead. Web, binary exploitation, and reverse engineering.",
       "linkedin": "https://www.linkedin.com/in/andrei-yeo-qiu-shi-799b25386/",
-      "events": ["byteme-ctf-26", "kaspersky-ctf-2026"]
+      "events": [
+        "byteme-ctf-26",
+        "kaspersky-ctf-2026"
+      ]
     },
     {
       "slug": "dxt",
@@ -943,7 +997,9 @@
       "status": "active",
       "role": "Newest member",
       "order": 3,
-      "focus": ["OSINT"],
+      "focus": [
+        "OSINT"
+      ],
       "bio": "Newest member of the team. OSINT focus.",
       "linkedin": "https://www.linkedin.com/in/sanjeev-kumar-senthil-kumar-6683023a6/",
       "events": []

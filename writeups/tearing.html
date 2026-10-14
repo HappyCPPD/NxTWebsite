@@ -67,44 +67,221 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><code>nc 0.cloud.chals.io 26166</code>. A line-based text protocol: <code>status</code>/<code>redeem</code>/<code>claim</code>/<code>quit</code>, &quot;vault&quot; semantics <code>prizes</code>/<code>tickets</code>/<code>need=15</code>. The service shares one mutable <code>(prizes, tickets)</code> pair <strong>across every connection</strong> and checks the win guard separately from the update, with no locking:</p>
+<p><code>nc 0.cloud.chals.io 26166</code></p>
+<h2 id="0-paste-ready-handoff"><a class="wu-anchor" href="#0-paste-ready-handoff" aria-hidden="true">#</a>§0 Paste-ready handoff</h2>
+<ul>
+<li><strong>Status: SOLVED.</strong> Flag recovered and reproduced twice (see <code>solve.log</code>, <code>hammer.log</code>).</li>
+<li><strong>Category:</strong> pwn/misc - TOCTOU race condition on shared server state.</li>
+<li><strong>Target:</strong> <code>0.cloud.chals.io 26166</code>, line-based text protocol.</li>
+<li><strong>Flag:</strong> <code>isfcr{t0ct0u_w1nd0w_0nly_0p3ns_c0ncurr3ntly}</code></li>
+<li><strong>One-line repro:</strong> <code>python3 solve.py</code> (64 threads, 120 s budget; hits in well
+under a minute - reproduced 3/3 consecutive fresh runs).</li>
+<li><strong>Root cause:</strong> the vault&#39;s <code>(prizes, tickets)</code> counters are <strong>global (shared by
+every connection)</strong> and <code>claim</code> does an un-locked check-then-act
+(<code>if prizes &gt;= 15:</code> … then update). Concurrent <code>claim</code>s all read the same
+<code>prizes &gt;= 15</code> snapshot and every one of them takes the success branch.</li>
+<li><strong>Do not re-derive (negatives):</strong><ol>
+<li>Command matching is a <strong>prefix</strong> test (<code>redeem:1</code>, <code>status()</code>, <code>redeem\t1</code>
+all dispatch; <code>REDEEM</code>/<code> Redeem</code>/leading-space do <strong>not</strong>). There is no
+argument parsing - <code>redeem 15</code>, <code>claim:15</code> send no count. <strong>No hidden
+commands exist</strong> (119-word sweep: only prefix-matches, everything else → <code>?</code>).</li>
+<li><strong>No injection surface.</strong> <code>%s%n</code>, <code>&#39;</code>, <code>&quot;</code>, <code>{}</code>, NUL bytes, 5000-byte
+lines, ANSI escapes, <code>\r</code> all return a plain <code>?</code> - no traceback, no eval.</li>
+<li><strong>State is NOT per-connection.</strong> Fresh connections observe whatever the
+global state currently is (e.g. <code>prizes=4 tickets=-3</code>), so single-threaded
+probing appears &quot;stuck at <code>1/0</code>&quot; and looks like a dead end. It is not.</li>
+<li><code>prizes + tickets == 1</code> is <strong>invariant</strong> - <code>redeem</code> transfers a ticket into
+a prize, <code>claim</code> transfers 15 prizes into a ticket. Reaching <code>prizes &gt;= 15</code>
+requires <code>tickets == -14</code>, which is only reachable because <code>redeem</code> also
+mutates under the same un-locked window. Single-threaded you can never
+escape <code>prizes = 1</code>, so <strong>serial play is provably useless</strong> - do not grind it.</li>
+<li>Idle state drifts every ~40 - 80 s even with no commands from you; that is
+the shared instance being touched by other traffic/timers. It is a red
+herring, not the exploit.</li>
+</ol>
+</li>
+<li><strong>Ranked leads (all resolved):</strong> concurrency (win) &gt; protocol fuzzing
+(empty) &gt; hidden-command brute (empty).</li>
+</ul>
+<h2 id="1-challenge-text"><a class="wu-anchor" href="#1-challenge-text" aria-hidden="true">#</a>§1 Challenge text</h2>
+<blockquote>
+<p>tearing - 50 pts - NotKnox - 3 solves
+<em>One ticket in the drawer. Leave with two.</em>
+<code>nc 0.cloud.chals.io 26166</code></p>
+</blockquote>
+<h2 id="2-service-protocol"><a class="wu-anchor" href="#2-service-protocol" aria-hidden="true">#</a>§2 Service protocol</h2>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">vault. commands: redeem | status | claim | quit
+&gt; status
+prizes=1 tickets=0 need=15
+&gt; redeem
+no tickets left
+&gt; claim
+not enough prizes
+&gt; quit</code></pre>
+      
+    </figure><table>
+<thead>
+<tr>
+<th>command</th>
+<th>guard</th>
+<th>success</th>
+<th>failure</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>status</code></td>
+<td>-</td>
+<td><code>prizes=P tickets=T need=15</code></td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>redeem</code></td>
+<td><code>tickets &gt; 0</code></td>
+<td><code>redeemed. prizes=P tickets=T</code></td>
+<td><code>no tickets left</code></td>
+</tr>
+<tr>
+<td><code>claim</code></td>
+<td><code>prizes &gt;= 15</code></td>
+<td>prints the <strong>flag</strong></td>
+<td><code>not enough prizes</code></td>
+</tr>
+<tr>
+<td><code>quit</code></td>
+<td>-</td>
+<td>closes the connection</td>
+<td>-</td>
+</tr>
+</tbody></table>
+<p>Dispatch is <code>line.startswith(cmd)</code>; unknown input → <code>?</code>.</p>
+<h2 id="3-root-cause-toctou-on-the-global-drawer"><a class="wu-anchor" href="#3-root-cause-toctou-on-the-global-drawer" aria-hidden="true">#</a>§3 Root cause - TOCTOU on the global drawer</h2>
+<p>The service shares one mutable <code>(prizes, tickets)</code> pair across all clients and
+checks the guard <strong>separately from</strong> the update, with no locking:</p>
+<figure class="wu-code" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># reconstructed</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">claim</span>():</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">    <span class="hljs-keyword">if</span> prizes &gt;= <span class="hljs-number">15</span>:          <span class="hljs-comment"># &lt;-- check</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">        ...                   <span class="hljs-comment"># &lt;-- (no lock / no re-read)</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">        tickets += <span class="hljs-number">1</span>          <span class="hljs-comment"># &lt;-- act, on a stale snapshot</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">        <span class="hljs-built_in">print</span>(FLAG)</span></span></code></pre>
+      
+    </figure><p>Because the check and the act are not atomic, a burst of concurrent <code>claim</code>s
+all observe <code>prizes &gt;= 15</code>, all enter the branch, and all receive the flag -
+&quot;one ticket in the drawer, leave with two&quot;. Under load the shared counters were
+repeatedly observed at <code>prizes=17 tickets=-16</code>, i.e. the <code>tickets &gt; 0</code> guard on
+<code>redeem</code> tears open the same way and lets <code>prizes</code> climb past 15.</p>
+<p>The invariant <code>prizes + tickets == 1</code> holds at rest; the race breaks the read
+consistency, not the arithmetic.</p>
+<h2 id="4-exploit"><a class="wu-anchor" href="#4-exploit" aria-hidden="true">#</a>§4 Exploit</h2>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 solve.py                 <span class="hljs-comment"># 64 threads, 120 s budget (hits in &lt;60 s)</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 solve.py &lt;host&gt; &lt;port&gt; [seconds]   <span class="hljs-comment"># custom target / budget</span></span></span></code></pre>
+      
+    </figure><p>Worker loop (see <code>solve.py</code>) - randomised command bursts, one recv per burst:</p>
 <figure class="wu-code" data-lines="4">
       <figcaption>
         
         <span class="wu-code-lang">python</span>
-        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">claim</span>():</span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">    <span class="hljs-keyword">if</span> prizes &gt;= <span class="hljs-number">15</span>:          <span class="hljs-comment"># check</span></span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">        tickets += <span class="hljs-number">1</span>          <span class="hljs-comment"># act, on a stale snapshot - no lock</span></span></span>
-<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">        <span class="hljs-built_in">print</span>(FLAG)</span></span></code></pre>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">s.sendall(random.choice(BURSTS))     <span class="hljs-comment"># b&quot;redeem\n&quot;*8, b&quot;claim\n&quot;*4,</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">                                     <span class="hljs-comment"># b&quot;redeem\nclaim\n&quot;*8, ...</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">buf = recv_until_prompt(s)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-keyword">if</span> <span class="hljs-string">b&quot;isfcr{&quot;</span> <span class="hljs-keyword">in</span> buf: win()</span></span></code></pre>
       
-    </figure><p>Because check and act are not atomic, a burst of concurrent <code>claim</code>s can all observe <code>prizes &gt;= 15</code> simultaneously and all take the success branch. The <code>tickets &gt; 0</code> guard on <code>redeem</code> tears open the same way, letting <code>prizes</code> climb past 15 under load (observed <code>prizes=17 tickets=-16</code>, breaking the normally-invariant <code>prizes + tickets == 1</code>). Single-threaded play can never escape <code>prizes = 1</code> - serial grinding is provably useless.</p>
-<p>Extensive negative findings ruled out: command dispatch is pure prefix-match with no hidden commands (119-word sweep), there is no injection surface (format strings, quotes, NULs, long lines all bounce off a plain <code>?</code>), and idle-state drift is a red herring unrelated to the exploit.</p>
-<p><strong>Exploit:</strong> 64 threads sending randomised command bursts (<code>redeem</code> bursts to drive <code>prizes</code> up through the torn guard, <code>claim</code> bursts to land inside the window the instant <code>prizes</code> crosses 15), one recv per burst, stop on first flag seen.</p>
-<figure class="wu-code wu-code-output" data-lines="4">
+    </figure><ul>
+<li><code>redeem</code> bursts drive the shared <code>prizes</code> counter up through the torn guard.</li>
+<li><code>claim</code> bursts land inside the window the instant <code>prizes</code> crosses 15.</li>
+<li>First <code>isfcr{...}</code> seen wins; all threads stop.</li>
+</ul>
+<p>Observed in one 40 s / 24-thread run (<code>hammer.log</code>):</p>
+<figure class="wu-code wu-code-output" data-lines="6">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">2452  b'no tickets left'
-1393  b'isfcr{t0ct0u_w1nd0w_0nly_0p3ns_c0ncurr3ntly}'
- 683  b'prizes=17 tickets=-16 need=15'
- 259  b'not enough prizes'</code></pre>
+      <pre id="code-5"><code class="language-text">    2452  b'no tickets left'
+    1393  b'isfcr{t0ct0u_w1nd0w_0nly_0p3ns_c0ncurr3ntly}'
+     683  b'prizes=17 tickets=-16 need=15'
+     259  b'not enough prizes'
+     140  b'prizes=4 tickets=-3 need=15'
+       4  b'prizes=0 tickets=1 need=15'</code></pre>
       
-    </figure><p>The flag was returned 1393 times - every racer that entered the window got it, exactly as the TOCTOU model predicts.</p>
+    </figure><p>The flag was returned <strong>1393 times</strong> - every racer that entered the window got
+it, exactly as the TOCTOU model predicts. <code>solve.py</code> independently produced the
+same flag (<code>solve.log</code>).</p>
+<h2 id="5-flag"><a class="wu-anchor" href="#5-flag" aria-hidden="true">#</a>§5 Flag</h2>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-3"><code class="language-text">isfcr{t0ct0u_w1nd0w_0nly_0p3ns_c0ncurr3ntly}</code></pre>
+      <pre id="code-6"><code class="language-text">isfcr{t0ct0u_w1nd0w_0nly_0p3ns_c0ncurr3ntly}</code></pre>
+      
+    </figure><h2 id="6-files"><a class="wu-anchor" href="#6-files" aria-hidden="true">#</a>§6 Files</h2>
+<table>
+<thead>
+<tr>
+<th>file</th>
+<th>role</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>solve.py</code></td>
+<td>final solver (64 threads, randomised bursts), flag regex + early stop</td>
+</tr>
+<tr>
+<td><code>hammer.py</code></td>
+<td>first concurrency fuzzer to win; prints the response histogram</td>
+</tr>
+<tr>
+<td><code>probe.py</code></td>
+<td>protocol recon (command semantics)</td>
+</tr>
+<tr>
+<td><code>monitor.py</code></td>
+<td>idle-state drift observer</td>
+</tr>
+<tr>
+<td><code>solve.log</code>, <code>hammer.log</code></td>
+<td>captured runs proving the flag</td>
+</tr>
+</tbody></table>
+<h2 id="7-reproduce-from-scratch"><a class="wu-anchor" href="#7-reproduce-from-scratch" aria-hidden="true">#</a>§7 Reproduce from scratch</h2>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">git <span class="hljs-built_in">clone</span> tearing.bundle tearing &amp;&amp; <span class="hljs-built_in">cd</span> tearing</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 solve.py            <span class="hljs-comment"># needs network access to 0.cloud.chals.io:26166</span></span></span></code></pre>
       
     </figure>
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#0-paste-ready-handoff">§0 Paste-ready handoff</a></li><li><a href="#1-challenge-text">§1 Challenge text</a></li><li><a href="#2-service-protocol">§2 Service protocol</a></li><li><a href="#3-root-cause-toctou-on-the-global-drawer">§3 Root cause - TOCTOU on the global drawer</a></li><li><a href="#4-exploit">§4 Exploit</a></li><li><a href="#5-flag">§5 Flag</a></li><li><a href="#6-files">§6 Files</a></li><li><a href="#7-reproduce-from-scratch">§7 Reproduce from scratch</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

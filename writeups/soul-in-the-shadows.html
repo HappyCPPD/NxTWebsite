@@ -68,14 +68,18 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><strong>Challenge:</strong> <em>Soul in the Shadows</em> - &quot;There is more to this image than what
-you can see. Recover the hidden flag.&quot; Flag format: <code>OWASP{...}</code></p>
+<h2 id="1-the-challenge"><a class="wu-anchor" href="#1-the-challenge" aria-hidden="true">#</a>1. The challenge</h2>
+<blockquote>
+<p><em>Soul in the Shadows</em>
+There is more to this image than what you can see. Recover the hidden flag.
+Flag format: <code>OWASP{...}</code></p>
+</blockquote>
 <p>Attachment: a player archive containing a single image, <code>archive.png</code>, and a
-short <code>challenge.txt</code> repeating the prompt. The title and the &quot;more than you
-can see&quot; line both point at pixel-level steganography.</p>
-<h2 id="1-triage"><a class="wu-anchor" href="#1-triage" aria-hidden="true">#</a>1. Triage</h2>
-<p>First pass is always cheap metadata and structure inspection, because it
-tells you where <em>not</em> to dig.</p>
+short <code>challenge.txt</code> repeating the prompt. The title and the &quot;more than you can
+see&quot; line both point at pixel-level steganography.</p>
+<h2 id="2-triage"><a class="wu-anchor" href="#2-triage" aria-hidden="true">#</a>2. Triage</h2>
+<p>First pass is always cheap metadata and structure inspection, because it tells
+you where <em>not</em> to dig.</p>
 <figure class="wu-code wu-code-output" data-lines="5">
       <figcaption>
         
@@ -88,18 +92,18 @@ archive.png: PNG image data, 1000 x 1180, 8-bit/color RGB, non-interlaced
 $ identify archive.png
 archive.png PNG 1000x1180 1000x1180+0+0 8-bit sRGB 2.01123MiB</code></pre>
       
-    </figure><p>Nothing exotic - a plain 8-bit RGB PNG, no alpha channel, non-interlaced.
-Next, walk the PNG chunk list and check for data smuggled <em>outside</em> the
-pixels:</p>
+    </figure><p>Nothing exotic - a plain 8-bit RGB PNG, no alpha channel, non-interlaced. Next,
+walk the PNG chunk list and check for data smuggled <em>outside</em> the pixels:</p>
 <ul>
 <li>Chunks present: <code>IHDR</code>, three <code>tEXt</code>, ~33 × <code>IDAT</code>, <code>IEND</code>.</li>
-<li><strong>No trailing bytes after <code>IEND</code></strong> (a classic ZIP/append trick) - the file
-ends cleanly.</li>
-<li><code>binwalk</code> finds nothing but the PNG header and its own zlib <code>IDAT</code> stream - no embedded archive, no secondary file.</li>
+<li><strong>No trailing bytes after <code>IEND</code></strong> (a classic ZIP/append trick) - the file ends
+cleanly.</li>
+<li><code>binwalk</code> finds nothing but the PNG header and its own zlib <code>IDAT</code> stream - no
+embedded archive, no secondary file.</li>
 </ul>
 <p>So the payload is not appended or embedded as a file; it must be <em>inside</em> the
 pixels or in the text chunks.</p>
-<h2 id="2-the-metadata-hint"><a class="wu-anchor" href="#2-the-metadata-hint" aria-hidden="true">#</a>2. The metadata hint</h2>
+<h2 id="3-the-metadata-hint"><a class="wu-anchor" href="#3-the-metadata-hint" aria-hidden="true">#</a>3. The metadata hint</h2>
 <p><code>exiftool</code> surfaces the three <code>tEXt</code> chunks:</p>
 <table>
 <thead>
@@ -121,16 +125,15 @@ pixels or in the text chunks.</p>
 <td><code>Some things are left behind on Vormir.</code></td>
 </tr>
 </tbody></table>
-<p>The Comment is doing real work here. The title (&quot;Forgotten Record&quot;) and
-author (&quot;Archives&quot;) are pure atmosphere, but <strong>Vormir</strong> is a deliberate
-breadcrumb - in the MCU, Vormir is the planet of the Soul Stone, and the
-prompt is <em>&quot;Soul in the Shadows.&quot;</em> A place-name like that is almost never
-scenery in a stego challenge; it is a candidate key, password, or XOR mask.
-Keep it in your pocket.</p>
-<h2 id="3-finding-the-payload"><a class="wu-anchor" href="#3-finding-the-payload" aria-hidden="true">#</a>3. Finding the payload</h2>
+<p>The Comment is doing real work here. The title (&quot;Forgotten Record&quot;) and author
+(&quot;Archives&quot;) are pure atmosphere, but <strong>Vormir</strong> is a deliberate breadcrumb - in
+the MCU, Vormir is the planet of the Soul Stone, and the prompt is <em>&quot;Soul in the
+Shadows.&quot;</em> A place-name like that is almost never scenery in a stego challenge;
+it is a candidate key, password, or XOR mask. Keep it in your pocket.</p>
+<h2 id="4-finding-the-payload"><a class="wu-anchor" href="#4-finding-the-payload" aria-hidden="true">#</a>4. Finding the payload</h2>
 <p>With pixels as the only remaining carrier, the right tool is <code>zsteg</code>, which
-brute-forces every combination of bit-plane, channel order, bit significance,
-and scan direction:</p>
+brute-forces every combination of bit-plane, channel order, bit significance, and
+scan direction:</p>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
@@ -171,10 +174,10 @@ The records showed nothing unusual.
 <li><strong><code>lsb</code></strong> - least-significant bit first.</li>
 <li><strong><code>xy</code></strong> - normal raster order (row by row, left to right).</li>
 </ul>
-<p>So the message is stored one bit per colour-component LSB, a very common and
-very robust scheme. The surrounding prose (&quot;checked twice&quot;, &quot;nothing
-unusual&quot;) is flavour, and <code>::END::</code> is a self-imposed terminator. The
-<strong>middle line is the payload</strong>:</p>
+<p>So the message is stored one bit per colour-component LSB, a very common and very
+robust scheme. The surrounding prose (&quot;checked twice&quot;, &quot;nothing unusual&quot;) is
+flavour, and <code>::END::</code> is a self-imposed terminator. The <strong>middle line is the
+payload</strong>:</p>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
@@ -195,10 +198,10 @@ yields 24 opaque bytes, not text, so there is a second layer:</p>
 00000000: 1918 131e 1929 2227 3712 3a3d 2323 0d3a  .....)&quot;'7.:=##.:
 00000010: 2821 0927 373f 2c2f                      (!.'7?,/</code></pre>
       
-    </figure><h2 id="4-cracking-the-second-layer"><a class="wu-anchor" href="#4-cracking-the-second-layer" aria-hidden="true">#</a>4. Cracking the second layer</h2>
-<p>We have 24 bytes and a strong hint that the word <code>VORMIR</code> is the key. Test it
-as a <strong>repeating-key XOR</strong> and use a known-plaintext check: every solution
-must start with <code>OWASP{</code>.</p>
+    </figure><h2 id="5-cracking-the-second-layer"><a class="wu-anchor" href="#5-cracking-the-second-layer" aria-hidden="true">#</a>5. Cracking the second layer</h2>
+<p>We have 24 bytes and a strong hint that the word <code>VORMIR</code> is the key. Test it as
+a <strong>repeating-key XOR</strong> and use a known-plaintext check: every solution must start
+with <code>OWASP{</code>.</p>
 <figure class="wu-code wu-code-output" data-lines="3">
       <figcaption>
         
@@ -209,8 +212,8 @@ must start with <code>OWASP{</code>.</p>
 key &quot;VORMIR&quot;     : 56 4f 52 4d 49 52
 XOR              : 4f 57 41 53 50 7b   -&gt;  &quot;OWASP{&quot;</code></pre>
       
-    </figure><p>The first six bytes XOR cleanly to the flag prefix, so the key is correct.
-Apply it across the whole 24-byte blob (<code>key[i % 6]</code>):</p>
+    </figure><p>The first six bytes XOR cleanly to the flag prefix, so the key is correct. Apply
+it across the whole 24-byte blob (<code>key[i % 6]</code>):</p>
 <figure class="wu-code wu-code-output" data-lines="3">
       <figcaption>
         
@@ -221,25 +224,34 @@ Apply it across the whole 24-byte blob (<code>key[i % 6]</code>):</p>
     &quot;import sys;d=sys.stdin.buffer.read();k=b'VORMIR';print(''.join(chr(b^k[i%6]) for i,b in enumerate(d)))&quot;
 OWASP{the_soul_was_here}</code></pre>
       
-    </figure><h2 id="5-the-three-layer-chain"><a class="wu-anchor" href="#5-the-three-layer-chain" aria-hidden="true">#</a>5. The three-layer chain</h2>
+    </figure><h2 id="6-flag"><a class="wu-anchor" href="#6-flag" aria-hidden="true">#</a>6. Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">OWASP{the_soul_was_here}</code></pre>
+      
+    </figure><h2 id="7-the-three-layer-chain"><a class="wu-anchor" href="#7-the-three-layer-chain" aria-hidden="true">#</a>7. The three-layer chain</h2>
 <ol>
 <li><strong>Pixels</strong> - a base64 string hidden in the R/G/B LSBs (<code>b1,rgb,lsb,xy</code>).</li>
 <li><strong>Encoding</strong> - Base64, hiding 24 raw bytes rather than ASCII.</li>
 <li><strong>Cipher</strong> - repeating-key XOR with <code>VORMIR</code>, the key teased by the PNG
 metadata comment and the challenge title.</li>
 </ol>
-<p>Each layer has a tell: the LSB channel produced readable prose, the Base64
-string had the right alphabet and length, and the decoded bytes failed every
-text test (high-bit and control characters) - the universal sign that you
-are looking at ciphertext, not a mis-decode.</p>
-<h2 id="6-one-shot-reproduction"><a class="wu-anchor" href="#6-one-shot-reproduction" aria-hidden="true">#</a>6. One-shot reproduction</h2>
+<p>Each layer has a tell: the LSB channel produced readable prose, the Base64 string
+had the right alphabet and length, and the decoded bytes failed every text test
+(high-bit and control characters) - the universal sign that you are looking at
+ciphertext, not a mis-decode.</p>
+<h2 id="8-one-shot-reproduction"><a class="wu-anchor" href="#8-one-shot-reproduction" aria-hidden="true">#</a>8. One-shot reproduction</h2>
 <figure class="wu-code" data-lines="3">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
-        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-9"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">zsteg -e b1,rgb,lsb,xy archive.png | sed -n 2p | <span class="hljs-built_in">base64</span> -d \</span></span>
+      <pre id="code-10"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">zsteg -e b1,rgb,lsb,xy archive.png | sed -n 2p | <span class="hljs-built_in">base64</span> -d \</span></span>
 <span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  | python3 -c <span class="hljs-string">&quot;import sys;d=sys.stdin.buffer.read();k=b&#x27;VORMIR&#x27;;print(&#x27;&#x27;.join(chr(b^k[i%6]) for i,b in enumerate(d)))&quot;</span></span></span>
 <span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># OWASP{the_soul_was_here}</span></span></span></code></pre>
       
@@ -248,29 +260,27 @@ are looking at ciphertext, not a mis-decode.</p>
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
-        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-10"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 solve.py archive.png</span></span></code></pre>
+      <pre id="code-11"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 solve.py archive.png</span></span></code></pre>
       
-    </figure><h2 id="7-lessons-takeaways"><a class="wu-anchor" href="#7-lessons-takeaways" aria-hidden="true">#</a>7. Lessons / takeaways</h2>
+    </figure><h2 id="9-lessons-takeaways"><a class="wu-anchor" href="#9-lessons-takeaways" aria-hidden="true">#</a>9. Lessons / takeaways</h2>
 <ul>
-<li><strong>Read the metadata first.</strong> A $0 <code>exiftool</code> call here supplied the XOR
-key. Metadata is where challenge authors hide hints they <em>want</em> you to
-find.</li>
+<li><strong>Read the metadata first.</strong> A $0 <code>exiftool</code> call here supplied the XOR key.
+Metadata is where challenge authors hide hints they <em>want</em> you to find.</li>
 <li><strong>Titles and comments are content.</strong> &quot;Soul&quot;, &quot;Vormir&quot;, &quot;shadows&quot; were all
 signalling, not scenery.</li>
-<li><strong>Know what &quot;not text&quot; looks like.</strong> Control characters and bytes ≥ 0x80
-after a Base64 decode mean &quot;another layer&quot;, not &quot;wrong channel&quot;.</li>
-<li><strong>Use known-plaintext.</strong> The fixed <code>OWASP{</code> prefix instantly validates a
-guess at the XOR key; never brute-force blindly when the answer format is
-known.</li>
+<li><strong>Know what &quot;not text&quot; looks like.</strong> Control characters and bytes ≥ 0x80 after
+a Base64 decode mean &quot;another layer&quot;, not &quot;wrong channel&quot;.</li>
+<li><strong>Use known-plaintext.</strong> The fixed <code>OWASP{</code> prefix instantly validates a guess
+at the XOR key; never brute-force blindly when the answer format is known.</li>
 <li><strong><code>zsteg -a</code> is exhaustive here.</strong> Once it printed the ASCII channel, the
 bit-plane search was finished - no need to keep sweeping.</li>
 </ul>
 <h2 id="coverage-confidence"><a class="wu-anchor" href="#coverage-confidence" aria-hidden="true">#</a>Coverage / confidence</h2>
 <ul>
-<li><strong>Complete</strong> - the <code>zsteg -a</code> sweep is exhaustive over bit-planes/orders,
-and the one payload channel is unambiguous and self-delimiting (<code>::END::</code>).</li>
+<li><strong>Complete</strong> - the <code>zsteg -a</code> sweep is exhaustive over bit-planes/orders, and the
+one payload channel is unambiguous and self-delimiting (<code>::END::</code>).</li>
 <li>Key recovery is <strong>verified</strong> by known-plaintext (<code>OWASP{</code> prefix).</li>
 <li>HIGH confidence. Flag submitted once.</li>
 </ul>
@@ -279,7 +289,7 @@ and the one payload channel is unambiguous and self-delimiting (<code>::END::</c
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#1-triage">1. Triage</a></li><li><a href="#2-the-metadata-hint">2. The metadata hint</a></li><li><a href="#3-finding-the-payload">3. Finding the payload</a></li><li><a href="#4-cracking-the-second-layer">4. Cracking the second layer</a></li><li><a href="#5-the-three-layer-chain">5. The three-layer chain</a></li><li><a href="#6-one-shot-reproduction">6. One-shot reproduction</a></li><li><a href="#7-lessons-takeaways">7. Lessons / takeaways</a></li><li><a href="#coverage-confidence">Coverage / confidence</a></li></ol>
+        <ol><li><a href="#1-the-challenge">1. The challenge</a></li><li><a href="#2-triage">2. Triage</a></li><li><a href="#3-the-metadata-hint">3. The metadata hint</a></li><li><a href="#4-finding-the-payload">4. Finding the payload</a></li><li><a href="#5-cracking-the-second-layer">5. Cracking the second layer</a></li><li><a href="#6-flag">6. Flag</a></li><li><a href="#7-the-three-layer-chain">7. The three-layer chain</a></li><li><a href="#8-one-shot-reproduction">8. One-shot reproduction</a></li><li><a href="#9-lessons-takeaways">9. Lessons / takeaways</a></li><li><a href="#coverage-confidence">Coverage / confidence</a></li></ol>
       </nav>
   </div>
 

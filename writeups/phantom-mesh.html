@@ -67,23 +67,143 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>An office smart-lighting mesh (proprietary &quot;Lumeta Mesh Protocol&quot; over 802.15.4 MAC payloads) has a rogue node broadcasting a diagnostics report once a day. Given: <code>mesh.pcap</code>, <code>traces/iq.npz</code> (2500 raw I/Q records, 4 Ms/s, each triggered at a KEY_CONFIRM transmission), <code>traces/nonces.csv</code> (the exact nonce on-air for each I/Q record), and vendor docs.</p>
-<p><strong>Protocol crypto:</strong> every protected PDU is AES-CCM* (key 128, nonce 13, MIC 4). A single fleet-wide <strong>TC Link Key</strong> protects <code>TRANSPORT_KEY</code> (which carries a per-site NWK key) and the <code>KEY_CONFIRM</code> check tag.</p>
-<p><strong>The side channel:</strong> the SDR lab notebook hints that the PA bias feed lacks a recommended decoupling cap, and the LMP crypto runs in software (no hardware AES peripheral) - software AES current draw modulates the PA bias, AM-modulating the transmitted carrier. Since the I/Q captures are aligned to KEY_CONFIRM <code>tx_start</code> with known plaintext (the nonce), this is textbook <strong>Correlation Power Analysis</strong>: each record&#39;s envelope magnitude <code>|iq|</code> is a power trace of the AES that computed that frame&#39;s tag.</p>
-<p><strong>CPA on round 1:</strong> model <code>HW(Sbox(nonce_j XOR g))</code>, correlated against every sample of the magnitude traces. The recovered TC Link Key is <code>7cf8b0b78be9f36a225c1e70692e1e1c</code>, corroborated by per-byte leak peaks spaced ~48 samples apart moving monotonically with byte index (sequential software AES byte processing), and by reproducing all 8 on-air KEY_CONFIRM tags.</p>
-<p><strong>The trap:</strong> <code>hw @ X.T</code> is silently wrong on a square trace matrix (2500×2500) because both orientations have the same shape - the correlation computes against the transposed axis and returns plausible-looking noise-floor z-scores (~4). The fix is <code>hw @ X</code> (no transpose); a positive control (inject a known-key correlation at a known sample) is essential to catch this - after the fix the injected key jumps to z≈50.</p>
-<p><strong>Decrypting the chain:</strong> <code>TRANSPORT_KEY</code> decrypts under the TC Link Key to reveal the NWK key (<code>ffa0be732cd8f56eae8caa21359baf06</code>). Decrypting all <code>SECURE_REPORT</code> frames under the NWK key, one frame comes from a node not in the mesh inventory (EUI pattern mismatch), reporting a vendor-specific cluster/attribute:</p>
-<figure class="wu-code wu-code-output" data-lines="1">
+<h2 id="the-scenario"><a class="wu-anchor" href="#the-scenario" aria-hidden="true">#</a>The scenario</h2>
+<p>An office smart-lighting mesh (vendor &quot;Lumeta&quot;, proprietary <em>Lumeta Mesh Protocol</em> /
+LMP) rides directly on IEEE 802.15.4 MAC payloads. Someone has added a rogue node that
+broadcasts a short diagnostics report once a day. We are given:</p>
+<ul>
+<li><code>mesh.pcap</code> - a capture of the mesh (PAN <code>0x1A2B</code>, coordinator short addr <code>0x0000</code>).</li>
+<li><code>traces/iq.npz</code> - 2500 raw I/Q records (4 Ms/s, 2440 MHz, <code>complex64</code>, shape (2500,2500))
+captured off the coordinator&#39;s antenna via a directional coupler, each triggered at
+<code>tx_start()</code> of a <strong>KEY_CONFIRM</strong> transmission.</li>
+<li><code>traces/nonces.csv</code> - the exact 16-byte KEY_CONFIRM nonce that went on the air during
+each I/Q record.</li>
+<li><code>docs/</code> - the LMP wire format and the operator&#39;s SDR lab notebook.</li>
+</ul>
+<p>Nobody has the network key. We must recover the rogue report and read the flag.</p>
+<h2 id="protocol-crypto-from-docslmp-protocolmd"><a class="wu-anchor" href="#protocol-crypto-from-docslmp-protocolmd" aria-hidden="true">#</a>Protocol crypto (from <code>docs/LMP-protocol.md</code>)</h2>
+<p>Every protected PDU is AES-CCM* (key 128, nonce 13, MIC 4, L=2):</p>
+<figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">isfcr{ph4nt0m_m3sh_h4rm0n1cs_un14sk_th3_tc_l1nk_k3y}</code></pre>
+      <pre id="code-1"><code class="language-text">nonce = src_eui64 (8, big-endian) || frame_counter (4, little-endian) || sec_ctl(1)
+aad   = sec_ctl(1) || frame_counter (4, little-endian) || src_eui64 (8, little-endian)</code></pre>
       
-    </figure>
+    </figure><p><code>sec_ctl = 0x05</code>. Key hierarchy:</p>
+<ul>
+<li>A single <strong>fleet-wide TC Link Key</strong> (provisioned at the factory, never leaves the device)
+protects <code>TRANSPORT_KEY</code> (0x11) and produces the <code>KEY_CONFIRM</code> (0x12) check tag.</li>
+<li>A per-site <strong>NWK key</strong> is delivered inside the <code>TRANSPORT_KEY</code> ciphertext and protects
+<code>SECURE_REPORT</code> (0x21), which carries ZCL-like attribute reports.</li>
+</ul>
+<p>So the whole thing hinges on the TC Link Key.</p>
+<h2 id="the-side-channel"><a class="wu-anchor" href="#the-side-channel" aria-hidden="true">#</a>The side channel</h2>
+<p>The SDR notebook is the hint:</p>
+<ul>
+<li>&quot;reference design review flagged a stability concern with the PA bias feed, but the
+production board ships without the recommended decoupling cap&quot; - the power amplifier&#39;s
+envelope is not stable.</li>
+<li>&quot;The LMP crypto stack runs in software on the main core; we have not seen Lumeta use the
+SoC&#39;s hardware AES peripheral&quot; - software AES ⇒ data-dependent current draw.</li>
+</ul>
+<p>The software AES current draw modulates the PA bias, which AM-modulates the transmitted
+carrier. Because the I/Q records are aligned to the KEY_CONFIRM <code>tx_start</code>, each record&#39;s
+<strong>envelope magnitude</strong> <code>|iq|</code> is a power trace of the AES that computed that frame&#39;s tag -
+with the AES <em>plaintext (the nonce) known for all 2500 records</em>. That is a textbook setup
+for <strong>Correlation Power Analysis (CPA)</strong>.</p>
+<h3 id="reading-the-data"><a class="wu-anchor" href="#reading-the-data" aria-hidden="true">#</a>Reading the data</h3>
+<p><code>iq[i, :]</code> is a constant complex carrier (random phase per record) plus additive white
+Gaussian noise (≈3.7 % per component). There is no carrier frequency offset (measured
+phase advance ≈ 0) and no modulation structure - the leakage lives in the <em>magnitude</em>
+envelope, at low SNR. The per-record constant itself carries nothing useful; all the signal
+is in <code>|iq|</code> across the 2500 records.</p>
+<h3 id="cpa-on-the-first-aes-round"><a class="wu-anchor" href="#cpa-on-the-first-aes-round" aria-hidden="true">#</a>CPA on the first AES round</h3>
+<p>Model for key byte <em>j</em> and guess <em>g</em>: <code>HW(Sbox(nonce_j XOR g))</code> (Hamming weight of the
+first-round SubBytes output). Correlate that per-record model against every sample of the
+2 500 magnitude traces; the correct key byte produces a clear peak.</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">sig = np.<span class="hljs-built_in">abs</span>(iq); X = sig - sig.mean(<span class="hljs-number">0</span>); X /= X.std(<span class="hljs-number">0</span>)      <span class="hljs-comment"># (N_traces, L_samples)</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">corr = hw @ X / N                                            <span class="hljs-comment"># (256, L)</span></span></span></code></pre>
+      
+    </figure><p>The recovered key:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">TC Link Key = 7cf8b0b78be9f36a225c1e70692e1e1c</code></pre>
+      
+    </figure><p>Corroboration: the per-byte leak peaks are spaced ~48 samples apart and move monotonically
+with the byte index (bytes processed sequentially) - exactly what a software AES power
+trace looks like. More decisively, the key reproduces <strong>all 8</strong> on-air KEY_CONFIRM tags
+(<code>tag = AES-128-ECB(TC, nonce)[:8]</code>), 8/8.</p>
+<h3 id="the-trap-that-cost-most-of-the-time"><a class="wu-anchor" href="#the-trap-that-cost-most-of-the-time" aria-hidden="true">#</a>The trap that cost most of the time</h3>
+<p><code>hw @ X.T</code> is <em>silently wrong here</em> because the trace matrix is square (2500 traces × 2500
+samples): both orientations produce the same shape, so the correlation is computed against
+the transposed axis and returns pure-noise z-scores (~4) that look plausible. The fix is
+<code>hw @ X</code> (no transpose). A <strong>positive control</strong> (inject <code>0.02·HW(Sbox(nonce_j⊕known_j))</code>
+at a known sample) is essential to catch this class of bug: after fixing the orientation the
+injected key jumps to z≈50; before the fix it is undetectable.</p>
+<h2 id="decrypting-the-chain"><a class="wu-anchor" href="#decrypting-the-chain" aria-hidden="true">#</a>Decrypting the chain</h2>
+<ol>
+<li><p><strong><code>TRANSPORT_KEY</code></strong> (seq 39) - AES-CCM* under the TC Link Key. Its 16-byte ciphertext
+decrypts (MIC valid) to the <strong>NWK key</strong>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">NWK Key = ffa0be732cd8f56eae8caa21359baf06</code></pre>
+      
+    </figure></li>
+<li><p><strong><code>SECURE_REPORT</code></strong> (0x21) PDUs - AES-CCM* under the NWK key. Decrypting all 96 frames,
+every node except one reports ordinary cluster/attribute values. Frame <strong>seq 80</strong> comes
+from a node not in the mesh inventory - short addr <code>0x1040</code>, EUI <code>4000aa25004b1200</code>
+(every legitimate node&#39;s EUI is <code>001Xaa25004b1200</code>) - reporting cluster <code>0xfc01</code>,
+attribute <code>0x0042</code>, value length 52:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">isfcr{ph4nt0m_m3sh_h4rm0n1cs_un14sk_th3_tc_l1nk_k3y}</code></pre>
+      
+    </figure></li>
+</ol>
+<h2 id="reproduce"><a class="wu-anchor" href="#reproduce" aria-hidden="true">#</a>Reproduce</h2>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">$ cd Phantom-Mesh
+$ python3 solve.py
+TC Link Key : 7cf8b0b78be9f36a225c1e70692e1e1c
+KEY_CONFIRM  : 8/8 verified
+NWK Key     : ffa0be732cd8f56eae8caa21359baf06
+FLAG        : isfcr{ph4nt0m_m3sh_h4rm0n1cs_un14sk_th3_tc_l1nk_k3y}</code></pre>
+      
+    </figure><p>Dependencies: <code>numpy</code>, <code>cryptography</code> (uses <code>AESCCM(tag_length=4)</code>, which matches CCM*
+for MIC&gt;0). Everything else is stdlib.</p>
+
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#the-scenario">The scenario</a></li><li><a href="#protocol-crypto-from-docslmp-protocolmd">Protocol crypto (from docs/LMP-protocol.md)</a></li><li><a href="#the-side-channel">The side channel</a><ol class="wu-toc-sub"><li><a href="#reading-the-data">Reading the data</a></li><li><a href="#cpa-on-the-first-aes-round">CPA on the first AES round</a></li><li><a href="#the-trap-that-cost-most-of-the-time">The trap that cost most of the time</a></li></ol></li><li><a href="#decrypting-the-chain">Decrypting the chain</a></li><li><a href="#reproduce">Reproduce</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

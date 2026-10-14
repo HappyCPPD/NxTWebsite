@@ -67,25 +67,141 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><code>chall.py</code> samples a random degree-39 polynomial <code>f</code> over GF(p), p = 2³¹−1, and hands out <code>n = 512</code> Shamir shares <code>(i, f(i))</code> for i = 1..512. On return, exactly <code>t = 185</code> are honest and <code>327</code> have been replaced by uniform random values. Nothing records which are which. The flag key is <code>sha256(&quot;,&quot;.join(f&#39;s coefficients))</code>, AES-GCM.</p>
-<p>The docstring taunts that Berlekamp-Welch/Gao/every classical decoder corrects up to <code>(N−K)/2</code> errors, needing <code>T ≥ (N+K)/2 = 276 &gt; 185</code>. But &quot;no unique-decoding argument reaches it&quot; invites <strong>list decoding</strong>.</p>
-<p><strong>Why it is solvable:</strong> RS list decoding (Sudan 1997, Guruswami-Sudan 1999) decodes beyond half the minimum distance up to the Johnson bound. With <code>n = 512, k = 40</code>: unique-decoding radius <code>236</code> errors (need <code>t ≥ 276</code>); Johnson bound tolerates <code>t ≳ 144</code>. We have 327 errors, comfortably inside the Johnson bound.</p>
-<p><strong>Sudan interpolation (multiplicity 1):</strong> find <code>Q(x, y) = Σ q_j(x) y^j</code> vanishing at every received point. Two requirements pick <code>D</code>: existence (monomial count <code>&gt; 512</code>) and correctness (<code>D &lt; t=185</code>). For <code>k = 40</code>, <code>D = 180</code> gives 515 monomials (<code>&gt;512</code>) and <code>180 &lt; 185</code> - the unique sweet spot, <code>ℓ = 5</code>. Built the 512×515 matrix and solved by RREF over GF(2³¹−1); kernel dimension <strong>7</strong>. Every nonzero kernel element is divisible by <code>(y − f(x))</code>.</p>
-<p><strong>Root finding - Roth-Ruckenstein, de-branched:</strong> recover <code>f</code> one coefficient at a time via <code>y ← a_d + x·y</code>, requiring the lowest-order x-term to vanish. Naive single-<code>Q</code> branches on all roots of a degree-≤4 polynomial <code>S(a)</code> and blows up (7 minutes CPU, unfinished). <strong>Fix:</strong> run RR on <strong>four independent kernel polynomials simultaneously</strong> and intersect root sets at each step - the true <code>f</code> is a root of every kernel element, so branching collapsed to exactly 1 candidate at every one of the 40 steps. Modular root extraction via <code>gcd(S, x^p − x)</code> + Cantor-Zassenhaus.</p>
-<p>Two implementation bugs cost time: (1) building <code>(x+r)^((p−1)/2) − 1</code> by prepending <code>−1</code> instead of subtracting from coefficient 0 → infinite loop; (2) using polynomial remainder instead of quotient when dividing out a known factor → roots silently discarded.</p>
-<p><strong>Result:</strong> after 40 RR steps exactly one candidate <code>f</code> remained, agreeing with 185 of 512 shares exactly matching <code>t</code>.</p>
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<p><code>chall.py</code> samples a random degree-39 polynomial <code>f</code> over GF(p), p = 2³¹−1, and hands
+out <code>n = 512</code> Shamir shares <code>(i, f(i))</code> for i = 1..512. On return, exactly <code>t = 185</code>
+are honest and <code>512 − 185 = 327</code> have been replaced by uniform random values in GF(p).
+Nothing records which are which. The flag is sealed under
+<code>key = sha256(&quot;,&quot;.join(f&#39;s coefficients, low-order first, decimal))</code>, AES-GCM,
+<code>nonce = b&quot;half-truths-&quot;</code>.</p>
+<p>The docstring is a deliberate taunt:</p>
+<blockquote>
+<p>Reed - Solomon unique decoding - Berlekamp - Welch, Gao, the extended Euclidean key
+equation, every classical decoder - corrects up to (N−K)/2 errors, i.e. needs
+T ≥ (N+K)/2 honest shares. Here T is well under that. There is no unique-decoding
+radius argument that reaches this instance, and that is not an oversight.</p>
+</blockquote>
+<p>Indeed <code>(N+K)/2 = 276 &gt; 185</code>. But &quot;no <em>unique</em>-decoding argument reaches it&quot; is not
+&quot;undecodable&quot;: it is a textbook invitation to <strong>list decoding</strong>.</p>
+<h2 id="why-it-is-solvable-at-all"><a class="wu-anchor" href="#why-it-is-solvable-at-all" aria-hidden="true">#</a>Why it is solvable at all</h2>
+<p>Reed - Solomon list decoding (Sudan 1997, Guruswami - Sudan 1999) decodes beyond half the
+minimum distance up to the Johnson bound. With <code>n = 512, k = 40</code>:</p>
+<ul>
+<li>unique-decoding radius: <code>(n−k)/2 = 236</code> errors → needs <code>t ≥ 276</code>.</li>
+<li>Johnson bound: <code>n − sqrt(n·k) = 512 − sqrt(20480) ≈ 368.9</code> errors → tolerates
+<code>t ≳ 144</code>.</li>
+</ul>
+<p>We have 327 errors, comfortably inside the Johnson bound. So a list decoder will find f
+among a tiny list of candidates.</p>
+<h2 id="sudan-interpolation-multiplicity-1"><a class="wu-anchor" href="#sudan-interpolation-multiplicity-1" aria-hidden="true">#</a>Sudan interpolation (multiplicity 1)</h2>
+<p>Sudan&#39;s algorithm looks for a nonzero polynomial</p>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">FLAG: isfcr{l1st_d3c0d1ng_p4st_th3_r4d1us}</code></pre>
+      <pre id="code-1"><code class="language-text">Q(x, y) = Σ_{j=0}^{ℓ-1} q_j(x) y^j,     deg q_j(x) ≤ D − (k−1)·j</code></pre>
       
-    </figure><p><strong>Takeaways:</strong> &quot;past the unique-decoding radius&quot; ≠ unsolvable - check the Johnson/list-decoding radius. The Sudan parameter <code>D</code> is chosen by a tight discrete count, not the asymptotic formula. Multiplicity-1 Sudan sufficed because <code>k−1</code> is small. Running root-finding across several independent kernel polynomials and intersecting roots is a cheap, general way to suppress RR branching.</p>
+    </figure><p>that vanishes at every received point <code>(x_i, y_i)</code> - honest and liar alike (we cannot
+tell them apart, so we impose the constraint on all of them).</p>
+<p>Two competing requirements pick <code>D</code>:</p>
+<ol>
+<li><strong>Existence:</strong> the number of monomials <code>Σ_j (D − (k−1)j + 1)</code> must exceed the number
+of linear constraints <code>n = 512</code>, so that the homogeneous system has a nonzero
+solution.</li>
+<li><strong>Correctness:</strong> if <code>f</code> agrees with the received word on <code>t</code> points, then
+<code>Q(x, f(x))</code> is a polynomial of x-degree ≤ D with at least <code>t</code> roots. If <code>D &lt; t</code>,
+it must be identically zero, hence <code>(y − f(x)) | Q</code>.</li>
+</ol>
+<p>For <code>k = 40</code> (so <code>k−1 = 39</code>):</p>
+<table>
+<thead>
+<tr>
+<th>D</th>
+<th>monomials</th>
+<th>&gt; 512 ?</th>
+<th>D &lt; t=185 ?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>179</td>
+<td>510</td>
+<td>no</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><strong>180</strong></td>
+<td><strong>515</strong></td>
+<td><strong>yes</strong></td>
+<td><strong>yes</strong></td>
+</tr>
+</tbody></table>
+<p>So <code>D = 180</code>, <code>ℓ = 5</code> (y-degree 4) is the unique sweet spot. Note this is <em>tight</em>:
+the asymptotic Sudan bound would suggest needing ~200, but the small value of <code>k−1</code>
+makes discrete/lattice effects generous enough that <code>D = 180</code> already works.</p>
+<p>I built the 512×515 matrix <code>M[i, (j,d)] = y_i^j · x_i^d mod p</code> and solved <code>M·q = 0</code>
+by RREF over GF(2³¹−1) (numpy int64, modular row reduction). Kernel dimension came out
+to <strong>7</strong> - plenty of freedom.</p>
+<p>Crucially, by requirement (2) <strong>every</strong> nonzero kernel element is divisible by
+<code>(y − f(x))</code>. This is what makes the next step robust.</p>
+<h2 id="root-finding-roth-ruckenstein-de-branched"><a class="wu-anchor" href="#root-finding-roth-ruckenstein-de-branched" aria-hidden="true">#</a>Root finding - Roth - Ruckenstein, de-branched</h2>
+<p>Sudan gives <code>Q</code>; we still must extract the linear-in-y factor <code>y − f(x)</code>. The standard
+tool is the Roth - Ruckenstein algorithm: recover <code>f = Σ a_d x^d</code> one coefficient at a
+time by repeatedly substituting <code>y ← a_d + x·y</code> and requiring the lowest-order x-term to
+vanish. At each step the next coefficient <code>a_d</code> is a root of a small polynomial
+<code>S(a) = Σ_{i : ord_x(c_i)=m} lead(c_i)·a^i</code> of degree ≤ 4.</p>
+<p>The naive single-<code>Q</code> version branches on all roots of <code>S</code> and blows up (my first run
+burned 7 minutes of CPU without finishing the first steps - the list of partial
+solutions grows like 4^depth).</p>
+<p><strong>Fix:</strong> run RR on <strong>four independent kernel polynomials simultaneously</strong> and, at each
+step, take the <em>intersection</em> of their root sets. The true <code>f</code> is a root of every kernel
+element, so the true coefficient <code>a_d</code> always lies in the intersection, while spurious
+roots from one polynomial are killed by the others. Branching collapsed from ~4 per step
+to exactly <strong>1 candidate at every one of the 40 steps</strong>.</p>
+<p>Modular root extraction for the ≤4-degree <code>S</code>:
+<code>g = gcd(S, x^p − x)</code> isolates the distinct linear factors (via <code>x^p mod S</code> by
+square-and-multiply); Cantor - Zassenhaus then splits <code>g</code> into individual roots. Since
+<code>p ≡ 3 (mod 4)</code>, degree-2 factors are also handleable directly.</p>
+<p>Two implementation bugs cost time and are worth flagging for anyone re-implementing:</p>
+<ul>
+<li>Building <code>(x+r)^((p−1)/2) − 1</code> by <em>prepending</em> <code>−1</code> as a new low-order coefficient
+instead of subtracting from coefficient 0 → gcd always trivial → infinite loop.</li>
+<li>Using the polynomial <strong>remainder</strong> function to divide <code>g</code> by a known factor <code>h</code>
+(remainder is 0 for an exact factor) instead of a quotient function → every extra
+root silently discarded.</li>
+</ul>
+<h2 id="recovery-and-decryption"><a class="wu-anchor" href="#recovery-and-decryption" aria-hidden="true">#</a>Recovery and decryption</h2>
+<p>After 40 RR steps exactly one candidate <code>f</code> remained. Evaluating it against all 512
+shares gives <strong>185 agreements</strong>, matching <code>t</code> exactly. The key
+<code>sha256(&quot;,&quot;.join(map(str, coeffs)))</code> then decrypts the AES-GCM ciphertext and the tag
+verifies:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">FLAG: isfcr{l1st_d3c0d1ng_p4st_th3_r4d1us}</code></pre>
+      
+    </figure><h2 id="takeaways"><a class="wu-anchor" href="#takeaways" aria-hidden="true">#</a>Takeaways</h2>
+<ul>
+<li>&quot;Past the unique-decoding radius&quot; ≠ &quot;unsolvable&quot;. Check the Johnson / list-decoding
+radius before declaring an RS instance out of reach.</li>
+<li>The Sudan parameter <code>D</code> is chosen by a tight discrete count (<code>515 &gt; 512</code> and
+<code>180 &lt; 185</code>); don&#39;t trust the asymptotic formula to the integer.</li>
+<li>Multiplicity-1 Sudan sufficed here (multiplicity-2 Guruswami - Sudan is not needed),
+because <code>k−1</code> is small enough that lattice effects let <code>D</code> sit just below <code>t</code>.</li>
+<li>Running root-finding across several independent kernel polynomials and intersecting
+roots is a cheap, general way to suppress RR branching.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#why-it-is-solvable-at-all">Why it is solvable at all</a></li><li><a href="#sudan-interpolation-multiplicity-1">Sudan interpolation (multiplicity 1)</a></li><li><a href="#root-finding-roth-ruckenstein-de-branched">Root finding - Roth - Ruckenstein, de-branched</a></li><li><a href="#recovery-and-decryption">Recovery and decryption</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

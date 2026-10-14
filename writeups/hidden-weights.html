@@ -67,7 +67,10 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><code>chall.py</code> picks <code>n = 10</code> secret weights <code>a_1..a_n</code> uniformly in <code>Z_M</code> with <code>M = nextprime(2^200)</code>, plus a secret <code>m = 50</code> column 0/1 matrix <code>X</code>, and publishes only the 50 sums</p>
+<h2 id="1-the-problem"><a class="wu-anchor" href="#1-the-problem" aria-hidden="true">#</a>1. The problem</h2>
+<p><code>chall.py</code> picks <code>n = 10</code> secret weights <code>a_1..a_n</code> uniformly in <code>Z_M</code>
+with <code>M = nextprime(2^200)</code>, plus a secret <code>m = 50</code> column 0/1 matrix
+<code>X</code>, and publishes only the 50 sums</p>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
@@ -76,36 +79,166 @@
       </figcaption>
       <pre id="code-1"><code class="language-text">h_j = sum_i a_i * x_{i,j}   (mod M),      x_{i,j} in {0,1}</code></pre>
       
-    </figure><p>Both the weights <strong>and</strong> the selection subsets are hidden. The flag is AES-GCM encrypted with <code>key = SHA256(&quot;,&quot;.join(sorted(weights)))</code>, so the weights must be recovered exactly as integers in <code>[0, M)</code>.</p>
-<p>The challenge text warns that &quot;the usual lattice does not apply&quot; - in ordinary subset-sum the weights are public and you search for the subset; here both are secret, so the classic <code>(I | h)</code> embedding is useless. The intended trick is the <strong>orthogonal (relation) lattice</strong>.</p>
-<p><strong>Key observation:</strong> Let <code>X</code> be the <code>n x m</code> matrix whose column <code>j</code> is the indicator of the <code>j</code>-th hidden subset, so the published data is <code>h == X^T a (mod M)</code>. For any integer vector <code>c in Z^m</code>, <code>c . h == a . (X c) (mod M)</code>. If <code>c</code> lands in the integer kernel of <code>X</code> (<code>X c == 0</code>), the relation holds <strong>exactly</strong>. Because <code>X</code> is 0/1, <code>ker(X)</code> is a rank-<code>(m - n) = 40</code> lattice <strong>packed with very short vectors</strong> (e.g. <code>h_19 == h_20</code> in the data means two columns are identical, giving a relation of norm <code>sqrt(2)</code>).</p>
-<p><strong>The lattice:</strong> the full relation lattice <code>R = { c in Z^m : c . h == 0 (mod M) }</code> has rank <code>m = 50</code> and covolume <code>M</code>. A basis is immediate since <code>h_0</code> is invertible mod <code>M</code>:</p>
-<figure class="wu-code wu-code-output" data-lines="2">
+    </figure><p>Both the weights <strong>and</strong> the selection subsets are hidden. The flag is
+AES-GCM encrypted with</p>
+<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">b_0        = M * e_0
-b_j        = e_j + ((-h_j * h_0^{-1}) mod M) * e_0      (j = 1..m-1)</code></pre>
+      <pre id="code-2"><code class="language-text">key = SHA256(&quot;,&quot;.join(sorted(weights)))</code></pre>
       
-    </figure><p><button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button>-reducing the resulting <code>50 x 50</code> basis yields a clean split: 40 short vectors (norm² ≤ 9) spanning <code>ker(X)</code>, and 10 huge ones. The orthogonal complement of the short vectors is the row space <code>W</code> of <code>X</code>, dimension 10.</p>
-<p><strong>Recovering the secret 0/1 rows:</strong> <code>W</code> contains exactly the 10 rows of <code>X</code> as its only 0/1 vectors. Solve the homogeneous 0/1 system <code>S v == 0, v in {0,1}^50</code> where <code>S</code> is the 40 short kernel vectors - rank 40, so 10-dimensional solution space. Brute-force all <code>2^10</code> 0/1 assignments to the 10 free columns, back-substituting the 40 pivot coordinates. Output: the zero vector plus exactly 10 non-zero 0/1 vectors - the secret rows of <code>X</code>.</p>
-<p><strong>Solve for the weights:</strong> with <code>X</code> known, <code>a == (X X^T)^{-1} X h (mod M)</code>. The recovered weights reproduce all 50 published sums exactly. Then <code>key = SHA256(&quot;,&quot;.join(sorted(a)))</code> decrypts the flag.</p>
-<figure class="wu-code wu-code-output" data-lines="3">
+    </figure><p>so we must recover the weights <em>exactly</em> as integers in <code>[0, M)</code>.</p>
+<p>The challenge text warns that &quot;the usual lattice does not apply&quot; - in
+ordinary subset-sum the weights are public and you search for the
+subset; here both are secret, so the classic <code>(I | h)</code> embedding is
+useless. The intended trick is the <strong>orthogonal (relation) lattice</strong>.</p>
+<h2 id="2-key-observation"><a class="wu-anchor" href="#2-key-observation" aria-hidden="true">#</a>2. Key observation</h2>
+<p>Let <code>X</code> be the <code>n x m</code> matrix whose column <code>j</code> is the indicator of the
+<code>j</code>-th hidden subset, so the published data is</p>
+<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-3"><code class="language-text">pip install fpylll sympy pycryptodome
+      <pre id="code-3"><code class="language-text">h  ==  X^T a   (mod M).</code></pre>
+      
+    </figure><p>For any integer vector <code>c in Z^m</code>,</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">c . h  ==  a . (X c)   (mod M).</code></pre>
+      
+    </figure><p>If <code>c</code> lands in the integer kernel of <code>X</code> (<code>X c == 0</code>), the relation
+holds <strong>exactly</strong>, i.e. <code>c . h == 0 (mod M)</code>. Because <code>X</code> is 0/1,
+<code>ker(X)</code> is a rank-<code>(m - n) = 40</code> lattice <strong>packed with very short
+vectors</strong>:</p>
+<ul>
+<li><code>h_19 == h_20</code> in the data, so <code>e_19 - e_20</code> is a relation of norm
+<code>sqrt(2)</code> (the two columns of <code>X</code> are identical);</li>
+<li>two columns whose integer sum coincides (e.g. <code>x_a + x_b = x_c + x_d</code>)
+give relations like <code>e_a + e_b - e_c - e_d</code> of norm <code>2</code>.</li>
+</ul>
+<p>A &quot;generic&quot; element of the relation lattice is long (~26 here), so
+lattice reduction cleanly separates <code>ker(X)</code> from everything else.</p>
+<h2 id="3-the-lattice"><a class="wu-anchor" href="#3-the-lattice" aria-hidden="true">#</a>3. The lattice</h2>
+<p>The full relation lattice</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">R = { c in Z^m : c . h == 0 (mod M) }</code></pre>
+      
+    </figure><p>has rank <code>m = 50</code> and covolume <code>M</code>. Since <code>h_0</code> is invertible mod <code>M</code>
+(this is exactly why <code>chall.py</code> retries until <code>gcd(h_0, M) == 1</code>), a
+basis is immediate:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">b_0        = M * e_0
+b_j        = e_j + ((-h_j * h_0^{-1}) mod M) * e_0      (j = 1..m-1)</code></pre>
+      
+    </figure><p><code>b_j . h = -h_j + h_j = 0 (mod M)</code>.</p>
+<p><button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button>-reducing the resulting <code>50 x 50</code> basis yields a clean split:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">norm^2 of reduced basis:  [2, 4, 4, ..., 9,  &lt;then 10 vectors ~6e10&gt;]
+                              \_____ 40 short ____/   \__ n long __/</code></pre>
+      
+    </figure><p>Exactly <code>m - n = 40</code> short vectors (norm² ≤ 9) - these span <code>ker(X)</code> -
+and <code>n = 10</code> huge ones. The <strong>orthogonal complement of the short
+vectors is the row space <code>W</code> of <code>X</code></strong>, of dimension <code>n = 10</code>.</p>
+<h2 id="4-recovering-the-secret-01-rows"><a class="wu-anchor" href="#4-recovering-the-secret-01-rows" aria-hidden="true">#</a>4. Recovering the secret 0/1 rows</h2>
+<p><code>W</code> contains exactly the 10 rows of <code>X</code> as its only 0/1 vectors (the
+rows are dense random binary, so accidental 0/1 combinations are
+essentially impossible). Find them by solving the homogeneous 0/1
+system</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">S v == 0,   v in {0,1}^50,    S = the 40 short kernel vectors.</code></pre>
+      
+    </figure><p><code>S</code> has rank 40, so the solution space is 10-dimensional: take its RREF,
+pick the 10 free columns, and brute-force all <code>2^10 = 1024</code> 0/1
+assignments to the free coordinates, back-substituting the 40 pivot
+coordinates and keeping the integral 0/1 results. Output: the zero
+vector plus exactly <strong>10 non-zero 0/1 vectors - the secret rows of <code>X</code></strong>.</p>
+<h2 id="5-solve-for-the-weights-and-decrypt"><a class="wu-anchor" href="#5-solve-for-the-weights-and-decrypt" aria-hidden="true">#</a>5. Solve for the weights and decrypt</h2>
+<p>With <code>X</code> known the system is linear:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">(X X^T) a  ==  X h   (mod M)     =&gt;     a == (X X^T)^{-1} X h  (mod M).</code></pre>
+      
+    </figure><p><code>det(X X^T)</code> is invertible mod <code>M</code> (checked). The recovered weights
+reproduce all 50 published sums exactly (<code>X^T a == h mod M</code>), which is a
+complete independent verification. Then</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-text">key = SHA256(&quot;,&quot;.join(sorted(a)))
+pt  = AES-GCM-decrypt(flag_ct, key, nonce=&quot;hidden-wts--&quot;, tag=flag_tag)</code></pre>
+      
+    </figure><figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-text">isfcr{0rth0g0n4l_l4tt1c3_1s_th3_tr1ck}</code></pre>
+      
+    </figure><p>The flag name - <em>orthogonal lattice is the trick</em> - confirms the method.</p>
+<h2 id="6-reproduce"><a class="wu-anchor" href="#6-reproduce" aria-hidden="true">#</a>6. Reproduce</h2>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-12" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-12"><code class="language-text">pip install fpylll sympy pycryptodome
 python3 solve.py
 # -&gt; [+] FLAG: isfcr{0rth0g0n4l_l4tt1c3_1s_th3_tr1ck}</code></pre>
       
-    </figure><p>Runtime: a few seconds (one LLL of a 50-dim lattice, then <code>2^10</code> back-substitutions). With <code>m = 50 &gt; n = 10</code> the data is massively overdetermined, and the 0/1 constraint makes <code>ker(X)</code> a low-covolume lattice full of tiny vectors - no subset-search over the 2^500 selection space needed.</p>
+    </figure><p>Runtime: a few seconds (one LLL of a 50-dim lattice, then <code>2^10</code>
+back-substitutions).</p>
+<h2 id="7-why-it-works-intuition"><a class="wu-anchor" href="#7-why-it-works-intuition" aria-hidden="true">#</a>7. Why it works (intuition)</h2>
+<p>With <code>m = 50 &gt; n = 10</code> the data is massively overdetermined, and the
+0/1 constraint makes <code>ker(X)</code> a low-covolume lattice full of tiny
+vectors. LLL pulls those out first; their orthogonal complement pins
+down the row space of the hidden selection matrix, and the 0/1 points of
+that space <em>are</em> the secret matrix. Everything else (weights, key,
+plaintext) follows by linear algebra. No subset-search, no brute force
+over the 2^500 selection space.</p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-the-problem">1. The problem</a></li><li><a href="#2-key-observation">2. Key observation</a></li><li><a href="#3-the-lattice">3. The lattice</a></li><li><a href="#4-recovering-the-secret-01-rows">4. Recovering the secret 0/1 rows</a></li><li><a href="#5-solve-for-the-weights-and-decrypt">5. Solve for the weights and decrypt</a></li><li><a href="#6-reproduce">6. Reproduce</a></li><li><a href="#7-why-it-works-intuition">7. Why it works (intuition)</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

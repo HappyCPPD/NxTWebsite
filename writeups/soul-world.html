@@ -67,8 +67,11 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><strong>Challenge:</strong> &quot;A mysterious image from the Soul World contains a message
-hidden one bit at a time. Recover the concealed Soul Stone fragment.&quot;</p>
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<blockquote>
+<p>A mysterious image from the Soul World contains a message hidden one bit at a
+time. Recover the concealed Soul Stone fragment.</p>
+</blockquote>
 <ul>
 <li>Attachment: <code>soul_world.png</code> - 80×80, 8-bit RGB, non-interlaced PNG (19 KB)</li>
 <li>Flag format: <code>OWASP{...}</code></li>
@@ -76,8 +79,9 @@ hidden one bit at a time. Recover the concealed Soul Stone fragment.&quot;</p>
 <h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
 <p>The hint &quot;hidden one bit at a time&quot; points straight at <strong>LSB (least-significant
 bit) steganography</strong>. With three colour channels (R, G, B) per pixel and 80×80
-pixels, the image holds <code>80 × 80 × 3 = 19200</code> bits = <strong>2400 bytes</strong> of capacity - far more than a flag needs.</p>
-<h2 id="method-1-zsteg-fast-triage"><a class="wu-anchor" href="#method-1-zsteg-fast-triage" aria-hidden="true">#</a>Method 1 - zsteg (fast triage)</h2>
+pixels, the image holds <code>80 × 80 × 3 = 19200</code> bits = <strong>2400 bytes</strong> of capacity -
+far more than a flag needs.</p>
+<h3 id="method-1-zsteg-fast-triage"><a class="wu-anchor" href="#method-1-zsteg-fast-triage" aria-hidden="true">#</a>Method 1 - zsteg (fast triage)</h3>
 <figure class="wu-code" data-lines="1">
       <figcaption>
         
@@ -86,7 +90,7 @@ pixels, the image holds <code>80 × 80 × 3 = 19200</code> bits = <strong>2400 b
       </figcaption>
       <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">zsteg -a soul_world.png</span></span></code></pre>
       
-    </figure><p>Among the many candidate bit-planes, one leaps out:</p>
+    </figure><p>Among the many candidate bit-planes, one leap out:</p>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
@@ -107,7 +111,7 @@ Extract raw:</p>
       <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">zsteg -E <span class="hljs-string">&quot;b1,rgb,lsb,xy&quot;</span> soul_world.png | strings</span></span>
 <span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># OWASP{s0ul_w0rld_h1d3s_1ts_s3cr3t}</span></span></span></code></pre>
       
-    </figure><h2 id="method-2-from-scratch-extraction-independent-confirmation"><a class="wu-anchor" href="#method-2-from-scratch-extraction-independent-confirmation" aria-hidden="true">#</a>Method 2 - from-scratch extraction (independent confirmation)</h2>
+    </figure><h3 id="method-2-from-scratch-extraction-independent-confirmation"><a class="wu-anchor" href="#method-2-from-scratch-extraction-independent-confirmation" aria-hidden="true">#</a>Method 2 - from-scratch extraction (independent confirmation)</h3>
 <p><code>solve.py</code> walks every pixel in row-major order, appends the LSB of R, then G,
 then B into one long bitstream, and packs it MSB-first into bytes:</p>
 <figure class="wu-code" data-lines="12">
@@ -140,34 +144,36 @@ then B into one long bitstream, and packs it MSB-first into bytes:</p>
 Raw head: OWASP{s0ul_w0rld_h1d3s_1ts_s3cr3t}
 FLAG: OWASP{s0ul_w0rld_h1d3s_1ts_s3cr3t}</code></pre>
       
-    </figure><p>The newline-terminated flag sits at the very start of the bitstream; the rest
-is random low-order noise, which is why the message is instantly readable.</p>
-<p><strong>Verification:</strong> Two independent implementations (zsteg&#39;s <code>b1,rgb,lsb,xy</code>
-decoder and the hand-written <code>solve.py</code>) produced byte-identical flags - no
-reliance on a single tool.</p>
+    </figure><p>The newline-terminated flag sits at the very start of the bitstream; the rest is
+random low-order noise, which is why the message is instantly readable.</p>
+<h2 id="verification"><a class="wu-anchor" href="#verification" aria-hidden="true">#</a>Verification</h2>
+<p>Two independent implementations (zsteg&#39;s <code>b1,rgb,lsb,xy</code> decoder and the
+hand-written <code>solve.py</code>) produced byte-identical flags - no reliance on a single
+tool.</p>
 <h2 id="reproduction"><a class="wu-anchor" href="#reproduction" aria-hidden="true">#</a>Reproduction</h2>
-<figure class="wu-code" data-lines="2">
+<figure class="wu-code" data-lines="3">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
         <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-6"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">zsteg -E <span class="hljs-string">&quot;b1,rgb,lsb,xy&quot;</span> soul_world.png | strings   <span class="hljs-comment"># quick</span></span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 solve.py                                    <span class="hljs-comment"># from-scratch, self-contained</span></span></span></code></pre>
+      <pre id="code-6"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> /home/ashton/Downloads/ctfs/Byteme2026/Soul_World</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">zsteg -E <span class="hljs-string">&quot;b1,rgb,lsb,xy&quot;</span> soul_world.png | strings   <span class="hljs-comment"># quick</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">python3 solve.py                                    <span class="hljs-comment"># from-scratch, self-contained</span></span></span></code></pre>
       
     </figure><h2 id="notes"><a class="wu-anchor" href="#notes" aria-hidden="true">#</a>Notes</h2>
 <ul>
 <li>No encryption, no compression, no interlace trickery - plain RGB LSB.</li>
-<li><code>b1,rgb,lsb,xy</code> is the canonical first thing to try on any PNG LSB
-challenge; if that fails, sweep bit depths (b2..b8), channel subsets
-(r/g/b/bgr), MSB vs LSB, and both xy/yx ordering (all covered by <code>zsteg -a</code>).</li>
+<li><code>b1,rgb,lsb,xy</code> is the canonical first thing to try on any PNG LSB challenge;
+if that fails, sweep bit depths (b2..b8), channel subsets (r/g/b/bgr),
+MSB vs LSB, and both xy/yx ordering (all covered by <code>zsteg -a</code>).</li>
 </ul>
 
     </article>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#solution">Solution</a></li><li><a href="#method-1-zsteg-fast-triage">Method 1 - zsteg (fast triage)</a></li><li><a href="#method-2-from-scratch-extraction-independent-confirmation">Method 2 - from-scratch extraction (independent confirmation)</a></li><li><a href="#reproduction">Reproduction</a></li><li><a href="#notes">Notes</a></li></ol>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#solution">Solution</a><ol class="wu-toc-sub"><li><a href="#method-1-zsteg-fast-triage">Method 1 - zsteg (fast triage)</a></li><li><a href="#method-2-from-scratch-extraction-independent-confirmation">Method 2 - from-scratch extraction (independent confirmation)</a></li></ol></li><li><a href="#verification">Verification</a></li><li><a href="#reproduction">Reproduction</a></li><li><a href="#notes">Notes</a></li></ol>
       </nav>
   </div>
 

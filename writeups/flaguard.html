@@ -67,22 +67,327 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A tiny Android app pitched as &quot;the strictest flag-format validator around.&quot; The prompt&#39;s wording (&quot;which flag it <strong>actually</strong> accepts&quot;) signals two candidate flags, decided by true runtime behaviour.</p>
-<p><strong>Candidate 1 - the visible checker:</strong> <code>FlagChecker.check()</code> runs a deterministic affine recurrence <code>i = ((i*131) + byte + P[k%6]) &amp; 0xFFFF</code> checked against a 34-entry constant table - every term except the input byte is known, so each byte inverts directly, giving <code>isfcr{sh4d0w_cl455l04d3r_tr1ckery}</code> (34 bytes, validates against the visible checker).</p>
-<p><strong>The intended (but broken) shadow mechanism:</strong> <code>App.bind()</code> decrypts a second dex (<code>theme.pack</code>, AES-256-CBC, key/IV derived from a 128-byte key-shard carved out of <code>palette.webp</code> plus the app&#39;s own classes.dex hash) and attempts to splice it into the ClassLoader chain via <code>dalvik.system.InMemoryDexClassLoader</code>, replacing the app ClassLoader&#39;s <code>parent</code> so parent-first lookup would find a <em>hidden</em> <code>FlagChecker</code> before the real one.</p>
-<p><strong>The deciding bug:</strong> <code>App.bind()</code> does <code>bb = ByteBuffer.allocateDirect(dex.length); bb.put(dex);</code> and hands <code>bb</code> straight to the <code>InMemoryDexClassLoader</code> constructor - <strong>without ever calling <code>bb.flip()</code></strong>. After <code>put()</code>, <code>position == limit == capacity</code>, so <code>remaining() == 0</code>; the loader sees an empty slice and contributes no classes at all. <code>bind()</code> still &quot;succeeds&quot; (no exception), but parent-first lookup misses on the inert shadow loader and falls through to the app&#39;s own <code>classes.dex</code> - the <strong>visible</strong> checker is what actually runs.</p>
-<p>Reproducing the shadow dex&#39;s decryption for completeness recovers a decoy class with the <em>same fully-qualified name</em>, whose own inverted recurrence yields <code>isfcr{p4r3nt_f1rst_d3x_1s_s0_m34n}</code> - narrating the trick the author wanted you to fall for. Because the buffer is never prepared for reading, this class is never registered and this flag is never accepted.</p>
+<h2 id="0-prompt"><a class="wu-anchor" href="#0-prompt" aria-hidden="true">#</a>0. Prompt</h2>
+<blockquote>
+<p>A small Android app called FlaGuard turned up on a forum, pitched as the
+strictest flag-format validator around. Nobody will say which flag it
+actually accepts. Flag format: <code>isfcr{...}</code>.</p>
+</blockquote>
+<p>The wording (&quot;which flag it <strong>actually</strong> accepts&quot;) is the whole clue: there are
+two candidate flags, and only true runtime behaviour picks the winner. The
+answer turns out to hinge on a one-line buffer bug.</p>
+<h2 id="1-triage"><a class="wu-anchor" href="#1-triage" aria-hidden="true">#</a>1. Triage</h2>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">isfcr{sh4d0w_cl455l04d3r_tr1ckery}</code></pre>
+      <pre id="code-1"><code class="language-text">flaguard.apk: Android package (APK), with AndroidManifest.xml, with APK Signing Block</code></pre>
+      
+    </figure><p>Unzipping shows a deliberately tiny app:</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">AndroidManifest.xml
+classes.dex          (9,780 bytes)
+resources.arsc
+res/layout/activity_main.xml
+assets/theme.pack    (1,296 bytes, opaque)
+assets/palette.webp  (1,318 bytes, &quot;lossless WebP&quot;)
+META-INF/...</code></pre>
+      
+    </figure><p>Two odd assets stand out: <code>theme.pack</code> (high entropy - looks encrypted) and
+<code>palette.webp</code> (a &quot;lossless WebP&quot; that the code nonetheless consults).
+<code>strings classes.dex</code> surfaces <code>isfcr{</code>, <code>sha256</code>, <code>SecretKeySpec</code>/<code>javax.crypto</code>,
+and the classes <code>App</code>, <code>Analytics</code>, <code>FlagChecker</code>, <code>MainActivity</code>, <code>obf/Veil</code>.</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">/tmp/jadx/bin/jadx -d /tmp/fg_src flaguard.apk</span></span></code></pre>
+      
+    </figure><h2 id="2-first-candidate-the-visible-checker"><a class="wu-anchor" href="#2-first-candidate-the-visible-checker" aria-hidden="true">#</a>2. First candidate - the visible checker</h2>
+<p><code>FlagChecker.java</code> in <code>classes.dex</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="15">
+      <figcaption>
+        
+        <span class="wu-code-lang">java</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-java">private static final int INIT = 7039;
+private static final int[] P = {55,141,25,242,75,166};
+private static final int[] C = {4765,34647,...,61896};      // 34 entries
+
+public static boolean check(String s) {
+    if (s==null || !s.startsWith(&quot;isfcr{&quot;) || !s.endsWith(&quot;}&quot;)) return false;
+    byte[] b = s.getBytes();
+    if (b.length != C.length) return false;
+    int i = INIT;
+    for (int k=0; k&lt;b.length; k++) {
+        i = ((i*131) + (b[k]&amp;255) + P[k % 6]) &amp; 0xFFFF;
+        if (i != C[k]) return false;
+    }
+    return true;
+}</code></pre>
+      
+    </figure><p>A deterministic affine recurrence: every term except <code>b[k]</code> is known, so each
+byte inverts directly - <code>b[k] = (C[k] - P[k%6] - i*131) &amp; 0xFFFF</code>, then
+<code>i = C[k]</code>.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">isfcr{sh4d0w_cl455l04d3r_tr1ckery}</code></pre>
+      
+    </figure><p>34 bytes, validates.</p>
+<h2 id="3-string-obfuscation-obfveiljava"><a class="wu-anchor" href="#3-string-obfuscation-obfveiljava" aria-hidden="true">#</a>3. String obfuscation (<code>obf/Veil.java</code>)</h2>
+<p><code>App</code>/<code>Analytics</code> pull their constants from an XOR pool:</p>
+<figure class="wu-code wu-code-output" data-lines="9">
+      <figcaption>
+        
+        <span class="wu-code-lang">java</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-java">private static final byte K = 91;
+private static final byte[] POOL = {...};
+private static final int[]  OFF = {0,12,22,38,74,80,87,104,107,126,130,139,150,161};
+private static final int[]  LEN = {12,10,16,36,6,7,17,3,19,4,9,11,11,9};
+public static String s(int i) {
+    int o=OFF[i], l=LEN[i]; char[] c=new char[l];
+    for (int j=0;j&lt;l;j++) c[j]=(char)((POOL[o+j]^K)&amp;255);
+    return new String(c);
+}</code></pre>
+      
+    </figure><p>Decoding the 14 strings:</p>
+<table>
+<thead>
+<tr>
+<th>i</th>
+<th>string</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td><code>palette.webp</code></td>
+</tr>
+<tr>
+<td>1</td>
+<td><code>theme.pack</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>flaguard-boot-v3</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>dalvik.system.InMemoryDexClassLoader</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>parent</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>SHA-256</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>AES/CBC/NoPadding</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>AES</code></td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>java.nio.ByteBuffer</code></td>
+</tr>
+<tr>
+<td>11</td>
+<td><code>classes.dex</code></td>
+</tr>
+<tr>
+<td>12</td>
+<td><code>trust.chain</code></td>
+</tr>
+<tr>
+<td>13</td>
+<td><code>.internal</code></td>
+</tr>
+</tbody></table>
+<p>The app intends to boot a second dex <strong>in memory</strong>. This is where the decoy
+lives.</p>
+<h2 id="4-appbind-the-intended-but-broken-shadow"><a class="wu-anchor" href="#4-appbind-the-intended-but-broken-shadow" aria-hidden="true">#</a>4. <code>App.bind()</code> - the intended (but broken) shadow</h2>
+<p><code>attachBaseContext()</code> runs <code>bind()</code> before anything else:</p>
+<figure class="wu-code wu-code-output" data-lines="22">
+      <figcaption>
+        
+        <span class="wu-code-lang">java</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-java">byte[] all  = readAll(assets.open(Veil.s(0)));   // palette.webp
+byte[] all2 = readAll(assets.open(Veil.s(1)));   // theme.pack  (encrypted dex)
+byte[] hDex = sha256(readSelfEntry(ctx, Veil.s(11)));   // sha256 of classes.dex entry
+
+byte[] bArr = new byte[128];
+System.arraycopy(all, (all[16] &amp; 63) + 64, bArr, 0, 128);      // carve 128B out of palette
+byte[] key  = sha256(concat3(bArr, &quot;flaguard-boot-v3&quot;.getBytes(), hDex)); // 32B AES key
+byte[] iv   = sha256(concat(hDex, bArr[0..16])).slice(0,16);   // 16B IV
+
+Cipher c = Cipher.getInstance(&quot;AES/CBC/NoPadding&quot;);
+c.init(DECRYPT, new SecretKeySpec(key, &quot;AES&quot;), new IvParameterSpec(iv));
+byte[] dex = c.doFinal(all2);                                   // hidden dex
+
+ByteBuffer bb = ByteBuffer.allocateDirect(dex.length);
+bb.put(dex);                                                    // &lt;-- position = len
+Object loader = Class.forName(&quot;dalvik.system.InMemoryDexClassLoader&quot;)
+        .getConstructor(ByteBuffer.class, ClassLoader.class)
+        .newInstance(bb, ctx.getClassLoader().getParent());     // &lt;-- dead buffer
+
+Field f = ClassLoader.class.getDeclaredField(&quot;parent&quot;);
+f.setAccessible(true);
+f.set(ctx.getClassLoader(), loader);</code></pre>
+      
+    </figure><p>Notes:</p>
+<ul>
+<li><code>palette.webp</code> is not a palette: it is a <strong>128-byte key-shard container</strong>.
+The shard offset is <code>(palette[16] &amp; 63) + 64</code> = 82.</li>
+<li><code>Analytics.enabled()</code> is true only when the package name ends in <code>.internal</code>;
+the shipped package <code>dev.srspace.flaguard</code> does not, so the <code>trust.chain</code>
+branch (asset index 12) is skipped and the IV is the plain
+<code>sha256(classes.dex_hash || bArr[0:16])[:16]</code>.</li>
+<li><code>theme.pack</code> is <code>AES-256-CBC/NoPadding</code>; length 1296 is a clean multiple of 16
+and the plaintext is a <code>dex\n038</code> file of declared size 1288.</li>
+</ul>
+<p>In principle the last lines <em>would</em> shadow the visible checker: replacing the
+app ClassLoader&#39;s <code>parent</code> with the in-memory dex loader means parent-first
+lookup finds the hidden <code>FlagChecker</code> before the app&#39;s own dex. <strong>But the
+buffer is never prepared for reading.</strong></p>
+<h2 id="5-the-bug-that-decides-the-challenge"><a class="wu-anchor" href="#5-the-bug-that-decides-the-challenge" aria-hidden="true">#</a>5. The bug that decides the challenge</h2>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">java</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-java">ByteBuffer bb = ByteBuffer.allocateDirect(dex.length);
+bb.put(dex);                     // advances position to dex.length</code></pre>
+      
+    </figure><p>After <code>put</code>, the buffer&#39;s <code>position == limit == capacity</code>, i.e.
+<code>remaining() == 0</code>. A <code>ByteBuffer</code> is read from <code>position</code> to <code>limit</code>, and
+<code>InMemoryDexClassLoader</code> expects the dex bytes starting at <code>position</code>. There is
+<strong>no <code>bb.flip()</code> (or <code>bb.rewind()</code>/<code>bb.position(0)</code>)</strong> before the buffer is
+handed to the constructor. The loader therefore sees an empty slice and
+contributes <strong>no classes at all</strong>.</p>
+<p>Consequence at runtime:</p>
+<ol>
+<li><code>bind()</code> still succeeds (no exception - an empty in-memory dex file yields an
+empty loader rather than a hard failure).</li>
+<li>The app ClassLoader&#39;s parent points at the inert loader.</li>
+<li><code>MainActivity.verify()</code> calls <code>dev.srspace.flaguard.FlagChecker.check()</code>.
+Parent-first lookup asks the inert loader (miss), then resolves from the
+app&#39;s own <code>classes.dex</code> - the <strong>visible</strong> <code>FlagChecker</code>.</li>
+<li>The visible checker is what actually validates input.</li>
+</ol>
+<p>So the shadowed/decrypted flag is the decoy, and the ordinary static checker is
+the real one. The name of the hidden flag (<code>p4r3nt_f1rst_d3x_1s_s0_m34n</code>)
+narrates the trick the author <em>wanted</em> you to fall for; the accepted flag
+(<code>sh4d0w_cl455l04d3r_tr1ckery</code>) calls the dynamic loader itself the trickery.</p>
+<h2 id="6-the-decoy-dex-for-completeness"><a class="wu-anchor" href="#6-the-decoy-dex-for-completeness" aria-hidden="true">#</a>6. The decoy dex (for completeness)</h2>
+<p>Reproducing the derivation (see <code>solve.py</code>):</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">sha256(classes.dex)  = 91400bf2...920f6a
+palette[16] &amp; 63 +64 = 82
+AES key = SHA256(shard || &quot;flaguard-boot-v3&quot; || dexhash)
+        = 799ac08bc7db682485c6b20fe68cd1f927a15887b14700c2ea85c26bfbc7df24
+AES iv  = SHA256(dexhash || shard[0:16])[:16]
+        = 2eaf112eab19925f3f1c14537de15c73</code></pre>
+      
+    </figure><p><code>openssl enc -aes-256-cbc -d -nopad -K &lt;key&gt; -iv &lt;iv&gt; -in theme.pack</code> yields a
+valid <code>dex\n038</code> (1288 bytes) containing a single class with the <strong>same FQN</strong> as
+the visible one:</p>
+<figure class="wu-code wu-code-output" data-lines="17">
+      <figcaption>
+        
+        <span class="wu-code-lang">java</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-java">public final class FlagChecker {
+    private static final byte[] T = {41,105,110,102,40,-89,...,-40,31};
+    private static final byte[] M = {26,41,72,35,31,-21,...,-36,102};
+    public static boolean check(String s) {
+        byte[] b = s.getBytes();
+        if (b.length != T.length) return false;
+        int i = 90, acc = 0;
+        for (int k=0;k&lt;b.length;k++) {
+            int x = ((T[k]^M[k]) ^ i) &amp; 255;
+            acc |= x ^ (b[k]&amp;255);
+            i = (i ^ (b[k]&amp;255)) &amp; 255;
+        }
+        return acc == 0;
+    }
+    public static String token() { return &quot;ok&quot;; }
+    public static int fingerprint() { return 1990058842; }
+}</code></pre>
+      
+    </figure><p>Inverting that recurrence (<code>b[k] = (T[k]^M[k]^i)&amp;255; i = (i^b[k])&amp;255</code>,
+<code>i0 = 90</code>) gives the decoy <code>isfcr{p4r3nt_f1rst_d3x_1s_s0_m34n}</code>. Because the
+loader never receives the bytes (section 5), this class is never registered and
+this flag is never accepted.</p>
+<h2 id="7-which-flag-does-the-app-actually-accept"><a class="wu-anchor" href="#7-which-flag-does-the-app-actually-accept" aria-hidden="true">#</a>7. Which flag does the app <em>actually</em> accept?</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Location</th>
+<th>Flag</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>visible <code>classes.dex</code></td>
+<td><code>isfcr{sh4d0w_cl455l04d3r_tr1ckery}</code></td>
+<td><strong>accepted</strong></td>
+</tr>
+<tr>
+<td>2</td>
+<td>shadow dex (<code>theme.pack</code>)</td>
+<td><code>isfcr{p4r3nt_f1rst_d3x_1s_s0_m34n}</code></td>
+<td>decoy</td>
+</tr>
+</tbody></table>
+<p>Decided by the missing <code>ByteBuffer.flip()</code> in <code>App.bind()</code>, which leaves the
+in-memory dex loader empty so the intended parent-first shadowing never occurs.</p>
+<h2 id="8-answer"><a class="wu-anchor" href="#8-answer" aria-hidden="true">#</a>8. Answer</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-text">isfcr{sh4d0w_cl455l04d3r_tr1ckery}</code></pre>
       
     </figure>
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#0-prompt">0. Prompt</a></li><li><a href="#1-triage">1. Triage</a></li><li><a href="#2-first-candidate-the-visible-checker">2. First candidate - the visible checker</a></li><li><a href="#3-string-obfuscation-obfveiljava">3. String obfuscation (obf/Veil.java)</a></li><li><a href="#4-appbind-the-intended-but-broken-shadow">4. App.bind() - the intended (but broken) shadow</a></li><li><a href="#5-the-bug-that-decides-the-challenge">5. The bug that decides the challenge</a></li><li><a href="#6-the-decoy-dex-for-completeness">6. The decoy dex (for completeness)</a></li><li><a href="#7-which-flag-does-the-app-actually-accept">7. Which flag does the app actually accept?</a></li><li><a href="#8-answer">8. Answer</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

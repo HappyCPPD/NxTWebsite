@@ -68,35 +68,53 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>Artefact: <code>flag.txt</code></p>
-<h2 id="summary"><a class="wu-anchor" href="#summary" aria-hidden="true">#</a>Summary</h2>
-<p>The only attachment is a single PNG - a matplotlib scatter plot titled
-<strong>&quot;SOUL STONE - SIGNAL RESIDUAL ANALYSIS&quot;</strong>.</p>
 <ul>
-<li>x-axis: <em>Observation Index</em> (0-40)  → <strong>character position</strong></li>
-<li>y-axis: <em>Residual Magnitude</em> (~35-130) → <strong>ASCII value</strong></li>
+<li><strong>Event:</strong> ByteMe CTF 26 (OWASP PCCOE, Pune) - CTF7 platform</li>
+<li><strong>Challenge:</strong> Invisible Signal</li>
+<li><strong>Category:</strong> Steganography</li>
+<li><strong>Points:</strong> 200 / Difficulty: Medium</li>
+<li><strong>Author:</strong> Suyog Jadhav</li>
+<li><strong>Created:</strong> 09 Oct 2026</li>
+<li><strong>Solves:</strong> 28</li>
 </ul>
-<p>Two populations of markers are overlaid:</p>
-<ol>
-<li><strong>Noise</strong> - hundreds of <em>single</em> markers (connected-component area ≈ 61
-px).</li>
-<li><strong>The message</strong> - exactly <strong>40 markers</strong>, one per integer x = 0…39, each
-drawn <strong>double size</strong> (area ≈ 121 px) with <code>y = ord(character)</code>.</li>
-</ol>
-<p>Read the 40 special markers left-to-right and cast each y-value to a
-character:</p>
-<figure class="wu-code wu-code-output" data-lines="4">
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">x=0..39  y=79 87 65 83 80 123 83 111 117 49 53 95 99 52 110 116 95 98 51 95
+      <pre id="code-1"><code class="language-text">OWASP{Sou15_c4nt_b3_533n_bY_n0rm41_3y3s}</code></pre>
+      
+    </figure><p>Artefact: <code>flag.txt</code></p>
+<hr>
+<h2 id="summary"><a class="wu-anchor" href="#summary" aria-hidden="true">#</a>Summary</h2>
+<p>The only attachment is a single PNG - a matplotlib scatter plot titled
+<strong>&quot;SOUL STONE - SIGNAL RESIDUAL ANALYSIS&quot;</strong>.</p>
+<ul>
+<li>x-axis: <em>Observation Index</em> (0 - 40)  → <strong>character position</strong></li>
+<li>y-axis: <em>Residual Magnitude</em> (~35 - 130) → <strong>ASCII value</strong></li>
+</ul>
+<p>Two populations of markers are overlaid:</p>
+<ol>
+<li><strong>Noise</strong> - hundreds of <em>single</em> markers (connected-component area ≈ 61 px).</li>
+<li><strong>The message</strong> - exactly <strong>40 markers</strong>, one per integer x = 0…39, each drawn
+<strong>double size</strong> (area ≈ 121 px) with <code>y = ord(character)</code>.</li>
+</ol>
+<p>Read the 40 special markers left-to-right and cast each y-value to a character:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">x=0..39  y=79 87 65 83 80 123 83 111 117 49 53 95 99 52 110 116 95 98 51 95
            53 51 51 110 95 98 89 95 110 48 114 109 52 49 95 51 121 51 115 125
 
 O W A S P { S o u 1 5 _ c 4 n t _ b 3 _ 5 3 3 n _ b Y _ n 0 r m 4 1 _ 3 y 3 s }</code></pre>
       
     </figure><p>Plaintext intent (leetspeak): <em>&quot;Souls can&#39;t be seen by normal eyes.&quot;</em></p>
+<hr>
 <h2 id="how-it-works-step-by-step"><a class="wu-anchor" href="#how-it-works-step-by-step" aria-hidden="true">#</a>How it works (step by step)</h2>
 <h3 id="1-find-that-the-plot-is-scatter-two-faint-line-families"><a class="wu-anchor" href="#1-find-that-the-plot-is-scatter-two-faint-line-families" aria-hidden="true">#</a>1. Find that the plot is scatter + two faint line families</h3>
 <p>The graph contains smooth sine-like curves (a decoy &quot;signal&quot;/noise field) and
@@ -105,18 +123,18 @@ sine curves; they are not the payload.</p>
 <h3 id="2-calibrate-the-axes-from-the-gridlines"><a class="wu-anchor" href="#2-calibrate-the-axes-from-the-gridlines" aria-hidden="true">#</a>2. Calibrate the axes from the gridlines</h3>
 <p>Gridline pixel positions (this exact render):</p>
 <ul>
-<li>Vertical (x = 0,5,10,…,40): px <strong>372, 869, 1366, 1864, 2361, 2858, 3356,
-3853, 4351</strong> → spacing 497.25 px per 5 data units.</li>
-<li>Horizontal (y = 120,100,80,60,40): px <strong>445, 842, 1240, 1638, 2036</strong> →
-spacing 397.75 px per 20 data units.</li>
+<li>Vertical (x = 0,5,10,…,40): px <strong>372, 869, 1366, 1864, 2361, 2858, 3356, 3853, 4351</strong>
+→ spacing 497.25 px per 5 data units.</li>
+<li>Horizontal (y = 120,100,80,60,40): px <strong>445, 842, 1240, 1638, 2036</strong>
+→ spacing 397.75 px per 20 data units.</li>
 </ul>
 <figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">x_data = (px - 372) * 5 / 497.25
+      <pre id="code-3"><code class="language-text">x_data = (px - 372) * 5 / 497.25
 y_data = 120 - (py - 445) * 20 / 397.75</code></pre>
       
     </figure><p>Calibration sanity check: a marker measured at y_data = 125.03 decodes to <code>}</code>
@@ -144,51 +162,85 @@ connected-component labelling (8-connected) on that binary mask. The marker
 <td>double-size marker (or drawn twice)</td>
 </tr>
 </tbody></table>
-<p>For each integer position <code>p = 0…40</code>, look in a ±0.45-unit column window,
-keep only blobs with <code>area ≥ 100</code> whose centroid x is within 0.08 of <code>p</code>, and
-read <code>round(y_data)</code> as the ASCII code.</p>
+<p>For each integer position <code>p = 0…40</code>, look in a ±0.45-unit column window, keep
+only blobs with <code>area ≥ 100</code> whose centroid x is within 0.08 of <code>p</code>, and read
+<code>round(y_data)</code> as the ASCII code.</p>
 <blockquote>
 <p>Why area and not brightness? The plain noise markers peak at grey ≈ 62
 (white marker, alpha ≈ 0.22). Two markers overlapping coincidentally reach
-≈ 103-104, so brightness alone gives false positives. The <em>size</em> of the
+≈ 103 - 104, so brightness alone gives false positives. The <em>size</em> of the
 connected component isolates the payload markers (area 121 ± 2).</p>
 </blockquote>
 <blockquote>
 <p>Caveat (found during independent verification): the area separator is not
-perfectly clean. Two coincidental <em>double-noise</em> overlaps reach area ≈ 106
-and land at x = 25.01 and 37.01 - i.e. above the 100 threshold on
-grid-adjacent columns. The decoder rejects them by requiring the blob&#39;s
-centroid x to be the <em>closest to the integer position</em> (payload sits at
-|x-int| ≤ 0.02, the false positives at ~0.01 off-grid but with a nearer
-true payload neighbour in the same column window). Column-count and
-per-column tie-break, not area alone, is what makes the extraction exact.</p>
+perfectly clean. Two coincidental <em>double-noise</em> overlaps reach area ≈ 106 and
+land at x = 25.01 and 37.01 - i.e. above the 100 threshold on grid-adjacent
+columns. The decoder rejects them by requiring the blob&#39;s centroid x to be the
+<em>closest to the integer position</em> (payload sits at |x-int| ≤ 0.02, the false
+positives at ~0.01 off-grid but with a nearer true payload neighbour in the
+same column window). Column-count and per-column tie-break, not area alone,
+is what makes the extraction exact.</p>
 </blockquote>
 <h3 id="4-result"><a class="wu-anchor" href="#4-result" aria-hidden="true">#</a>4. Result</h3>
 <p><code>decode.py</code> prints all 40 (position, ascii, area) rows and the final flag.
-<code>decode_overlay.png</code> draws a red circle on every detected marker as visual
-proof (40 circles, one per integer column, all visibly larger than
-surrounding noise).</p>
+<code>decode_overlay.png</code> draws a red circle on every detected marker as visual proof
+(40 circles, one per integer column, all visibly larger than surrounding noise).</p>
+<hr>
+<h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>signal.png</code></td>
+<td>Original challenge attachment</td>
+</tr>
+<tr>
+<td><code>decode.py</code></td>
+<td>Reproducible solver (reads <code>signal.png</code>, prints flag)</td>
+</tr>
+<tr>
+<td><code>flag.txt</code></td>
+<td>The flag</td>
+</tr>
+<tr>
+<td><code>decode_overlay.png</code></td>
+<td>Evidence: 40 detected markers circled</td>
+</tr>
+<tr>
+<td><code>WRITEUP.md</code></td>
+<td>This write-up</td>
+</tr>
+<tr>
+<td><code>HANDOFF.md</code></td>
+<td>One-page paste-ready summary</td>
+</tr>
+<tr>
+<td><code>RESULTS.md</code></td>
+<td>Decoded character table + coverage notes</td>
+</tr>
+</tbody></table>
 <h2 id="reproduce"><a class="wu-anchor" href="#reproduce" aria-hidden="true">#</a>Reproduce</h2>
 <figure class="wu-code" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
-        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 decode.py signal.png</span></span>
+      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 decode.py signal.png</span></span>
 <span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># -&gt; FLAG: OWASP{Sou15_c4nt_b3_533n_bY_n0rm41_3y3s}</span></span></span></code></pre>
       
     </figure><p>Requires: <code>numpy</code>, <code>Pillow</code>, <code>scipy</code>.</p>
 <h2 id="notes-pitfalls"><a class="wu-anchor" href="#notes-pitfalls" aria-hidden="true">#</a>Notes / pitfalls</h2>
 <ul>
-<li>The two characters just above the y=120 gridline (<code>{</code> at 123 and <code>}</code> at<ol start="125">
-<li>are plotted <strong>outside</strong> the gridline band - a mask limited to the
-gridline rectangle will miss them. Include the full plot area.</li>
-</ol>
-</li>
+<li>The two characters just above the y=120 gridline (<code>{</code> at 123 and <code>}</code> at 125)
+are plotted <strong>outside</strong> the gridline band - a mask limited to the gridline
+rectangle will miss them. Include the full plot area.</li>
 <li>Column windows centred on x = 5,10,… must not be excluded even though
-gridlines live there; grid greys (16/25) fall below the ≥45 threshold
-anyway.</li>
+gridlines live there; grid greys (16/25) fall below the ≥45 threshold anyway.</li>
 <li>Position 40 is empty - the flag is exactly 40 characters (0…39).</li>
 <li><code>bY</code> is literal (lowercase <code>b</code>, uppercase <code>Y</code>); the extraction is exact
 (both centroids are integer-aligned, area 121).</li>
@@ -198,7 +250,7 @@ anyway.</li>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#summary">Summary</a></li><li><a href="#how-it-works-step-by-step">How it works (step by step)</a><ol class="wu-toc-sub"><li><a href="#1-find-that-the-plot-is-scatter-two-faint-line-families">1. Find that the plot is scatter + two faint line families</a></li><li><a href="#2-calibrate-the-axes-from-the-gridlines">2. Calibrate the axes from the gridlines</a></li><li><a href="#3-separate-the-message-markers-from-the-noise">3. Separate the message markers from the noise</a></li><li><a href="#4-result">4. Result</a></li></ol></li><li><a href="#reproduce">Reproduce</a></li><li><a href="#notes-pitfalls">Notes / pitfalls</a></li></ol>
+        <ol><li><a href="#flag">Flag</a></li><li><a href="#summary">Summary</a></li><li><a href="#how-it-works-step-by-step">How it works (step by step)</a><ol class="wu-toc-sub"><li><a href="#1-find-that-the-plot-is-scatter-two-faint-line-families">1. Find that the plot is scatter + two faint line families</a></li><li><a href="#2-calibrate-the-axes-from-the-gridlines">2. Calibrate the axes from the gridlines</a></li><li><a href="#3-separate-the-message-markers-from-the-noise">3. Separate the message markers from the noise</a></li><li><a href="#4-result">4. Result</a></li></ol></li><li><a href="#files">Files</a></li><li><a href="#reproduce">Reproduce</a></li><li><a href="#notes-pitfalls">Notes / pitfalls</a></li></ol>
       </nav>
   </div>
 

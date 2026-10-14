@@ -68,10 +68,10 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><strong>TL;DR</strong></p>
-<p>Classic <strong>Common Modulus</strong> attack. Two RSA ciphertexts <code>c1</code>, <code>c2</code> were
-produced with the <strong>same modulus <code>n</code></strong> but <strong>coprime public exponents</strong>
-<code>e1=65537</code>, <code>e2=65539</code>, over the <em>same</em> plaintext. Their exponents satisfy
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<p>Classic <strong>Common Modulus</strong> attack. Two RSA ciphertexts <code>c1</code>, <code>c2</code> were produced
+with the <strong>same modulus <code>n</code></strong> but <strong>coprime public exponents</strong> <code>e1=65537</code>,
+<code>e2=65539</code>, over the <em>same</em> plaintext. Their exponents satisfy
 <code>a*e1 + b*e2 = 1</code>, so the plaintext is recovered directly:
 <code>m = c1^a · c2^b mod n</code>.</p>
 <h2 id="given-data-paramstxt"><a class="wu-anchor" href="#given-data-paramstxt" aria-hidden="true">#</a>Given data (params.txt)</h2>
@@ -90,8 +90,8 @@ c2 = 460132199845741197113468766144476671627684702230503073675822708824655467274
     </figure><h2 id="approach"><a class="wu-anchor" href="#approach" aria-hidden="true">#</a>Approach</h2>
 <ol>
 <li>Confirm <code>gcd(e1, e2) = 1</code> (both are primes, so yes).</li>
-<li>Run the extended Euclidean algorithm to get <code>a, b</code> with
-<code>a·e1 + b·e2 = 1</code>. Result: <code>a = 32769</code>, <code>b = -32768</code>.</li>
+<li>Run the extended Euclidean algorithm to get <code>a, b</code> with <code>a·e1 + b·e2 = 1</code>.
+Result: <code>a = 32769</code>, <code>b = -32768</code>.</li>
 <li>Compute <code>m = c1^a · c2^b (mod n)</code>, taking <code>c2^b</code> as
 <code>inverse(c2)^|b| mod n</code> since <code>b &lt; 0</code>.</li>
 <li>Decode <code>m</code> as big-endian bytes → flag.</li>
@@ -107,16 +107,21 @@ c2 = 460132199845741197113468766144476671627684702230503073675822708824655467274
 <span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># OWASP{v0rm1r_tw1st3d_rsa_l34ks_th3_s0ul}</span></span></span></code></pre>
       
     </figure><h2 id="why-it-works"><a class="wu-anchor" href="#why-it-works" aria-hidden="true">#</a>Why it works</h2>
-<p>RSA encrypts <code>c = m^e mod n</code>. With two exponents on the same <code>n</code> and same
-<code>m</code>: <code>c1^a · c2^b = m^(a·e1 + b·e2) = m^1 = m (mod n)</code>. No factoring
-required - the weakness is reusing one modulus with multiple exponents over
-the same message.</p>
+<p>RSA encrypts <code>c = m^e mod n</code>. With two exponents on the same <code>n</code> and same <code>m</code>:
+<code>c1^a · c2^b = m^(a·e1 + b·e2) = m^1 = m (mod n)</code>.
+No factoring required - the weakness is reusing one modulus with multiple
+exponents over the same message.</p>
+<h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
+<ul>
+<li><code>params.txt</code> - challenge input</li>
+<li><code>solve.py</code> - common-modulus recovery script</li>
+</ul>
 
     </article>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#given-data-paramstxt">Given data (params.txt)</a></li><li><a href="#approach">Approach</a></li><li><a href="#solve">Solve</a></li><li><a href="#why-it-works">Why it works</a></li></ol>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#given-data-paramstxt">Given data (params.txt)</a></li><li><a href="#approach">Approach</a></li><li><a href="#solve">Solve</a></li><li><a href="#why-it-works">Why it works</a></li><li><a href="#files">Files</a></li></ol>
       </nav>
   </div>
 

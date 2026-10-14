@@ -67,26 +67,112 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><code>nc 0.cloud.chals.io 25537</code>, a simulated maintenance controller with an Ed25519-signed firmware artifact format (<code>pol</code>/<code>tab</code>/<code>rad</code> components, each with a security counter and dependency ranges) and a token/capability-gated command dispatcher.</p>
-<p>The controller verifies each firmware artifact <strong>individually</strong> (signature, counter ≥ stored, dependency ranges satisfied) but <strong>never validates the resulting combination as a coherent whole</strong>. A low-tier service credential (<code>user_id=42</code>, <code>caps=0x0003</code>, no <code>SERVICE</code> bit) is issued by default.</p>
-<p><strong>The composition:</strong> <code>pol-v3rc.fw</code> is a same-counter &quot;sidegrade&quot; (counter 3 == stored 3, so it&#39;s accepted) that adds a handler for opcode <code>0x70</code> (UNLOCK) and relaxes the <code>tab</code> dependency range. <code>tab-v3.fw</code> is a counter-valid upgrade (3 ≥ stored 2) that lowers opcode <code>0x70</code>&#39;s required capability from <code>0x8000</code> (SERVICE) to <code>0x0001</code> (BASIC_READ) - which the default token already has. Neither artifact alone grants anything: v3rc&#39;s handler is useless while <code>tab-v2</code> still demands SERVICE; <code>tab-v3</code>&#39;s lowered requirement is useless without a <code>0x70</code> handler in <code>pol</code>. Installed together, opcode <code>0x70</code> becomes &quot;UNLOCK, requires only BASIC_READ.&quot;</p>
-<figure class="wu-code wu-code-output" data-lines="6">
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<p>The controller verifies each firmware artifact <strong>individually</strong> (Ed25519 signature over the
+artifact, counter ≥ stored, dependency ranges satisfied) but <strong>never validates the resulting
+<em>combination</em> as a coherent whole</strong>. You are handed a low-tier service credential
+(<code>user_id=42</code>, <code>caps=0x0003</code>). By <strong>sidegrading</strong> <code>pol</code> v3 → v3rc (same counter = 3, allowed)
+and <strong>upgrading</strong> <code>tab</code> v2 → v3 (counter 3 ≥ 2), the two changes compose into a privilege
+escalation that neither artifact would allow alone:</p>
+<ul>
+<li><code>pol-v3rc</code> <strong>adds</strong> a handler for opcode <code>0x70</code> (UNLOCK) and relaxes the <code>tab</code> dependency.</li>
+<li><code>tab-v3</code> <strong>lowers</strong> opcode <code>0x70</code>&#39;s required capability from <code>0x8000</code> (SERVICE) to
+<code>0x0001</code> (BASIC_READ) - which the issued token already has.</li>
+</ul>
+<p>Boot, send a <code>SEND</code> frame with opcode <code>0x70</code> and your token → the service blob containing
+the flag is returned. <em>Signed parts, unsigned whole.</em></p>
+<hr>
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<figure class="wu-code wu-code-output" data-lines="10">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">1. UPDATE pol-v3rc.fw   (sidegrade, counter 3 == 3)
-2. UPDATE tab-v3.fw     (upgrade, counter 3 &gt;= 2)
-3. BOOT                 (dependency ranges still satisfied)
-4. TOKEN                (user_id=42, caps=0x0003)
-5. SEND opcode 0x70 with the token -&gt; capability check passes on BASIC_READ
-resp_b64=...  -&gt;  isfcr{s1gn3d_p4rts_uns1gn3d_whole_ab84f1}</code></pre>
+      <pre id="code-1"><code class="language-text">$ nc 0.cloud.chals.io 25537
+OK Fluxgate G3 (sim)
+$ HELLO
+OK Fluxgate G3 (sim)
+OK vendor_pk=1a3f...e2
+$ STATUS
+OK booted=False
+OK   pol: v3 counter=3 build=0x0303 deps=[tab:v2-v2, rad:v2-v2]
+OK   tab: v2 counter=2 build=0x1002 deps=[none]
+OK   rad: v2 counter=2 build=0x2002 deps=[none]</code></pre>
       
-    </figure><p>Fix: validate the <em>set</em>, not just the elements - pin an authorized (component → version/counter) manifest and verify a single signature over the whole installed image before boot/dispatch. &quot;Signed parts, unsigned whole&quot;: composable trust boundaries (here, a policy table plus a capability table) must be validated as a unit, or two individually benign, individually-signed artifacts can degenerate into privilege escalation.</p>
+    </figure><p>The service is line-oriented ASCII over TCP; binary blobs are base64 after a <code>key_b64=</code> tag.
+Device state is per-connection (<code>RESET</code> restores factory defaults). Commands: <code>HELLO</code>,
+<code>STATUS</code>, <code>TOKEN</code>, <code>UPDATE &lt;b64&gt;</code>, <code>BOOT</code>, <code>SEND &lt;b64&gt;</code>, <code>RESET</code>, <code>HELP</code>, <code>QUIT</code>.</p>
+<h3 id="artifact-format-docsartifactmd"><a class="wu-anchor" href="#artifact-format-docsartifactmd" aria-hidden="true">#</a>Artifact format (<code>docs/artifact.md</code>)</h3>
+<p>Big-endian outer layout: magic <code>&quot;FXG1&quot;</code>, 4-byte component (<code>pol</code>/<code>tab</code>/<code>rad</code>), <code>version</code>,
+<code>sec_counter</code>, <code>build_id</code>, <code>dep_count</code> + deps (<code>name[4] | min | max</code>, 6 bytes each),
+<code>payload_len</code>, payload, then a <strong>64-byte Ed25519 signature</strong> over <code>[0 .. end-64)</code>.</p>
+<p>Update rules (<code>docs/protocol.md</code>): (1) vendor signature verifies; (2) artifact counter <strong>≥</strong>
+stored counter (equal permitted - &quot;sidegrade between build variants&quot;); (3) after install,
+<strong>every</strong> installed component&#39;s dependency ranges must still be satisfied. Boot re-checks
+(1) and (3) and additionally parses each payload.</p>
+<h3 id="token-frames"><a class="wu-anchor" href="#token-frames" aria-hidden="true">#</a>Token &amp; frames</h3>
+<p>The issued operator token is 24 bytes: <code>user_id(2) | capabilities(2) | nonce(4) | HMAC-SHA256(key, bytes[0..8])[:16]</code>. The device hands us <strong><code>user_id=42</code>, <code>caps=0x0003</code></strong>
+(<code>BASIC_READ=0x0001</code> set, <code>0x0002</code> set; <code>SERVICE=0x8000</code> <strong>not</strong> set).</p>
+<p>Frame layout: magic <code>&quot;FG&quot; | frame_version | opcode | payload_len | payload | 24-byte token</code>.
+Dispatch: HMAC-check the token, look the opcode up in <code>tab</code> → required capability mask,
+compare against <code>token.capabilities</code>; then look the opcode up in <code>pol</code> → run the action.</p>
+<h2 id="2-the-vulnerability"><a class="wu-anchor" href="#2-the-vulnerability" aria-hidden="true">#</a>2. The vulnerability</h2>
+<p>Each <code>.fw</code> is individually signed and individually counter-gated, and the loader checks that
+the <em>set</em> satisfies dependency ranges - but there is <strong>no cross-component policy</strong>: it never
+checks that a given (pol, tab, rad) tuple is an <em>authorized, mutually-consistent</em> combination.
+Two independently-valid artifacts therefore compose into behaviour the vendor never shipped:</p>
+<ul>
+<li><strong><code>pol-v3rc.fw</code></strong> (counter 3, <code>==</code> the installed pol counter → sidegrade accepted):
+adds the <code>0x70 → action 0x07 (UNLOCK)</code> handler to the policy/handler table, and relaxes the
+<code>tab</code> dependency to <code>v1–v3</code>.</li>
+<li><strong><code>tab-v3.fw</code></strong> (counter 3 ≥ installed tab counter 2 → upgrade accepted): changes opcode
+<code>0x70</code>&#39;s <strong>required capability</strong> from <code>0x8000</code> (SERVICE) to <code>0x0001</code> (BASIC_READ).</li>
+</ul>
+<p>Neither artifact alone grants anything: v3rc&#39;s UNLOCK handler is useless while <code>tab-v2</code> still
+demands SERVICE, and <code>tab-v3</code>&#39;s lowered requirement is useless without a <code>0x70</code> handler in
+<code>pol</code>. Installed <strong>together</strong>, opcode <code>0x70</code> becomes &quot;UNLOCK, requires only BASIC_READ&quot; -
+which our token satisfies.</p>
+<h2 id="3-exploit-chain"><a class="wu-anchor" href="#3-exploit-chain" aria-hidden="true">#</a>3. Exploit chain</h2>
+<ol>
+<li><code>UPDATE</code> <code>pol-v3rc.fw</code> - sidegrade pol v3 → v3rc (counter 3 == 3).</li>
+<li><code>UPDATE</code> <code>tab-v3.fw</code> - upgrade tab v2 → v3 (counter 3 ≥ 2).</li>
+<li><code>BOOT</code> - dependency ranges now satisfied (<code>rad:v2-v2</code> still met).</li>
+<li><code>TOKEN</code> - obtain the 24-byte token (<code>user_id=42</code>, <code>caps=0x0003</code>).</li>
+<li><code>SEND</code> a frame <code>b&quot;FG&quot; + 0x02 + 0x70 + 0x00 + token</code> → opcode <code>0x70</code> (UNLOCK). The
+capability check passes on <code>BASIC_READ</code>; the <code>pol</code> handler runs action <code>0x07</code>; the
+service blob (the flag) is returned in <code>resp_b64</code>.</li>
+</ol>
+<h2 id="4-proof"><a class="wu-anchor" href="#4-proof" aria-hidden="true">#</a>4. Proof</h2>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">=== UPDATE pol-v3rc ===     OK installed pol v3rc counter=3
+=== UPDATE tab-v3   ===     OK installed tab v3   counter=3
+=== BOOT            ===     OK boot ok: pol@v3rc.0304 tab@v3.1003 rad@v2.2002
+=== TOKEN           ===     OK token_b64=ACoAAwD...        (user_id=42 caps=0x0003)
+=== SEND UNLOCK     ===     resp_b64=...  -&gt;  isfcr{s1gn3d_p4rts_uns1gn3d_whole_ab84f1}</code></pre>
+      
+    </figure><p>Solver: <code>solve/exploit.py</code> (socket client; drives the 5 steps and decodes <code>resp_b64</code>).</p>
+<h2 id="5-fix"><a class="wu-anchor" href="#5-fix" aria-hidden="true">#</a>5. Fix</h2>
+<p>Validate the <em>set</em>, not just the elements: pin an authorized (component → version/counter)
+manifest and verify a <strong>single signature over the whole installed image</strong> (or a signed
+capability-policy that the composition must satisfy) before boot/dispatch. Individually
+signed parts, unsigned whole, is the bug.</p>
+<h2 id="6-takeaway"><a class="wu-anchor" href="#6-takeaway" aria-hidden="true">#</a>6. Takeaway</h2>
+<p><code>isfcr{s1gn3d_p4rts_uns1gn3d_whole_ab84f1}</code> - each part was signed, but the assembly wasn&#39;t.
+Composable trust boundaries (here: policy table + capability table) must be validated as a
+unit; per-component signing alone lets two benign artifacts degenerate into privilege escalation.</p>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#1-recon">1. Recon</a><ol class="wu-toc-sub"><li><a href="#artifact-format-docsartifactmd">Artifact format (docs/artifact.md)</a></li><li><a href="#token-frames">Token &amp; frames</a></li></ol></li><li><a href="#2-the-vulnerability">2. The vulnerability</a></li><li><a href="#3-exploit-chain">3. Exploit chain</a></li><li><a href="#4-proof">4. Proof</a></li><li><a href="#5-fix">5. Fix</a></li><li><a href="#6-takeaway">6. Takeaway</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

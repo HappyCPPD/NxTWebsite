@@ -67,27 +67,202 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><code>handout.zip</code> → <code>case.json</code> (a case spec the target derivative must satisfy: capture principal, final action <code>redact</code>, intermediate actions <code>crop</code>/<code>resize</code>, max chain 4, parent-before-child, <code>log_scope: largest_valid_checkpoint</code>, RFC8785 canonical encoding, target incident id, root key, 5 signed tree heads) + <code>entries.bin</code> (magic <code>ISFCRLOG</code>, TLV records: key registry, manifest, incident link, tree-head stubs).</p>
-<p>Manifests are ed25519-signed over the raw JSON bytes (not over a canonical form - confirmed by local verification). <code>parent_asset_sha256</code> links a DAG from capture through derivatives.</p>
-<p><strong>Checkpoint validity</strong> requires both a valid signature over the canonical <code>{key_id, root_hash, tree_size}</code> AND a correct RFC6962 Merkle root over the log records, AND an authorized signer. Of the 5 checkpoints: <code>tree_size=55</code> has a correct root but forged signature; <code>tree_size=50</code> has a valid signature but a root mismatch; <code>tree_size=52</code> is signed by the rogue secondary key; only <code>tree_size=33</code> and <strong>46</strong> (the largest valid) pass everything - so <code>log_scope</code> = records 0..45.</p>
-<p><strong>Finding the derivative:</strong> only one capture (<code>capture-north</code>-signed) has a <code>crop → resize → redact</code> continuation. Among the redact candidates, each must pass raw-sig validity, RFC8785 canonical JSON, in-scope index, and parent-logged-before-child - eliminating candidates with duplicate JSON keys, unicode-escaped keys, extra spaces, forged signatures, case-mismatched hex links, and out-of-scope indices (idx48 &gt; scope 45). <strong><code>mf-ee2392778137</code></strong> is the only survivor.</p>
-<figure class="wu-code" data-lines="6">
+<h2 id="0-handout"><a class="wu-anchor" href="#0-handout" aria-hidden="true">#</a>0. Handout</h2>
+<p><code>handout.zip</code> → <code>case.json</code> + <code>entries.bin</code>.
+<code>case.json</code> is a &quot;case spec&quot; the target derivative must satisfy:</p>
+<figure class="wu-code wu-code-output" data-lines="10">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">capture_principals     : [&quot;capture-north&quot;]
+final_action           : &quot;redact&quot;
+intermediate_actions   : [&quot;crop&quot;, &quot;resize&quot;]
+max_chain              : 4
+parent_logged_before_child : true
+log_scope              : &quot;largest_valid_checkpoint&quot;
+manifest_encoding      : &quot;RFC8785&quot;
+target_incident_id     : &quot;incident-d7be9442cb&quot;
+root_key               : 304bff5d…b70b03
+checkpoints            : 5 signed tree heads (tree_size 55/33/46/50/52)</code></pre>
+      
+    </figure><p>The deliverable is a 6-field evidence list, hashed into a scrypt key that
+decrypts an AES-GCM blob. Because GCM is authenticated, <strong>the tag itself is the
+<button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button></strong> - only the exactly-correct evidence decrypts.</p>
+<h2 id="1-reversing-entriesbin"><a class="wu-anchor" href="#1-reversing-entriesbin" aria-hidden="true">#</a>1. Reversing <code>entries.bin</code></h2>
+<p>Magic <code>ISFCRLOG</code>, then <code>[u32 len][record]*</code>. <code>record[0]</code> is a type byte and the
+rest is TLV (<code>tag u8, len u16, value</code>):</p>
+<table>
+<thead>
+<tr>
+<th>type</th>
+<th>meaning</th>
+<th>fields</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0x01</td>
+<td>key registry</td>
+<td>0x01 key_id, 0x02 principal, 0x04 ed25519 pubkey(32), 0x05 epoch, 0x7e &quot;root&quot;, 0x7f sig</td>
+</tr>
+<tr>
+<td>0x03</td>
+<td>manifest</td>
+<td>0x08 raw-JSON manifest, 0x7e signer key_id, 0x7f ed25519 sig</td>
+</tr>
+<tr>
+<td>0x04</td>
+<td>incident link</td>
+<td>0x09 incident_id, 0x0a asset_sha256</td>
+</tr>
+<tr>
+<td>0x02/0x05</td>
+<td>tree-head stubs</td>
+<td>key_id + tree_size + sig</td>
+</tr>
+</tbody></table>
+<p>The manifest JSON is <code>{action, asset_sha256, manifest_id, parent_asset_sha256}</code>.
+<code>parent_asset_sha256</code> links a DAG: capture → {crop,resize,recolor,redact,…}.</p>
+<p><strong>Signature scheme:</strong> the 64-byte sigs verify as plain ed25519 <strong>over the raw
+JSON bytes</strong> with the pubkey registered under the manifest&#39;s signer key_id.
+(Also tried sha256(canonical) - wrong.) This immediately exposed forgeries.</p>
+<h2 id="2-checkpoint-validity"><a class="wu-anchor" href="#2-checkpoint-validity" aria-hidden="true">#</a>2. Checkpoint validity</h2>
+<p>Two independent conditions must hold for a signed tree head:</p>
+<ol>
+<li><strong>Signature</strong> verifies with the checkpoint key&#39;s own pubkey over
+<code>JCS({&quot;key_id&quot;,&quot;root_hash&quot;,&quot;tree_size&quot;})</code> (sorted keys, <code>,</code>/<code>:</code> separators).</li>
+<li><strong>Root</strong> equals the RFC6962 Merkle root over the first <code>tree_size</code> log
+records, leaf hash = <code>SHA256(0x00 || record_bytes)</code>.</li>
+</ol>
+<p>Plus the signer must be an <strong>authorized log key</strong> - i.e. the log&#39;s own primary
+signer <code>log-primary</code>, not the secondary.</p>
+<table>
+<thead>
+<tr>
+<th>tree_size</th>
+<th>sig</th>
+<th>root</th>
+<th>authorized</th>
+<th>verdict</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>55</td>
+<td>✗</td>
+<td>✓</td>
+<td>✓</td>
+<td>invalid (bad sig)</td>
+</tr>
+<tr>
+<td>33</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td>valid</td>
+</tr>
+<tr>
+<td>46</td>
+<td>✓</td>
+<td>✓</td>
+<td>✓</td>
+<td><strong>valid (largest)</strong></td>
+</tr>
+<tr>
+<td>50</td>
+<td>✓</td>
+<td>✗</td>
+<td>✓</td>
+<td>invalid (root ≠ log)</td>
+</tr>
+<tr>
+<td>52</td>
+<td>✓</td>
+<td>✓</td>
+<td>✗ (log-secondary)</td>
+<td>invalid (rogue signer)</td>
+</tr>
+</tbody></table>
+<p><code>log_scope: largest_valid_checkpoint</code> ⇒ <strong>scope = records 0..45</strong>.</p>
+<p>The two &quot;big&quot; decoys are deliberately tempting: 55 has a <em>correct</em> Merkle root
+but a forged signature; 50 has a <em>valid</em> signature but a root that doesn&#39;t match
+the log; 52 is perfect in every way except it&#39;s signed by the secondary key.</p>
+<h2 id="3-finding-the-derivative"><a class="wu-anchor" href="#3-finding-the-derivative" aria-hidden="true">#</a>3. Finding the derivative</h2>
+<p><code>capture_principals = [&quot;capture-north&quot;]</code> ⇒ capture must be signed by
+<code>k-378c6e054e</code>. Three captures qualify, but only one has a
+<code>crop → resize → redact</code> continuation:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">capture 5fe33137 (idx 6, capture-north)
+ └─ crop   9293fe40 (idx 12)
+     └─ resize 39b82b8f (idx 17)
+         └─ redact … (idx 19,24,33,34,38,41,48)</code></pre>
+      
+    </figure><p>Every redact candidate must then pass: raw-sig valid <strong>and</strong> RFC8785-canonical
+<strong>and</strong> inside scope <strong>and</strong> parent logged before child:</p>
+<ul>
+<li>idx19 duplicate <code>&quot;action&quot;</code> key → not canonical.</li>
+<li>idx24 <code>&quot;action&quot;:&quot;\u0072edact&quot;</code> → not canonical.</li>
+<li>idx34 spaces after colons → not canonical.</li>
+<li>idx33 signature invalid (forged).</li>
+<li>idx38 parent <code>39B82B8F…</code> uppercase → not the same asset as <code>39b82b8f…</code>.</li>
+<li>idx48 valid but <strong>index 48 &gt; scope 45</strong> → outside the relied-upon checkpoint.</li>
+<li><strong>idx41 <code>mf-ee2392778137</code> - the only survivor.</strong></li>
+</ul>
+<p>So the derivative is <code>mf-ee2392778137</code> (asset <code>c40ac4a3268f…</code>), and its ancestry
+from capture to derivative is
+<code>mf-326c47df321e &gt; mf-95efb978da36 &gt; mf-57d2452e846e &gt; mf-ee2392778137</code>.</p>
+<p>The title is literal: several redacts are <em>signed</em>; the puzzle is deciding
+<em>which original</em> (which capture/chain/checkpoint) the answer hangs from - and
+only one survives every constraint simultaneously.</p>
+<h2 id="4-flag-derivation"><a class="wu-anchor" href="#4-flag-derivation" aria-hidden="true">#</a>4. Flag derivation</h2>
+<figure class="wu-code" data-lines="5">
       <figcaption>
         
         <span class="wu-code-lang">python</span>
-        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">evidence = [derivative_asset, derivative_manifest_id, ancestry_joined,</span></span>
+      <pre id="code-3"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">evidence = [derivative_asset, derivative_manifest_id, ancestry_joined,</span></span>
 <span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">            capture_asset, target_incident_id, <span class="hljs-built_in">str</span>(tree_size)]</span></span>
-<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">E = json.dumps(evidence, ensure_ascii=<span class="hljs-literal">True</span>, separators=(<span class="hljs-string">&quot;,&quot;</span>, <span class="hljs-string">&quot;:&quot;</span>)).encode(<span class="hljs-string">&quot;ascii&quot;</span>)</span></span>
-<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">key = scrypt(<span class="hljs-string">b&quot;isfcr-forensics\x00&quot;</span>+E, salt=..., n=<span class="hljs-number">131072</span>, r=<span class="hljs-number">8</span>, p=<span class="hljs-number">1</span>, dklen=<span class="hljs-number">32</span>)</span></span>
-<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">flag = AESGCM(key).decrypt(nonce, ct, <span class="hljs-string">b&quot;signed-but-which-original&quot;</span>)</span></span>
-<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">isfcr{29336738f5f44f4d2d1e3ac2}</span></span></code></pre>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">E   = json.dumps(evidence, ensure_ascii=<span class="hljs-literal">True</span>, separators=(<span class="hljs-string">&quot;,&quot;</span>, <span class="hljs-string">&quot;:&quot;</span>)).encode(<span class="hljs-string">&quot;ascii&quot;</span>)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">key = scrypt(<span class="hljs-string">b&quot;isfcr-forensics\x00&quot;</span>+E, salt=df2fd39a…, n=<span class="hljs-number">131072</span>,r=<span class="hljs-number">8</span>,p=<span class="hljs-number">1</span>,dklen=<span class="hljs-number">32</span>)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">flag = AESGCM(key).decrypt(nonce, ct, <span class="hljs-string">b&quot;signed-but-which-original&quot;</span>)</span></span></code></pre>
       
-    </figure><p>&quot;signed&quot; ≠ &quot;valid&quot;: several redacts carry valid signatures over non-canonical JSON, uppercase hex links, or out-of-scope entries. Merkle-root correctness alone or signature correctness alone is not enough - the largest checkpoint is disqualified on purpose, and <code>root_key</code> in <code>case.json</code> is a decoy (checkpoints verify against the log key&#39;s own registered pubkey).</p>
+    </figure><p>Evidence:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">[&quot;c40ac4a3268f0b30aac5a1e344e1e4016b82fbfb1171e86330a64c69e73d6cff&quot;,
+ &quot;mf-ee2392778137&quot;,
+ &quot;mf-326c47df321e&gt;mf-95efb978da36&gt;mf-57d2452e846e&gt;mf-ee2392778137&quot;,
+ &quot;5fe33137c48b34086ca6c2c19723b4916fb13732e465759be10b96dcef825bcf&quot;,
+ &quot;incident-d7be9442cb&quot;,
+ &quot;46&quot;]</code></pre>
+      
+    </figure><p>⇒ <code>isfcr{29336738f5f44f4d2d1e3ac2}</code></p>
+<h2 id="5-traps-summary"><a class="wu-anchor" href="#5-traps-summary" aria-hidden="true">#</a>5. Traps summary</h2>
+<ul>
+<li>&quot;signed&quot; ≠ &quot;valid&quot;: valid signatures over non-canonical JSON, uppercase hex
+links, and out-of-scope entries all fail the case spec.</li>
+<li>Merkle-root correctness alone (55) or signature correctness alone (50) is not
+enough; the largest checkpoint is disqualified on purpose.</li>
+<li><code>root_key</code> in <code>case.json</code> is a decoy - the checkpoints verify with the log
+key&#39;s own registered pubkey, not the root key.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#0-handout">0. Handout</a></li><li><a href="#1-reversing-entriesbin">1. Reversing entries.bin</a></li><li><a href="#2-checkpoint-validity">2. Checkpoint validity</a></li><li><a href="#3-finding-the-derivative">3. Finding the derivative</a></li><li><a href="#4-flag-derivation">4. Flag derivation</a></li><li><a href="#5-traps-summary">5. Traps summary</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

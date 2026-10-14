@@ -67,24 +67,101 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>A black-box model <code>f: R^6 -&gt; R</code> returning exact rational outputs. Given 16 labelled anchors, 22 &quot;captures&quot; (each with two 7-point clusters), and 24 unlabelled targets to predict.</p>
-<p><strong>Step 1 - the model is piecewise-linear with integer weights.</strong> Seven points in R^6 determine an affine fit uniquely. The signal is that <strong>all 44 clouds fit with exact integer coefficients</strong> - a smooth/polynomial model would need non-integer rationals for random tight clusters. Confirmed independently: a global degree-2 polynomial fit leaves residual ~11, degree-4 ~0.28 - no smooth low-degree fit exists, and every cloud&#39;s 7 points sit strictly on one side of every recovered hyperplane. Conclusion: <code>f</code> is a ReLU network with integer weights.</p>
-<p><strong>Step 2 - recovering ReLU units, and the version trap.</strong> Each capture&#39;s two clouds straddle one kink; for a unit <code>ReLU(w·x+t)</code>, the gradient jump <code>Δg = v·w</code> and intercept jump <code>Δb = v·t</code> give the offset <code>t = Δb/v</code>. Across the 22 captures, the recovered offsets <code>t</code> were identical for every capture sharing a direction - a strong ReLU signature - but the base term was <strong>not constant</strong> across clouds. The resolution: <strong><code>model_version</code> is a deliberate trap</strong> - 4 of the 22 captures are tagged a <em>different</em> model version (<code>v-41e59d</code> vs. <code>v-8fb4ff</code>) and simply belong to a different function entirely. Restricting to the 18 same-version captures resolves cleanly to <strong>9 distinct ReLU units</strong> with a consistent activation-side choice (found by a <code>2^9</code> search) giving a constant base term.</p>
-<p><strong>Step 3 - assembling and verifying.</strong> <code>f(x) = c·x + d + Σ_j [active_j(x)]·(inc_j·x + s_j)</code>. Solving the resulting linear systems for <code>inc_j</code>, <code>s_j</code>, <code>d</code> gives exact integers (float residual ~1e-13). <strong>Verification: the reconstructed net reproduces all 252 same-version cloud points AND all 16 anchors exactly (268/268)</strong> - critically, the anchors were never used for fitting, so exact reproduction on them licenses extrapolating to the 24 targets.</p>
-<figure class="wu-code wu-code-output" data-lines="3">
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<p><code>data.json</code> describes a black-box model <code>f: R^6 -&gt; R</code> that &quot;returns exact rational
+outputs&quot;. We are given:</p>
+<ul>
+<li><code>model_version</code>: <code>v-8fb4ff</code>, <code>dimension</code>: 6</li>
+<li><code>anchors</code>: 16 labelled points <code>(x, y)</code></li>
+<li><code>captures</code>: 22 records, each with a <code>model_version</code> and <code>clouds</code> = two clusters of
+7 points <code>(x, y)</code> each</li>
+<li><code>targets</code>: 24 unlabelled inputs</li>
+</ul>
+<p>We must output <code>f(target)</code> for all 24 as reduced rational strings and feed them to
+<code>unlock.py</code> (AES-GCM; key = SHA256(<code>isfcr-ml\0</code> + JSON of the answer)).</p>
+<h2 id="step-1-the-model-is-piecewise-linear-integer-weights"><a class="wu-anchor" href="#step-1-the-model-is-piecewise-linear-integer-weights" aria-hidden="true">#</a>Step 1 - The model is piecewise-linear (integer weights)</h2>
+<p>A <code>cloud</code> has exactly <strong>7 points in R^6</strong>. Seven points determine an affine function
+uniquely (7 unknowns, 7 equations), so <em>any</em> cloud is trivially &quot;affine-fittable&quot;. The
+signal is that <strong>every</strong> one of the 44 cloud fits came out with <strong>exact integer
+coefficients</strong> (e.g. cap0/cloud0 → <code>b=-2, g=(-15,-11,12,-5,-2,-1)</code>).</p>
+<p>For a smooth (polynomial/analytic) model, random tight clusters would fit with
+non-integer rationals. Getting clean integers for all 44 clouds means each cloud lies
+inside a region where <code>f</code> is <em>exactly</em> an affine map with integer coefficients:
+<code>f</code> is piecewise-linear (a ReLU network with integer weights).</p>
+<p>Confirmed: a degree-2 global polynomial leaves residual ~11, degree-4 ~0.28, i.e. no
+low-degree smooth fit; and each cloud&#39;s 7 points are all on one side of every recovered
+hyperplane (no cloud straddles a kink).</p>
+<h2 id="step-2-recovering-the-relu-units-and-spotting-the-version-trap"><a class="wu-anchor" href="#step-2-recovering-the-relu-units-and-spotting-the-version-trap" aria-hidden="true">#</a>Step 2 - Recovering the ReLU units (and spotting the version trap)</h2>
+<p>A <code>capture</code>&#39;s two clouds sit on opposite sides of one kink (they &quot;straddle&quot; it). For a
+ReLU unit <code>ReLU(w·x+t)</code> the gradient jump across its hyperplane is <code>v·w</code> and the
+intercept jump is <code>v·t</code>. So from each capture:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">python3 final.py
+      <pre id="code-1"><code class="language-text">Δg = g1 - g0 = v·w      (primitive direction w, scale v)
+Δb = b1 - b0 = v·t   =&gt;  t = Δb / v</code></pre>
+      
+    </figure><p>Taking the 13 distinct primitive directions from all 22 captures, the offsets <code>t</code> came
+out <strong>identical for every capture that shared a direction</strong> - a strong ReLU signature.</p>
+<p>But the <em>base</em> term <code>c = g - Σ_active (Δg)</code> was <strong>not constant</strong> across clouds, which
+looked like &quot;not a ReLU net&quot;. The resolution:</p>
+<blockquote>
+<p><strong><code>model_version</code> is a real trap.</strong> 4 captures (indices 0, 8, 18, 19) are tagged
+<code>v-41e59d</code>; the other 18 are <code>v-8fb4ff</code>. They are <em>two different models</em>.</p>
+</blockquote>
+<p>Re-running the analysis on <strong>v-8fb4ff only</strong>:</p>
+<ul>
+<li>18 captures → <strong>9 distinct units</strong> (not 13).</li>
+<li>A consistent choice of which side of each hyperplane is &quot;active&quot; exists (2^9 search),
+giving a constant base term <code>c = (-3,-2,-5,0,1,-5)</code>, <code>d = 0</code>.</li>
+</ul>
+<p>The 4 <code>v-41e59d</code> captures simply belong to a different function - they are 56 points that
+the v-8fb4ff net correctly does <em>not</em> match.</p>
+<h2 id="step-3-assembling-and-verifying-the-net"><a class="wu-anchor" href="#step-3-assembling-and-verifying-the-net" aria-hidden="true">#</a>Step 3 - Assembling and verifying the net</h2>
+<p>Model: <code>f(x) = c·x + d + Σ_{j=1..9} [active_j(x)] · (inc_j·x + s_j)</code>,
+<code>active_j(x) = [w_j·x + t_j &gt; 0] XOR flip_j</code>.</p>
+<ul>
+<li><code>inc_j</code> solved exactly from <code>g - c = Σ active_j · inc_j</code> (36 clouds × 6 eqs, rank 9).</li>
+<li><code>s_j, d</code> solved exactly from <code>b = d + Σ active_j · s_j</code>.</li>
+<li>All solved values are integers (float residual ~1e-13).</li>
+</ul>
+<p><strong>Verification:</strong> the reconstructed net reproduces <code>y</code> exactly on</p>
+<ul>
+<li>all 18 v-8fb4ff captures&#39; cloud points (252/252), and</li>
+<li>all 16 anchors (16/16).</li>
+</ul>
+<p>Total <strong>268/268 exact</strong>, and the only mismatches anywhere are the 56 points from the
+other model version. Because the 16 anchors (points the net was <em>not</em> fit on, in cells
+never sampled by clouds) are reproduced exactly, the net genuinely generalises - so its
+values on the 24 targets are correct.</p>
+<h2 id="step-4-submit"><a class="wu-anchor" href="#step-4-submit" aria-hidden="true">#</a>Step 4 - Submit</h2>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">python3 final.py            # prints the 24 reduced rationals
 python3 unlock.py '[&quot;5441/64&quot;, ...]'
 # isfcr{577027585a0778773aa949d9}</code></pre>
       
-    </figure><p>Key lessons: 7 points in R^6 is a minimal affine probe, and clean integer fits signal piecewise-linearity; paired clusters straddling a kink reveal ReLU units via <code>(Δg, Δb)</code>; always split by <code>model_version</code> when a dataset field hints at provenance - two models were deliberately mixed; anchors are the generalisation check that licenses trusting extrapolated predictions.</p>
+    </figure><h2 id="key-lessons"><a class="wu-anchor" href="#key-lessons" aria-hidden="true">#</a>Key lessons</h2>
+<ul>
+<li>7 points in R^6 = a minimal affine probe; exact <strong>integer</strong> fits ⇒ piecewise-linear.</li>
+<li>Paired &quot;clouds&quot; straddling a kink reveal ReLU units via <code>(Δg, Δb)</code>.</li>
+<li><strong>Always split by <code>model_version</code></strong> - the dataset mixed two models on purpose.</li>
+<li>Anchors are the generalisation check that licenses extrapolating to the targets.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#step-1-the-model-is-piecewise-linear-integer-weights">Step 1 - The model is piecewise-linear (integer weights)</a></li><li><a href="#step-2-recovering-the-relu-units-and-spotting-the-version-trap">Step 2 - Recovering the ReLU units (and spotting the version trap)</a></li><li><a href="#step-3-assembling-and-verifying-the-net">Step 3 - Assembling and verifying the net</a></li><li><a href="#step-4-submit">Step 4 - Submit</a></li><li><a href="#key-lessons">Key lessons</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">

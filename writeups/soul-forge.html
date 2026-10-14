@@ -68,7 +68,24 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><strong>TL;DR</strong></p>
+<ul>
+<li><strong>Event:</strong> Byteme 2026 (CTF7)</li>
+<li><strong>Challenge:</strong> Soul Forge</li>
+<li><strong>Author:</strong> Pratik Jadhav</li>
+<li><strong>Category:</strong> Cryptography</li>
+<li><strong>Difficulty:</strong> Easy (100 pts)</li>
+<li><strong>Flag format:</strong> <code>OWASP{...}</code></li>
+</ul>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4nd0m}</code></pre>
+      
+    </figure><h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
 <p>Two ciphertexts encrypted with the same keystream (two-time pad). XOR the
 ciphertexts to cancel the keystream, then crib-drag the XOR to recover both
 plaintexts. The flag was in the longer message.</p>
@@ -101,9 +118,9 @@ prefix. This is the classic two-time pad scenario:</p>
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">C1 = P1 XOR KS
+      <pre id="code-2"><code class="language-text">C1 = P1 XOR KS
 C2 = P2 XOR KS
 C1 XOR C2 = P1 XOR P2    (keystream cancels)</code></pre>
       
@@ -113,10 +130,10 @@ C1 XOR C2 = P1 XOR P2    (keystream cancels)</code></pre>
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">X = T1 XOR T2
-  = 00000000000000000000000  (first 12 bytes - shared prefix)
+      <pre id="code-3"><code class="language-text">X = T1 XOR T2
+  = 00000000000000000000000  (first 12 bytes — shared prefix)
     01e00100104137f0075032936701d1c4212097f14
     551f02083d1500424d56053a460b132c0f50045a
     1436115140</code></pre>
@@ -125,52 +142,51 @@ C1 XOR C2 = P1 XOR P2    (keystream cancels)</code></pre>
 <h2 id="3-crib-dragging"><a class="wu-anchor" href="#3-crib-dragging" aria-hidden="true">#</a>3. Crib dragging</h2>
 <p>Starting from the identical prefix, cribs were tested against X to find
 English text in one message and leet-speak flag content in the other.</p>
-<p><strong>Shared prefix (positions 0-11):</strong> Both messages start with <code>Soul Forge: </code>
+<p><strong>Shared prefix (positions 0 - 11):</strong> Both messages start with <code>Soul Forge: </code>
 (12 bytes, all-zero XOR confirms identical text).</p>
-<p><strong>Positions 12-17:</strong> XOR bytes <code>1e 00 10 01 04 13</code> match the word pair
+<p><strong>Positions 12 - 17:</strong> XOR bytes <code>1e 00 10 01 04 13</code> match the word pair
 <code>Secret</code> / <code>Messag</code>. The XOR at position 18 is <code>0x7f</code>, which forces a
 punctuation/special character pair (<code>_</code> / space).</p>
-<p><strong>Positions 20-56:</strong> The crib <code>:The forge remembers every sacrifice.</code>
-tested against X produces clean leet-speak output:</p>
+<p><strong>Positions 20 - 56:</strong> The crib <code>:The forge remembers every sacrifice.</code> tested
+against X produces clean leet-speak output:</p>
 <figure class="wu-code wu-code-output" data-lines="2">
-      <figcaption>
-        
-        <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
-      </figcaption>
-      <pre id="code-3"><code class="language-text">P1[20:57] = &quot;:The forge remembers every sacrifice.&quot;
-P2[20:57] = &quot;OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4n&quot;</code></pre>
-      
-    </figure><p>Every byte decodes to a valid flag character - letters, digits, and
-underscores in coherent leet speak (&quot;soul forge primes are never r4n...&quot;).</p>
-<h2 id="4-completing-the-flag"><a class="wu-anchor" href="#4-completing-the-flag" aria-hidden="true">#</a>4. Completing the flag</h2>
-<p>The recovered flag text ends at <code>...r4n</code> (position 56) - the overlap
-boundary. T2 has 20 more bytes beyond T1&#39;s length, but those can&#39;t be
-decrypted from the pair alone since there&#39;s no corresponding T1 data and the
-keystream doesn&#39;t repeat.</p>
-<p>The partial <code>r4n</code> strongly suggests <code>r4nd0m</code> (&quot;random&quot;), giving:</p>
-<blockquote>
-<p><strong>soul forge primes are never random</strong></p>
-</blockquote>
-<p>This is cryptographically meaningful - non-random primes break public-key
-cryptography - and fits the challenge&#39;s crypto theme. Submitted and
-confirmed:</p>
-<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-4"><code class="language-text">OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4nd0m}</code></pre>
+      <pre id="code-4"><code class="language-text">P1[20:57] = &quot;:The forge remembers every sacrifice.&quot;
+P2[20:57] = &quot;OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4n&quot;</code></pre>
+      
+    </figure><p>Every byte decodes to a valid flag character - letters, digits, and
+underscores in coherent leet speak (&quot;soul forge primes are never r4n...&quot;).</p>
+<h2 id="4-completing-the-flag"><a class="wu-anchor" href="#4-completing-the-flag" aria-hidden="true">#</a>4. Completing the flag</h2>
+<p>The recovered flag text ends at <code>...r4n</code> (position 56) - the overlap boundary.
+T2 has 20 more bytes beyond T1&#39;s length, but those can&#39;t be decrypted from the
+pair alone since there&#39;s no corresponding T1 data and the keystream doesn&#39;t
+repeat.</p>
+<p>The partial <code>r4n</code> strongly suggests <code>r4nd0m</code> (&quot;random&quot;), giving:</p>
+<blockquote>
+<p><strong>soul forge primes are never random</strong></p>
+</blockquote>
+<p>This is cryptographically meaningful - non-random primes break public-key
+cryptography - and fits the challenge&#39;s crypto theme. Submitted and confirmed:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4nd0m}</code></pre>
       
     </figure><h2 id="5-full-recovered-plaintexts"><a class="wu-anchor" href="#5-full-recovered-plaintexts" aria-hidden="true">#</a>5. Full recovered plaintexts</h2>
 <figure class="wu-code wu-code-output" data-lines="2">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-5"><code class="language-text">P1 = &quot;Soul Forge: Secret_ :The forge remembers every sacrifice.&quot;   (57 bytes)
+      <pre id="code-6"><code class="language-text">P1 = &quot;Soul Forge: Secret_ :The forge remembers every sacrifice.&quot;   (57 bytes)
 P2 = &quot;Soul Forge: Messag  OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4nd0m}...&quot;  (77 bytes)</code></pre>
       
     </figure><h2 id="6-reproduce"><a class="wu-anchor" href="#6-reproduce" aria-hidden="true">#</a>6. Reproduce</h2>
@@ -178,9 +194,9 @@ P2 = &quot;Soul Forge: Messag  OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4nd0m}...&quot
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-6"><code class="language-text">$ python3 solve.py
+      <pre id="code-7"><code class="language-text">$ python3 solve.py
 [*] T1=57B  T2=77B  identical prefix=12 bytes
 [*] XOR overlap=57 bytes (limited by shorter ciphertext)
 [*] First 12 XOR bytes are 0x00 -&gt; both plaintexts share a 12-char prefix
@@ -188,15 +204,15 @@ P2 = &quot;Soul Forge: Messag  OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4nd0m}...&quot
 [*] P2 (flag msg)  = Soul Forge: Messag  OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4n
 [+] Verified: keystream re-encrypts both plaintexts to original ciphertexts
 [*] Partial flag from overlap: OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4n
-[*] Ends with 'r4n' - completing as 'r4nd0m' (&quot;random&quot;, cryptographically meaningful)
+[*] Ends with 'r4n' — completing as 'r4nd0m' (&quot;random&quot;, cryptographically meaningful)
 [+] FLAG: OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4nd0m}</code></pre>
       
     </figure><h2 id="key-takeaways"><a class="wu-anchor" href="#key-takeaways" aria-hidden="true">#</a>Key takeaways</h2>
 <ul>
-<li>Two ciphertexts sharing a prefix = <strong>reused keystream</strong>. XOR them to
-cancel the key material.</li>
-<li><strong>Crib dragging</strong> on <code>P1 XOR P2</code>: guess a word in one message, XOR it
-against X, check if the result is plausible text in the other message.</li>
+<li>Two ciphertexts sharing a prefix = <strong>reused keystream</strong>. XOR them to cancel
+the key material.</li>
+<li><strong>Crib dragging</strong> on <code>P1 XOR P2</code>: guess a word in one message, XOR it against
+X, check if the result is plausible text in the other message.</li>
 <li>The <code>0x7f</code> XOR byte at position 18 was a constraint that narrowed the
 character pair to <code>_</code> / space - useful for bootstrapping the crib drag.</li>
 <li>When the flag extends beyond the overlap, context and domain knowledge
@@ -207,7 +223,7 @@ character pair to <code>_</code> / space - useful for bootstrapping the crib dra
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#1-reused-keystream">1. Reused keystream</a></li><li><a href="#2-xor-the-ciphertexts">2. XOR the ciphertexts</a></li><li><a href="#3-crib-dragging">3. Crib dragging</a></li><li><a href="#4-completing-the-flag">4. Completing the flag</a></li><li><a href="#5-full-recovered-plaintexts">5. Full recovered plaintexts</a></li><li><a href="#6-reproduce">6. Reproduce</a></li><li><a href="#key-takeaways">Key takeaways</a></li></ol>
+        <ol><li><a href="#flag">Flag</a></li><li><a href="#tldr">TL;DR</a></li><li><a href="#1-reused-keystream">1. Reused keystream</a></li><li><a href="#2-xor-the-ciphertexts">2. XOR the ciphertexts</a></li><li><a href="#3-crib-dragging">3. Crib dragging</a></li><li><a href="#4-completing-the-flag">4. Completing the flag</a></li><li><a href="#5-full-recovered-plaintexts">5. Full recovered plaintexts</a></li><li><a href="#6-reproduce">6. Reproduce</a></li><li><a href="#key-takeaways">Key takeaways</a></li></ol>
       </nav>
   </div>
 

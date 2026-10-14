@@ -68,18 +68,20 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>From the Echoes of Vormir memory forensics series. The artifact is <code>soul.zip</code>, containing <code>soul.mem</code>, a 2.6 GB Windows memory dump captured with FTK Imager, reused across all five sub-challenges.</p>
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p>We&#39;re given a memory dump (<code>soul.mem</code>) from a Windows machine. The challenge series has five artifacts to find. The memory image is reused across all sub-challenges.</p>
+<p><strong>File:</strong> <code>soul.zip</code> -&gt; <code>soul.mem</code> (2.6 GB Windows memory dump)</p>
+<hr>
+<h2 id="mem-1-when-it-happened-100-pts-easy"><a class="wu-anchor" href="#mem-1-when-it-happened-100-pts-easy" aria-hidden="true">#</a>Mem-1: When It Happened (100 pts - Easy)</h2>
 <blockquote>
-<p><em>Before following the trail, determine when the machine gave up its
-secrets. Find the time recorded in the memory image.</em>
+<p><em>Before following the trail, determine when the machine gave up its secrets.</em>
+<em>Find the time recorded in the memory image.</em>
 <em>Flag format: OWASP{YYYY-MM-DD HH:MM:SS}</em></p>
 </blockquote>
-<h2 id="approach"><a class="wu-anchor" href="#approach" aria-hidden="true">#</a>Approach</h2>
-<p>This is a straightforward memory forensics warm-up. The challenge asks for
-the timestamp embedded in the memory image - i.e. the <code>SystemTime</code> recorded
-when the dump was captured.</p>
-<h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
-<p>Step 1 - Extract the memory dump:</p>
+<h3 id="approach"><a class="wu-anchor" href="#approach" aria-hidden="true">#</a>Approach</h3>
+<p>This is a straightforward memory forensics warm-up. The challenge asks for the timestamp embedded in the memory image -- i.e., the <code>SystemTime</code> recorded when the dump was captured.</p>
+<h3 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h3>
+<p><strong>Step 1: Extract the memory dump</strong></p>
 <figure class="wu-code" data-lines="1">
       <figcaption>
         
@@ -89,7 +91,7 @@ when the dump was captured.</p>
       <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">unzip soul.zip</span></span></code></pre>
       
     </figure><p>This produces <code>soul.mem</code>, a ~2.6 GB raw memory image.</p>
-<p>Step 2 - Identify the image and extract metadata with Volatility 3:</p>
+<p><strong>Step 2: Identify the image and extract metadata with Volatility 3</strong></p>
 <figure class="wu-code" data-lines="1">
       <figcaption>
         
@@ -127,14 +129,22 @@ when the dump was captured.</p>
 <td>NtProductWinNt</td>
 </tr>
 </tbody></table>
-<p>The <code>SystemTime</code> field in the <code>_KUSER_SHARED_DATA</code> structure records the
-system clock at the time the memory was captured.</p>
-
+<p>The <code>SystemTime</code> field in the <code>_KUSER_SHARED_DATA</code> structure records the system clock at the time the memory was captured.</p>
+<h3 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h3>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">OWASP{2026-10-08 05:07:43}</code></pre>
+      
+    </figure>
     </article>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#approach">Approach</a></li><li><a href="#solution">Solution</a></li></ol>
+        <ol><li><a href="#overview">Overview</a></li><li><a href="#mem-1-when-it-happened-100-pts-easy">Mem-1: When It Happened (100 pts - Easy)</a><ol class="wu-toc-sub"><li><a href="#approach">Approach</a></li><li><a href="#solution">Solution</a></li><li><a href="#flag">Flag</a></li></ol></li></ol>
       </nav>
   </div>
 

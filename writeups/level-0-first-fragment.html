@@ -68,41 +68,45 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p><strong>Attachment</strong></p>
-<p><code>pieces_0.zip</code> (Google Drive <code>1xzftGKuzaUB9p3oSCpjp3uISb_VJlXIr</code>). Contains
-a single folder <code>pieces_0/</code> with <strong>9 PNG tiles</strong> <code>piece_001.png … piece_009.png</code>, each <strong>400×400, 8-bit grayscale</strong>.</p>
-<p>The zip uses <strong>WinZip AES-256</strong> (compress method <code>99</code>, PK version 5.1). Old
-<code>unzip</code> and Python <code>zipfile</code> both refuse it (&quot;need PK compat v5.1 /
-encrypted&quot;). <code>7z</code> handles it.</p>
+<h2 id="attachment"><a class="wu-anchor" href="#attachment" aria-hidden="true">#</a>Attachment</h2>
+<p><code>pieces_0.zip</code> (Google Drive <code>1xzftGKuzaUB9p3oSCpjp3uISb_VJlXIr</code>).
+Contains a single folder <code>pieces_0/</code> with <strong>9 PNG tiles</strong> <code>piece_001.png … piece_009.png</code>,
+each <strong>400×400, 8-bit grayscale</strong>.</p>
+<p>The zip uses <strong>WinZip AES-256</strong> (compress method <code>99</code>, PK version 5.1). Old <code>unzip</code>
+and Python <code>zipfile</code> both refuse it (&quot;need PK compat v5.1 / encrypted&quot;). <code>7z</code> handles it.</p>
 <h2 id="step-1-crack-the-zip-password"><a class="wu-anchor" href="#step-1-crack-the-zip-password" aria-hidden="true">#</a>Step 1 - Crack the zip password</h2>
-<p>The zip has no comment and the challenge ships no hint, but the whole event
-is OWASP-branded and the resource attachment literally says &quot;OWASP&quot;. The
-password is simply:</p>
-<figure class="wu-code wu-code-output" data-lines="5">
+<p>The zip has no comment and the challenge ships no hint, but the whole event is OWASP-branded
+and the resource attachment literally says &quot;OWASP&quot;. The password is simply:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">OWASP
-bash
-for p in owasp OWASP soulstone ... ; do 7z t -p&quot;$p&quot; pieces_0.zip &amp;&amp; echo &quot;$p&quot;; done
-# -&gt; OWASP
-7z x -pOWASP pieces_0.zip</code></pre>
+      <pre id="code-1"><code class="language-text">OWASP</code></pre>
+      
+    </figure><figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">for</span> p <span class="hljs-keyword">in</span> owasp OWASP soulstone ... ; <span class="hljs-keyword">do</span> 7z t -p<span class="hljs-string">&quot;<span class="hljs-variable">$p</span>&quot;</span> pieces_0.zip &amp;&amp; <span class="hljs-built_in">echo</span> <span class="hljs-string">&quot;<span class="hljs-variable">$p</span>&quot;</span>; <span class="hljs-keyword">done</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># -&gt; OWASP</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">7z x -pOWASP pieces_0.zip</span></span></code></pre>
       
     </figure><h2 id="step-2-recognise-the-puzzle"><a class="wu-anchor" href="#step-2-recognise-the-puzzle" aria-hidden="true">#</a>Step 2 - Recognise the puzzle</h2>
-<p>The nine 400×400 tiles are slices of one <strong>1200×1200 QR code</strong> smashed into
-a 3×3 grid and shuffled. Two giveaways:</p>
+<p>The nine 400×400 tiles are slices of one <strong>1200×1200 QR code</strong> smashed into a 3×3 grid and
+shuffled. Two giveaways:</p>
 <ul>
-<li>Module size ≈ <strong>24.49 px</strong> (measured from the smallest dark/white run),
-so a 1200 px image is ≈ <strong>49 modules</strong> → a QR version 6..8 with a quiet
-zone.</li>
-<li>Three tiles (<strong>007, 008, 009</strong>) each contain a full QR <strong>finder pattern</strong>
-(the 1:1:3:1:1 bullseye). The other six are dense data modules. One tile
-(<strong>006</strong>) carries the small <strong>alignment pattern</strong>.</li>
+<li>Module size ≈ <strong>24.49 px</strong> (measured from the smallest dark/white run), so a 1200 px image
+is ≈ <strong>49 modules</strong> → a QR version 6..8 with a quiet zone.</li>
+<li>Three tiles (<strong>007, 008, 009</strong>) each contain a full QR <strong>finder pattern</strong> (the 1:1:3:1:1
+bullseye). The other six are dense data modules. One tile (<strong>006</strong>) carries the small
+<strong>alignment pattern</strong>.</li>
 </ul>
-<p>Locating the finder centre in each of those tiles by template-matching the
-ideal 7-module finder (module = 1200/49):</p>
+<p>Locating the finder centre in each of those tiles by template-matching the ideal 7-module
+finder (module = 1200/49):</p>
 <table>
 <thead>
 <tr>
@@ -124,8 +128,8 @@ ideal 7-module finder (module = 1200/49):</p>
 </tr>
 </tbody></table>
 <h2 id="step-3-solve-the-geometry-this-is-the-whole-trick"><a class="wu-anchor" href="#step-3-solve-the-geometry-this-is-the-whole-trick" aria-hidden="true">#</a>Step 3 - Solve the geometry (this is the whole trick)</h2>
-<p>Work out where a valid QR&#39;s finders <em>should</em> be. Assume a QR <strong>version 6</strong> =
-41 modules, module <code>m = 24.49 px</code>, drawn with a <strong>quiet zone <code>q</code></strong>:</p>
+<p>Work out where a valid QR&#39;s finders <em>should</em> be. Assume a QR <strong>version 6</strong> = 41 modules,
+module <code>m = 24.49 px</code>, drawn with a <strong>quiet zone <code>q</code></strong>:</p>
 <ul>
 <li>top-left finder centre  = <code>(q + 3.5m, q + 3.5m)</code></li>
 <li>top-right finder centre = <code>(q + 37.5m, q + 3.5m)</code></li>
@@ -135,25 +139,22 @@ ideal 7-module finder (module = 1200/49):</p>
 <code>q + 37.5·24.49 = 97 + 918 ≈ 1015</code>.</p>
 <ul>
 <li>Tile <strong>008</strong> local (183,183) → top-left cell <strong>(row 0, col 0)</strong> ✓</li>
-<li>Tile <strong>009</strong> local (216,183): 216 + 800 = <strong>1016</strong> → top-right cell
-<strong>(row 0, col 2)</strong> ✓</li>
-<li>Tile <strong>007</strong> local (183,216): 216 + 800 = <strong>1016</strong> → bottom-left cell
-<strong>(row 2, col 0)</strong> ✓</li>
+<li>Tile <strong>009</strong> local (216,183): 216 + 800 = <strong>1016</strong> → top-right cell <strong>(row 0, col 2)</strong> ✓</li>
+<li>Tile <strong>007</strong> local (183,216): 216 + 800 = <strong>1016</strong> → bottom-left cell <strong>(row 2, col 0)</strong> ✓</li>
 </ul>
-<p>No rotation needed - the corner tiles drop straight in. Only the <strong>6 data
-tiles remain</strong>: <code>{001, 002, 003, 004, 005, 006}</code> into the 6 open cells
-<code>{1,3,4,5,7,8}</code> → just <strong>6! = 720</strong> candidate assemblies instead of
-9! = 362 880.</p>
+<p>No rotation needed - the corner tiles drop straight in. Only the <strong>6 data tiles remain</strong>:
+<code>{001, 002, 003, 004, 005, 006}</code> into the 6 open cells <code>{1,3,4,5,7,8}</code> → just <strong>6! = 720</strong>
+candidate assemblies instead of 9! = 362 880.</p>
 <h2 id="step-4-brute-force-the-last-six-and-decode"><a class="wu-anchor" href="#step-4-brute-force-the-last-six-and-decode" aria-hidden="true">#</a>Step 4 - Brute-force the last six and decode</h2>
-<p>Assemble each of the 720 permutations into a 1200×1200 image and hand it to
-a QR decoder (<code>zxing-cpp</code>). The correct one:</p>
+<p>Assemble each of the 720 permutations into a 1200×1200 image and hand it to a QR decoder
+(<code>zxing-cpp</code>). The correct one:</p>
 <figure class="wu-code wu-code-output" data-lines="3">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">cells (row-major 0..8):  [008, 001, 009,
+      <pre id="code-3"><code class="language-text">cells (row-major 0..8):  [008, 001, 009,
                           005, 003, 004,
                           007, 002, 006]</code></pre>
       
@@ -162,28 +163,28 @@ a QR decoder (<code>zxing-cpp</code>). The correct one:</p>
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-3"><code class="language-text">SOUL STONE // FIRST FRAGMENT // OWASP{Th3_f1rst_fr4gm3nt}</code></pre>
+      <pre id="code-4"><code class="language-text">SOUL STONE // FIRST FRAGMENT // OWASP{Th3_f1rst_fr4gm3nt}</code></pre>
       
     </figure><h2 id="step-5-flag"><a class="wu-anchor" href="#step-5-flag" aria-hidden="true">#</a>Step 5 - Flag</h2>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-4"><code class="language-text">OWASP{Th3_f1rst_fr4gm3nt}</code></pre>
+      <pre id="code-5"><code class="language-text">OWASP{Th3_f1rst_fr4gm3nt}</code></pre>
       
     </figure><h2 id="reproduce"><a class="wu-anchor" href="#reproduce" aria-hidden="true">#</a>Reproduce</h2>
 <figure class="wu-code" data-lines="3">
       <figcaption>
         
         <span class="wu-code-lang">bash</span>
-        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-5"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">7z x -pOWASP pieces_0.zip -opieces_0</span></span>
-<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 solve.py     <span class="hljs-comment"># see solve.py - arranges tiles + decodes</span></span></span>
+      <pre id="code-6"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">7z x -pOWASP pieces_0.zip -opieces_0</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 solve.py     <span class="hljs-comment"># see solve.py — arranges tiles + decodes</span></span></span>
 <span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># needs: pip install pillow numpy zxing-cpp</span></span></span></code></pre>
       
     </figure><p><code>solved_first_fragment.png</code> in this folder is the reconstructed QR.</p>
@@ -192,7 +193,7 @@ a QR decoder (<code>zxing-cpp</code>). The correct one:</p>
     <nav class="wu-toc" aria-label="On this page">
         <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
         <p class="wu-toc-h">On this page</p>
-        <ol><li><a href="#step-1-crack-the-zip-password">Step 1 - Crack the zip password</a></li><li><a href="#step-2-recognise-the-puzzle">Step 2 - Recognise the puzzle</a></li><li><a href="#step-3-solve-the-geometry-this-is-the-whole-trick">Step 3 - Solve the geometry (this is the whole trick)</a></li><li><a href="#step-4-brute-force-the-last-six-and-decode">Step 4 - Brute-force the last six and decode</a></li><li><a href="#step-5-flag">Step 5 - Flag</a></li><li><a href="#reproduce">Reproduce</a></li></ol>
+        <ol><li><a href="#attachment">Attachment</a></li><li><a href="#step-1-crack-the-zip-password">Step 1 - Crack the zip password</a></li><li><a href="#step-2-recognise-the-puzzle">Step 2 - Recognise the puzzle</a></li><li><a href="#step-3-solve-the-geometry-this-is-the-whole-trick">Step 3 - Solve the geometry (this is the whole trick)</a></li><li><a href="#step-4-brute-force-the-last-six-and-decode">Step 4 - Brute-force the last six and decode</a></li><li><a href="#step-5-flag">Step 5 - Flag</a></li><li><a href="#reproduce">Reproduce</a></li></ol>
       </nav>
   </div>
 

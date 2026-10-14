@@ -67,31 +67,186 @@
 
     <div class="wu-layout">
     <article class="wu-article">
-<p>An APK (925 KB) with a near-empty <code>MainActivity</code> that calls a single <code>native</code> method <code>bloom(byte[])</code> in <code>libgarden.so</code>, plus 1024 generated Java classes <code>one/sr/garden/leaf/L0000..L1023</code>, each with one <code>verify(byte[]) -&gt; byte[]</code> method encoding a system of 8 equations over 16 byte-variables (using jadx&#39;s decompiled forms of <code>(a|b)-(a&amp;b) == a^b</code> and <code>(x^y)+2(x&amp;y) == x+y</code>).</p>
-<p><strong>Solving all 1024 leaves:</strong> a small symbolic evaluator textually rewrites each <code>long jN = ...</code> line into <button type="button" class="wu-gloss" data-def="An SMT solver: give it symbolic variables and constraints and it finds a satisfying assignment or proves none exists.">z3</button> 32-bit BitVector operations, split on <code>||</code> for the final equality checks. All 1024 leaves are satisfiable; for each, <code>bArr2 XOR input[i&amp;15]</code> yields a 48-byte value. 1023 of them decode to a well-formed <code>isfcr{&lt;plant&gt;_&lt;hex&gt;}</code> plus junk bytes - pure decoys. Exactly <strong>one leaf (357)</strong> fails that pattern - &quot;the only leaf that remembers&quot; - so its raw output must be post-processed by native code.</p>
-<p><strong>Reversing <code>bloom()</code>:</strong> the tiny native library (<code>.text</code> only 0x12b8 bytes) computes a constant leaf index via an internal mixing function that <strong>never reads its input arguments</strong> (emulated in Unicorn, confirmed <code>index = 0x1ab67d65 &amp; 0x3ff = 357</code>), calls <code>one/sr/garden/leaf/L0357.verify()</code> via JNI reflection, XORs the 48-byte result against an internal state, then runs it through an internal &quot;mirror&quot; transform chain.</p>
-<p><strong>Full emulation instead of hand-reversing the mirror VM:</strong> rather than reimplementing the native transform routines by hand, the entire <code>bloom()</code> function is emulated in Unicorn with a <strong>stub JNI environment</strong> (mapped function-pointer table implementing <code>FindClass</code>, <code>GetStaticMethodID</code>, <code>CallStaticObjectMethodA</code>, array accessors, <code>NewStringUTF</code>, plus stubbed <code>snprintf</code>/<code>memcpy</code>), with <code>CallStaticObjectMethodA</code> honoured by substituting the precomputed leaf-357 result.</p>
-<figure class="wu-code wu-code-output" data-lines="1">
+<blockquote>
+<p>&quot;Something is growing in the mirror garden, and only one leaf remembers.&quot;</p>
+</blockquote>
+<h2 id="1-triage"><a class="wu-anchor" href="#1-triage" aria-hidden="true">#</a>1. Triage</h2>
+<p><code>mirror-garden.apk</code> (925 KB) contains:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
         <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-1"><code class="language-text">FINAL: isfcr{m1rr0r_g4rden_bl00ms_@t_m1dn1ght_7f3a}</code></pre>
+      <pre id="code-1"><code class="language-text">AndroidManifest.xml        package one.sr.garden, single activity MainActivity
+classes.dex                1026 classes: MainActivity, R, and 1024 obfuscated leaves
+lib/arm64-v8a/libgarden.so 9.8 KB native library
+res/layout/activity_main.xml</code></pre>
       
-    </figure><p>Negative control: feeding all-zero or arbitrary 16-byte input into the same emulation stops at a length/guard check and returns <code>the mirror cracks.</code> - confirming only the true leaf-357 preimage produces the flag.</p>
+    </figure><p><code>MainActivity</code> is minimal:</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">java</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-java">public class MainActivity extends Activity {
+    private native String bloom(byte[] bArr);
+    static { System.loadLibrary(&quot;garden&quot;); }
+    protected void onCreate(Bundle b) { ...
+        ((Button) findViewById(R.id.water)).setOnClickListener(v -&gt;
+            result.setText(MainActivity.this.bloom(editText.getText().toString().getBytes())));
+    }
+}</code></pre>
+      
+    </figure><p>So the real logic lives in <code>libgarden.so</code>; it validates the text typed into the app.</p>
+<h2 id="2-the-1024-leaves"><a class="wu-anchor" href="#2-the-1024-leaves" aria-hidden="true">#</a>2. The 1024 leaves</h2>
+<p><code>one/sr/garden/leaf/</code> holds <code>L0000</code> … <code>L1023</code>. Each has exactly one method:</p>
+<figure class="wu-code wu-code-output" data-lines="14">
+      <figcaption>
+        
+        <span class="wu-code-lang">java</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-java">public static byte[] verify(byte[] bArr) {
+    if (bArr == null || bArr.length != 16) return null;
+    long j5 = bArr[4] &amp; 255; ...                 // 16 input bytes
+    long j17 = (173 * j5) &amp; 0xffffffffL;         // products of bytes
+    long j19 = (j17 | j18) - (j17 &amp; j18);        // == j17 ^ j18
+    long j20 = ((j19 &lt;&lt; 2) | (j19 &gt;&gt;&gt; 30)) &amp; 0xffffffffL;   // rotl32
+    long j30 = ((((j25 ^ j29) + ((j25 &amp; j29) * 2)) &amp; 0xffffffffL) * 45) &amp; 0xffffffffL; // (A+B)*45
+    ...
+    if ( &lt;8 expressions&gt; != &lt;8 constants&gt; ) return null;     // 8 x 32-bit equations
+    byte[] bArr2 = { ... 48 bytes ... };
+    byte[] bArr3 = new byte[48];
+    for (int i=0;i&lt;48;i++) bArr3[i] = (byte)(bArr2[i] ^ bArr[i &amp; 15]);
+    return bArr3;
+}</code></pre>
+      
+    </figure><p>Each leaf therefore defines a system of 8 equations over 16 byte-variables. The two
+algebraic identities used by jadx&#39;s decompiler make this tractable:
+<code>(a|b)-(a&amp;b) == a^b</code> and <code>(x^y)+2(x&amp;y) == x+y</code> (all mod 2^32).</p>
+<h3 id="solving-all-leaves"><a class="wu-anchor" href="#solving-all-leaves" aria-hidden="true">#</a>Solving all leaves</h3>
+<p>I wrote a tiny symbolic evaluator: every <code>long jN = ...</code> line is textually rewritten
+(<code>4294967295L</code>→<code>M32</code>, <code>bArr[N] &amp; 255</code>→<code>B(N)</code>, <code>&gt;&gt;&gt;</code>→logical shift) and evaluated with
+an operator-overloading <code>Sym</code> class wrapping <button type="button" class="wu-gloss" data-def="An SMT solver: give it symbolic variables and constraints and it finds a satisfying assignment or proves none exists.">z3</button> 32-bit BitVectors. The final <code>if (E1 != C1 || ...)</code> is split on <code>||</code> into equalities. Gravity: watch out for the two guard lines
+<code>if (bArr == null || bArr.length != 16)</code> - skip them or the parser chokes.</p>
+<p>Result: <strong>all 1024 leaves are satisfiable</strong>. For each leaf, <code>bArr2 XOR input[i&amp;15]</code> is a
+48-byte value. 1023 of them begin with <code>isfcr{&lt;plant-name&gt;_&lt;hex&gt;}</code> followed by 24 junk
+bytes - i.e. decoys. Condition grep <code>^isfcr\{...}</code> matched every leaf <strong>except one</strong>:</p>
 <figure class="wu-code wu-code-output" data-lines="1">
       <figcaption>
         
         <span class="wu-code-lang">output</span>
-        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
       </figcaption>
-      <pre id="code-2"><code class="language-text">isfcr{m1rr0r_g4rden_bl00ms_@t_m1dn1ght_7f3a}</code></pre>
+      <pre id="code-4"><code class="language-text">leaf 357 -&gt; b'\x85\xd3\xd1\xdf\xac\xd6\xab\xaaB\x93\x1f\x9a{&amp;\xb76i\xde\xcf@\xa7\xe4$g\xc9\x96\xe91\xba\xacn\x8dl\xe5\xefC\xf2+\xcb\xd1O\xaf\xbf\xc36\x0bX\x9b'</code></pre>
       
-    </figure><p>Reusable lessons: a tiny APK whose only logic is one <code>native</code> method means the JNI body <em>is</em> the challenge - read the function-pointer call sites rather than guessing the (large) JNI index table. 1024 generated classes are just constraint systems, solved per-leaf with z3. Emulating obfuscated native transforms with a stub JNI/libc is faster and exact compared to hand-reversing them, provided a negative control proves the result comes from the intended path.</p>
+    </figure><p>Leaf 357 is the odd one out - &quot;the only leaf that remembers&quot;. But its raw output isn&#39;t a
+flag, so the native code must post-process it.</p>
+<h2 id="3-reversing-bloom"><a class="wu-anchor" href="#3-reversing-bloom" aria-hidden="true">#</a>3. Reversing <code>bloom()</code></h2>
+<p><code>libgarden.so</code> <code>.text</code> is only 0x12b8 bytes. <code>Java_one_sr_garden_MainActivity_bloom</code> does:</p>
+<ol>
+<li><code>bl fcn.00002374</code> with <code>x0 = buffer</code>, then <code>w21 = word0(buffer) &amp; 0x3ff</code> → <strong>leaf index</strong>.</li>
+<li>Builds a format string and <code>snprintf(buf, 0x40, fmt, w21)</code>.</li>
+<li><code>FindClass(buf)</code>, <code>GetStaticMethodID(clazz,&quot;verify&quot;,&quot;([B)[B&quot;)</code>, then
+<code>CallStaticObjectMethodA(env, clazz, mid, inputArray)</code> → the leaf&#39;s 48-byte result.</li>
+<li><code>GetArrayLength</code> must be 48, <code>GetByteArrayElements</code>, XOR with an internal 48-byte
+state, <code>ReleaseByteArrayElements</code>.</li>
+<li>A chain of internal transform routines (<code>fcn.00002810</code>, <code>fcn.00002b0c</code>) - the
+&quot;mirror&quot; - over the XOR result.</li>
+<li><code>NewStringUTF(env, buf)</code> returns the displayed string.</li>
+</ol>
+<h3 id="step-3a-the-index-is-a-constant"><a class="wu-anchor" href="#step-3a-the-index-is-a-constant" aria-hidden="true">#</a>Step 3a - the index is a constant</h3>
+<p>I emulated <code>fcn.00002374</code> with Unicorn (ARM64). It builds a 16-word state from constant
+tables at <code>.rodata</code> 0x600 / 0x72c / 0x5a0, runs 24 rounds using <code>fcn.000027e8</code>
+(<code>((x^y)*0x9e3779b1 + z)</code> ror-based mixer), and writes 0x40 bytes to its output buffer.
+It never reads the input arguments. Output word0 = <code>0x1ab67d65</code>, so:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">index = 0x1ab67d65 &amp; 0x3ff = 357   -&gt;  class &quot;one/sr/garden/leaf/L0357&quot;</code></pre>
+      
+    </figure><p>Emulating the string-builder region confirmed <code>fmt = &quot;one/sr/garden/leaf/L%04d&quot;</code>,
+<code>name = &quot;verify&quot;</code>, <code>sig = &quot;([B)[B&quot;</code>.</p>
+<h3 id="step-3b-emulate-the-whole-thing-instead-of-hand-reversing-the-mirror-vm"><a class="wu-anchor" href="#step-3b-emulate-the-whole-thing-instead-of-hand-reversing-the-mirror-vm" aria-hidden="true">#</a>Step 3b - emulate the whole thing instead of hand-reversing the mirror VM</h3>
+<p>Rather than reimplement <code>fcn.00002810</code>/<code>fcn.00002b0c</code> by hand, I emulated the <strong>entire
+<code>bloom()</code></strong> in Unicorn with a <strong>stub JNI environment</strong>:</p>
+<ul>
+<li>JNIEnv is a pointer-to-pointer-to-table; I mapped a table of 256 stub <code>ret</code>
+instructions and implemented, by observed offset:
+<code>0x30</code> FindClass, <code>0xb8</code> DeleteLocalRef, <code>0x388</code> GetStaticMethodID,
+<code>0x390</code> CallStaticObjectMethodA, <code>0x558</code> GetArrayLength, <code>0x580</code> NewByteArray,
+<code>0x5c0</code> GetByteArrayElements, <code>0x600</code> ReleaseByteArrayElements, <code>0x538</code> NewStringUTF.</li>
+<li><code>CallStaticObjectMethodA</code> is honoured by computing leaf 357&#39;s <code>verify</code> for the passed
+array (I precomputed the 48-byte result and the 16-byte preimage).</li>
+<li>The two libc imports are stubbed: <code>snprintf</code> (PLT 0x2dd0, handles <code>%04d</code>) and <code>memcpy</code>
+(PLT 0x2de0).</li>
+</ul>
+<p>Run with <code>x0=ENV</code>, <code>x2 = 16-byte leaf-357 solution</code>, executed <code>0x1b28 → 0x2288</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">FINAL: isfcr{m1rr0r_g4rden_bl00ms_@t_m1dn1ght_7f3a}</code></pre>
+      
+    </figure><h3 id="step-3c-negative-control"><a class="wu-anchor" href="#step-3c-negative-control" aria-hidden="true">#</a>Step 3c - negative control</h3>
+<p>Same emulation with <code>x2 = 16 zero bytes</code>, or <code>x2 = &quot;AAAAAAAAAAAAAAAA&quot;</code>, both stop at the
+<code>GetStatic...</code>/length checks and return the error string <code>the mirror cracks.</code>. Only the
+true preimage of leaf 357 passes. This proves the flag is produced by the leaf and not by
+a branch artifact.</p>
+<h2 id="4-answer"><a class="wu-anchor" href="#4-answer" aria-hidden="true">#</a>4. Answer</h2>
+<p>Leaf 357&#39;s unique 16-byte preimage is
+<code>4c 2e 5d 5e 6f 6f 71 28 4c 6c 55 5e 28 61 5d 23</code> (<code>L.]^ooq(LlU^(a]#</code>). The native
+mirror transform turns <code>bArr2 XOR input[i&amp;15]</code> into the flag:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">isfcr{m1rr0r_g4rden_bl00ms_@t_m1dn1ght_7f3a}</code></pre>
+      
+    </figure><h2 id="5-files"><a class="wu-anchor" href="#5-files" aria-hidden="true">#</a>5. Files</h2>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">solve/solve_leaves.py   z3 parser + solver for one leaf (Sym wrapper)
+solve/run_all.py        parallel solve of all 1024 leaves
+solve/emu_bloom.py      Unicorn + stub-JNI emulation of Java_..._bloom -&gt; flag
+work/jadxout/           jadx decompilation of classes.dex
+work/lib/arm64-v8a/libgarden.so
+work/bloom.asm          r2 disassembly of the native lib</code></pre>
+      
+    </figure><h2 id="6-reusable-lessons"><a class="wu-anchor" href="#6-reusable-lessons" aria-hidden="true">#</a>6. Reusable lessons</h2>
+<ul>
+<li>A tiny APK whose only logic is a <code>native</code> method: the JNI body is the challenge. Read
+the JNI function-pointer offsets (<code>ldr x8,[x8,off]; blr x8</code>) to identify calls instead
+of guessing the (large) JNI index table.</li>
+<li>1024 generated Java &quot;leaf&quot; classes are just constraint systems; parse them with a
+symbolic operator-overloading evaluator and solve each with z3 (all are sat).</li>
+<li><code>(a|b)-(a&amp;b)</code> is <code>a^b</code>; <code>(x^y)+2(x&amp;y)</code> is <code>x+y</code> - jadx emits these instead of <code>^</code>/<code>+</code>.</li>
+<li><strong>Emulate</strong> obfuscated native transforms (Unicorn) with stub JNI/libc rather than
+reversing them; it is faster and exact. Always run a negative control (wrong input) to
+prove the value comes from the intended path.</li>
+<li>Watch for the length-guard <code>if (bArr == null || bArr.length != 16)</code> when auto-parsing
+generated Java; it is not the real condition.</li>
+</ul>
 
     </article>
-    
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-triage">1. Triage</a></li><li><a href="#2-the-1024-leaves">2. The 1024 leaves</a><ol class="wu-toc-sub"><li><a href="#solving-all-leaves">Solving all leaves</a></li></ol></li><li><a href="#3-reversing-bloom">3. Reversing bloom()</a><ol class="wu-toc-sub"><li><a href="#step-3a-the-index-is-a-constant">Step 3a - the index is a constant</a></li><li><a href="#step-3b-emulate-the-whole-thing-instead-of-hand-reversing-the-mirror-vm">Step 3b - emulate the whole thing instead of hand-reversing the mirror VM</a></li><li><a href="#step-3c-negative-control">Step 3c - negative control</a></li></ol></li><li><a href="#4-answer">4. Answer</a></li><li><a href="#5-files">5. Files</a></li><li><a href="#6-reusable-lessons">6. Reusable lessons</a></li></ol>
+      </nav>
   </div>
 
   <nav class="wu-pager" aria-label="More writeups">
