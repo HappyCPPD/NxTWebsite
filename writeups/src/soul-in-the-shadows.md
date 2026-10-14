@@ -17,6 +17,8 @@ Attachment: a player archive containing a single image, `archive.png`, and a
 short `challenge.txt` repeating the prompt. The title and the "more than you can
 see" line both point at pixel-level steganography.
 
+![archive.png, the only image in the player archive](../images/writeups/soul-in-the-shadows-archive.jpg "420x496")
+
 ## 2. Triage
 
 First pass is always cheap metadata and structure inspection, because it tells

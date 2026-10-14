@@ -30,6 +30,8 @@ Artefact: `flag.txt`
 The only attachment is a single PNG - a matplotlib scatter plot titled
 **"SOUL STONE - SIGNAL RESIDUAL ANALYSIS"**.
 
+![The challenge attachment, a scatter plot](../images/writeups/invisible-signal-attachment.jpg "640x354")
+
 - x-axis: *Observation Index* (0 - 40)  → **character position**
 - y-axis: *Residual Magnitude* (~35 - 130) → **ASCII value**
 

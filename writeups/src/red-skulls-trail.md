@@ -38,6 +38,8 @@ Records 1, 2, 4, and 5 each name a user who returned the stone (`soulkeeper`, `v
 
 Git history reveals RECORD6 was originally uploaded as `soul_stone.png`, then renamed through several steps:
 
+![RECORD6 as recovered from the repository](../images/writeups/red-skulls-trail-record6.jpg "420x420")
+
 ```
 soul_stone.png → Nothing_suspicious.png → Nothing_suspicious.md → Nothing_suspicious → RECORD6
 ```

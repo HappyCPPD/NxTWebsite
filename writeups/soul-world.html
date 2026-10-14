@@ -76,6 +76,7 @@ time. Recover the concealed Soul Stone fragment.</p>
 <li>Attachment: <code>soul_world.png</code> - 80×80, 8-bit RGB, non-interlaced PNG (19 KB)</li>
 <li>Flag format: <code>OWASP{...}</code></li>
 </ul>
+<p><img src="../images/writeups/soul-world-attachment.png" alt="The challenge attachment, an 80x80 PNG" width="160" height="160" loading="lazy"></p>
 <h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
 <p>The hint &quot;hidden one bit at a time&quot; points straight at <strong>LSB (least-significant
 bit) steganography</strong>. With three colour channels (R, G, B) per pixel and 80×80

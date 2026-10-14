@@ -15,6 +15,8 @@ pixels. Extract the concealed message."
   a mild hint that low-order bits are doing work).
 - Flag format: `OWASP{...}`
 
+![The challenge attachment, an 80x80 PNG](../images/writeups/hidden-soul-attachment.png "160x160")
+
 ## Solution
 Classic LSB steganography in the colour channels.
 

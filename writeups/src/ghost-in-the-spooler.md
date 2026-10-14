@@ -9,6 +9,8 @@
 CryoVault (ISFCR) CTF · Forensics · 50 pts
 Artifacts: `FP02CF4.SHD` (520 B), `FP02CF4.SPL` (1872 B), `scan.png` (2550×3300).
 
+![scan.png, the scanned page (downscaled; the yellow dots are not visible at this size)](../images/writeups/ghost-in-the-spooler-scan.jpg "360x466")
+
 Story: a workstation was imaged and three print-spooler leftovers survived; a scanner
 holds a scan of the printed page. Prove the page came from that machine and rebuild the flag.
 

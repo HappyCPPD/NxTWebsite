@@ -12,6 +12,8 @@ Category: Steganography
 Flag format: OWASP{...}
 Attachment: last_soul.png (80x80, 8-bit RGB, 19353 bytes, md5 251b95b5de291c4f084f0d0c00ca9ffe)
 
+![The challenge attachment, an 80x80 PNG](../images/writeups/the-last-soul-attachment.png "160x160")
+
 ## Flag
 
 ```

@@ -13,6 +13,8 @@
 - Attachment: `soul_world.png` - 80×80, 8-bit RGB, non-interlaced PNG (19 KB)
 - Flag format: `OWASP{...}`
 
+![The challenge attachment, an 80x80 PNG](../images/writeups/soul-world-attachment.png "160x160")
+
 ## Solution
 
 The hint "hidden one bit at a time" points straight at **LSB (least-significant
