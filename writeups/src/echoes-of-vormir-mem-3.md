@@ -40,6 +40,8 @@ This recovers (among others):
 OWASP{soulstone_memory_84c2}
 ```
 
+![Sacrifice.png carved from memory, with the flag painted over the wallpaper](../images/writeups/echoes-of-vormir-mem-3-sacrifice.jpg "640x276")
+
 No stego needed - "the painted soul" means the answer is drawn onto the picture; you only have to pull the picture out of RAM and open it.
 
 ### 3. Cross-check against the raw dump

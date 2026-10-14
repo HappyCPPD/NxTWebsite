@@ -108,6 +108,8 @@ only blobs with `area ≥ 100` whose centroid x is within 0.08 of `p`, and read
 `decode_overlay.png` draws a red circle on every detected marker as visual proof
 (40 circles, one per integer column, all visibly larger than surrounding noise).
 
+![All 40 detected markers circled in red over the signal image](../images/writeups/invisible-signal-overlay.jpg "640x354")
+
 ---
 
 ## Files

@@ -102,5 +102,7 @@ python3 solve.py     # see solve.py — arranges tiles + decodes
 # needs: pip install pillow numpy zxing-cpp
 ```
 
-`solved_first_fragment.png` in this folder is the reconstructed QR.
+The reconstructed QR:
+
+![The reconstructed QR code from the nine tiles](../images/writeups/level-0-first-fragment-qr.png "200x200")
 

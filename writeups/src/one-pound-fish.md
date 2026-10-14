@@ -10,6 +10,8 @@
 
 A single image `fish.png` (745x999 PNG) and the title **"One-pound-fish"**. No description (platform shows "???"). Identify the place in the photo.
 
+![The challenge photo, a fish market stall with a blurred band across the signage](../images/writeups/one-pound-fish-photo.jpg "300x402")
+
 ## Solution
 
 ### Step 1 - Rule out steganography

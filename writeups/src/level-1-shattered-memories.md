@@ -114,6 +114,8 @@ The decoded QR code reads:
 SOUL STONE // SHATTERED MEMORIES // OWASP{Sh4tt3r3d_m3m0r13s}
 ```
 
+![The assembled QR code from the sixteen tiles](../images/writeups/level-1-shattered-memories-qr.png "240x240")
+
 ## Key Takeaways
 
 - Password-protected zips in CTFs often use the competition name or a previous flag as the password
