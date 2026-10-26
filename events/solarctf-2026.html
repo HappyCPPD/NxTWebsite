@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SolarCTF 2026 writeups · NXT_CTFS</title>
+<meta name="description" content="NXT_CTFS writeups for SolarCTF 2026: 13 challenges." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>solarctf-2026</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>SolarCTF 2026</h1>
+      <div class="page-meta"><span>17 October 2026</span></div>
+      
+      <div class="results-scoreline">
+      <span class="is-place"><b>123rd</b> of 580</span>
+      <span><b>13</b> solves</span>
+      <span><b>NxT, TxN</b></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="wu-filters" role="group" aria-label="Filter SolarCTF 2026 writeups">
+      <div class="wu-filter-row">
+        <span class="wu-filter-label" id="fCatLabel">Category</span>
+        <div class="wu-filter-chips" role="group" aria-labelledby="fCatLabel">
+          <button type="button" class="chip" data-cat="all" aria-pressed="true">All</button>
+          <button type="button" class="chip chip-dot wu-cat-web" data-cat="web" aria-pressed="false">web</button>
+          <button type="button" class="chip chip-dot wu-cat-rev" data-cat="rev" aria-pressed="false">rev</button>
+          <button type="button" class="chip chip-dot wu-cat-crypto" data-cat="crypto" aria-pressed="false">crypto</button>
+          <button type="button" class="chip chip-dot wu-cat-forensics" data-cat="forensics" aria-pressed="false">forensics</button>
+          <button type="button" class="chip chip-dot wu-cat-osint" data-cat="osint" aria-pressed="false">osint</button>
+          <button type="button" class="chip chip-dot wu-cat-misc" data-cat="misc" aria-pressed="false">misc</button>
+        </div>
+      </div>
+      <p class="wu-count" id="wuCount" aria-live="polite">13 writeups</p>
+    </div>
+
+  <ul class="wu-list-rows" id="wuRows">
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/neuropet.html">
+            <span class="wu-row-title"><span class="wu-row-name">Neuropet</span><span class="wu-row-sub">Android backup, hidden DEX, native core</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">An Android backup unpacks to a Tamagotchi APK whose skin.dat is really an LCG-XORed DEX. Calling the native core directly, without JNI or the watchdog, gives up four &quot;neuron&quot; payloads that concatenate into the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="../writeups/kumir-behind-the-wall.html">
+            <span class="wu-row-title"><span class="wu-row-name">KuMir Behind the Wall</span><span class="wu-row-sub">SSRF through an avatar URL</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-blurb">Forum breadcrumbs point at an internal checker API. The avatar URL field fetches server-side, so a wrong answer submitted through it makes the checker report the expected answer, which is the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/the-missing-archive.html">
+            <span class="wu-row-title"><span class="wu-row-name">The Missing Archive</span><span class="wu-row-sub">RSA with leaked high bits, Coppersmith</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">Four RSA-2048 instances each leak the top 518 bits of one prime. Coppersmith with a 4-bit brute force factors all four, and the last 8 bytes of each plaintext join into the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/shellbreach.html">
+            <span class="wu-row-title"><span class="wu-row-name">ShellBreach</span><span class="wu-row-sub">NTFS alternate data stream, LNK-derived key</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A dynamic VHD holds an NTFS volume that is all decoy except one 44-byte alternate data stream. The XOR key is the odd-one-out ObjectID tail in a shortcut file's TrackerDataBlock.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/ventilator303.html">
+            <span class="wu-row-title"><span class="wu-row-name">Ventilator303</span><span class="wu-row-sub">Galaksija cassette audio to Z80</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">A 1987 radio broadcast turns out to be a Galaksija home computer tape. Demodulating the WAV gives a TAP file, and reversing the Z80 code loaded at 0x8000 recovers the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/unreal-duck.html">
+            <span class="wu-row-title"><span class="wu-row-name">Unreal Duck</span><span class="wu-row-sub">UE5 client, hidden cheat codes</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">An Unreal Engine 5.7 duck game only sends the flag after a route with three trigger volumes, each wanting a secret 5-letter code. The codes brute force offline from hashes in the client, then a scripted run under Wine collects the flag image.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="../writeups/stecademia.html">
+            <span class="wu-row-title"><span class="wu-row-name">Stecademia</span><span class="wu-row-sub">OAuth open redirect, PKCE bypass</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-blurb">An open redirect in the OAuth state handling leaks the victim's authorization code. PKCE doesn't help when the attacker generated the challenge, so the stolen code redeems into a teacher session.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="osint">
+          <a class="wu-row-link" href="../writeups/faded-trace.html">
+            <span class="wu-row-title"><span class="wu-row-name">Faded Trace</span><span class="wu-row-sub">Geolocating a castle photo</span></span>
+            <span class="wu-cat wu-cat-osint">osint</span>
+            <span class="wu-row-blurb">A photo covered in stickers, cropped clean and run through Yandex, matches the Jankowski House. The answer is the camera position, worked out from the zoom and angle of the shot.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="../writeups/vintage-bank.html">
+            <span class="wu-row-title"><span class="wu-row-name">Vintage Bank</span><span class="wu-row-sub">IDOR via predictable UUIDv1</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-blurb">Safe deposit boxes are keyed by UUIDv1 tokens with a fixed MAC, fixed clock sequence and whole-second timestamps. A public ledger leaks the rental time, so the target box's UUID can be rebuilt directly.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/lockpick.html">
+            <span class="wu-row-title"><span class="wu-row-name">Lockpick</span><span class="wu-row-sub">iCE40 bitstream keystream device</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">An iCE40 bitstream decompiles to a keystream generator with a 32-bit key comparator. The key itself is a decoy. The flag is what the device prints, once the data bus bit order is derived from the ROM bytes it XORs in.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/easier-than-it-seems.html">
+            <span class="wu-row-title"><span class="wu-row-name">Easier Than It Seems</span><span class="wu-row-sub">UAC triage to a VM-packed implant</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A UAC archive from a never-rebooted web box leads to the malware still running. It hides behind an aegis_vm layer and anti-debug checks, so an LD_PRELOAD shim fakes TracerPid and the flag comes out at the comparison call.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="../writeups/kommunalochka.html">
+            <span class="wu-row-title"><span class="wu-row-name">Kommunalochka</span><span class="wu-row-sub">Wildcard DNS room takeover</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-blurb">Rooms are addressed as username subdomains on nip.io. Swapping the username in Burp for upravdom, the building manager, opens the manager's room and the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/zero-report.html">
+            <span class="wu-row-title"><span class="wu-row-name">Zero Report</span><span class="wu-row-sub">Self-referential hash invariant</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">The auditor accepts any (a, b) on the line (1 - h)a + hb = 0 mod 2^127 - 1, where h hashes the submitted source. The program can compute H(SOURCE) itself, so a = h, b = h - 1 always passes.</span>
+          </a>
+        </li>
+  </ul>
+  <p class="wu-empty" id="wuEmpty" hidden>No writeups in this category.</p>
+  <p class="wu-note"><a href="../writeups.html">All competitions</a></p>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

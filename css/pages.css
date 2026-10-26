@@ -93,17 +93,25 @@
    ================================================================== */
 
 /* ---------- Writeups index ---------- */
-.wu-groups { display: grid; gap: 64px; }
+.comp-grid { margin-bottom: 8px; }
+.comp-card[hidden] { display: none; }
+.comp-name { margin: 0 0 14px; font-size: var(--fs-h3); }
+.comp-name a { transition: color 0.2s ease; }
+.comp-name a:hover { color: var(--sig-hot); }
 
-.wu-eventgroup-head {
+.comp-cats {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px 28px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--wire);
 }
-.wu-eventgroup-head h2 { margin: 0; }
-.wu-eventgroup-count { margin: 0 0 0 auto; font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+.comp-cats .chip { padding: 3px 9px; font-size: 11px; }
+.comp-cats .chip.is-match { color: var(--ink); border-color: var(--sig); background: var(--sig-soft); }
+.comp-cat-n { color: var(--ink-3); }
+
+.page-head .results-scoreline { margin-top: 16px; }
 
 .wu-list-rows { list-style: none; margin: 0; padding: 0; }
 .wu-row { border-top: 1px solid var(--wire); }
@@ -111,7 +119,7 @@
 
 .wu-row-link {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 64px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 4px 20px;
   padding: 16px 12px;
@@ -124,7 +132,6 @@
 .wu-row-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; }
 .wu-row-name { font-family: var(--mono); font-size: 15px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em; }
 .wu-row-sub { font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
-.wu-row-pts { font-family: var(--mono); font-size: 12px; color: var(--ink-3); text-align: right; font-variant-numeric: tabular-nums; }
 
 .wu-row-blurb {
   grid-column: 1 / -1;
@@ -154,8 +161,6 @@
 @media (max-width: 620px) {
   .wu-row-link { grid-template-columns: auto minmax(0, 1fr); gap: 8px 14px; }
   .wu-row-title { grid-column: 1 / -1; }
-  .wu-row-pts { text-align: left; }
-  .wu-eventgroup-count { margin-left: 0; }
 }
 
 /* ---------- Member (solo) pages ---------- */

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TFC CTF 26 writeups · NXT_CTFS</title>
+<meta name="description" content="NXT_CTFS writeups for TFC CTF 26: 7 challenges." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>tfc-ctf-26</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>TFC CTF 26</h1>
+      <div class="page-meta"><span>6 September 2026</span></div>
+      
+      <div class="results-scoreline">
+      <span class="is-place"><b>162nd</b> of 1,027 teams</span>
+      <span><b>77.08</b> CTFtime weight</span>
+      <span><b>7</b> solves</span>
+      <span><b>NxT</b> &middot; solo</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="wu-filters" role="group" aria-label="Filter TFC CTF 26 writeups">
+      <div class="wu-filter-row">
+        <span class="wu-filter-label" id="fCatLabel">Category</span>
+        <div class="wu-filter-chips" role="group" aria-labelledby="fCatLabel">
+          <button type="button" class="chip" data-cat="all" aria-pressed="true">All</button>
+          <button type="button" class="chip chip-dot wu-cat-crypto" data-cat="crypto" aria-pressed="false">crypto</button>
+          <button type="button" class="chip chip-dot wu-cat-osint" data-cat="osint" aria-pressed="false">osint</button>
+          <button type="button" class="chip chip-dot wu-cat-misc" data-cat="misc" aria-pressed="false">misc</button>
+        </div>
+      </div>
+      <p class="wu-count" id="wuCount" aria-live="polite">7 writeups</p>
+    </div>
+
+  <ul class="wu-list-rows" id="wuRows">
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/discord-shenanigans-v6.html">
+            <span class="wu-row-title"><span class="wu-row-name">Discord Shenanigans V6</span><span class="wu-row-sub">acrostic in #announcements</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">The pre-event announcement is an acrostic. First letters spell LCASTLE, and the opening words &quot;Less than&quot; tell you to drop the leading L. The hidden word is CASTLE.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/math-or-meth.html">
+            <span class="wu-row-title"><span class="wu-row-name">MATH OR METH?</span><span class="wu-row-sub">hidden row in a lattice</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">One row of a small-entry matrix is the flag's base-33 digits, and only `h = a A mod p` is published. Two LLL passes recover the hidden row lattice, and one vector decodes to printable text.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/rules.html">
+            <span class="wu-row-title"><span class="wu-row-name">RULES</span><span class="wu-row-sub">read the rules page</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">The flag-format section of the site rules page uses a real flag as its example. Visiting the page marks the challenge solved.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/cer-frumos.html">
+            <span class="wu-row-title"><span class="wu-row-name">CER FRUMOS</span><span class="wu-row-sub">MT19937 state recovery</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">625 partial Mersenne Twister outputs over-determine the 19968-bit state. Model the twist and temper in Z3, add the leaked bits as constraints, then read off the two words that seed the AES key and IV.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/one-plus-one.html">
+            <span class="wu-row-title"><span class="wu-row-name">1+1</span><span class="wu-row-sub">approximate GCD</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">Ten samples `x_i = p * q_i + r_i` share the secret `p` (the flag) with small noise `r_i`. A Howgrave-Graham AGCD lattice with the right scale recovers `q_0`, and `p = x_0 / q_0`.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/mid.html">
+            <span class="wu-row-title"><span class="wu-row-name">mid</span><span class="wu-row-sub">a lying binary-search oracle</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">A 30-character password behind a comparison oracle that answers truthfully only while your submitted state matches a hidden mood. One provably-safe probe detects the mood flip; char-by-char search contains the damage.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="osint">
+          <a class="wu-row-link" href="../writeups/fishing-not-phishing.html">
+            <span class="wu-row-title"><span class="wu-row-name">FISHING NOT PHISHING</span><span class="wu-row-sub">vessel tracking via AIS</span></span>
+            <span class="wu-cat wu-cat-osint">osint</span>
+            <span class="wu-row-blurb">Reverse image search identifies the trawler STEAUA DE MARE 1. Global Fishing Watch gives the September 2023 voyage from Constanta, the first fishing event, and the coordinates for a haversine distance.</span>
+          </a>
+        </li>
+  </ul>
+  <p class="wu-empty" id="wuEmpty" hidden>No writeups in this category.</p>
+  <p class="wu-note"><a href="../writeups.html">All competitions</a></p>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

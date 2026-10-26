@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>September 2026 SkillBit Flash CTF writeups · NXT_CTFS</title>
+<meta name="description" content="NXT_CTFS writeups for September 2026 SkillBit Flash CTF: 5 challenges." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>skillbit-flash-ctf-2026-09</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>September 2026 SkillBit Flash CTF</h1>
+      <div class="page-meta"><span>24 September 2026</span></div>
+      
+      <div class="results-scoreline">
+      <span class="is-place"><b>Participant</b> 2-hour flash CTF</span>
+      <span><b>5</b> solves</span>
+      <span><b>NxT</b> &middot; solo</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="wu-filters" role="group" aria-label="Filter September 2026 SkillBit Flash CTF writeups">
+      <div class="wu-filter-row">
+        <span class="wu-filter-label" id="fCatLabel">Category</span>
+        <div class="wu-filter-chips" role="group" aria-labelledby="fCatLabel">
+          <button type="button" class="chip" data-cat="all" aria-pressed="true">All</button>
+          <button type="button" class="chip chip-dot wu-cat-web" data-cat="web" aria-pressed="false">web</button>
+          <button type="button" class="chip chip-dot wu-cat-rev" data-cat="rev" aria-pressed="false">rev</button>
+          <button type="button" class="chip chip-dot wu-cat-forensics" data-cat="forensics" aria-pressed="false">forensics</button>
+          <button type="button" class="chip chip-dot wu-cat-misc" data-cat="misc" aria-pressed="false">misc</button>
+        </div>
+      </div>
+      <p class="wu-count" id="wuCount" aria-live="polite">5 writeups</p>
+    </div>
+
+  <ul class="wu-list-rows" id="wuRows">
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/coilvm.html">
+            <span class="wu-row-title"><span class="wu-row-name">CoilVM</span><span class="wu-row-sub">SIGTRAP-driven VM</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">A stripped x86-64 binary runs its checks entirely inside a SIGTRAP handler, one int3 per input byte, with self-modifying XOR blocks and an rdtsc anti-debug gate. The FNV-1a verification chain inverts cleanly step by step, recovering the input and the decryption key in one forward pass.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/gitsleuth.html">
+            <span class="wu-row-title"><span class="wu-row-name">Git Sleuth</span><span class="wu-row-sub">git-only shell, 501 haystack files</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">A restricted shell only runs git, with `flag`, `grep`, `diff` and `:` all blocklisted. Committing the haystack and diffing blob hashes finds the one odd file among 500 decoys, and `git cat-file -p &lt;hash&gt;` reads it straight by SHA with no blocked syntax.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="../writeups/trackme.html">
+            <span class="wu-row-title"><span class="wu-row-name">TrackMe</span><span class="wu-row-sub">log poisoning via User-Agent</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-blurb">A PHP log viewer `include`s the access log instead of reading it, and the User-Agent header is logged unsanitized. Poisoning the log with a PHP snippet in the User-Agent, then viewing it through the include, executes it and dumps the runtime-generated flag file.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/carry-on.html">
+            <span class="wu-row-title"><span class="wu-row-name">Carry On</span><span class="wu-row-sub">ZIP appended after PNG IEND</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A checkpoint-layout PNG carries a ZIP archive appended after its IEND chunk, invisible to image viewers but readable by unzip. The extracted memo hides the flag in plain sight, labeled as a diagnostic recovery key.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/careless-talk.html">
+            <span class="wu-row-title"><span class="wu-row-name">Careless Talk</span><span class="wu-row-sub">plaintext flag in decoy noise</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">A watchword-prompt binary never needs to be run or reversed: the flag sits split across two plaintext strings in the data section, buried under dozens of decoy lines that a targeted grep cuts straight through.</span>
+          </a>
+        </li>
+  </ul>
+  <p class="wu-empty" id="wuEmpty" hidden>No writeups in this category.</p>
+  <p class="wu-note"><a href="../writeups.html">All competitions</a></p>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

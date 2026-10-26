@@ -16,7 +16,6 @@
           "name": "Neuropet",
           "category": "rev",
           "subtitle": "Android backup, hidden DEX, native core",
-          "points": 100,
           "flag": "SOLARCTF{FR1d0Mp_Sc4n_p4G3s_in_GamEEE}",
           "blurb": "An Android backup unpacks to a Tamagotchi APK whose skin.dat is really an LCG-XORed DEX. Calling the native core directly, without JNI or the watchdog, gives up four \"neuron\" payloads that concatenate into the flag."
         },
@@ -548,7 +547,6 @@
           "name": "The Last Soul",
           "category": "forensics",
           "subtitle": "LSB stego carrying base64",
-          "points": 200,
           "flag": "OWASP{th3_l4st_s0ul_w4s_n3v3r_l0st}",
           "blurb": "The LSB layer is itself a base64 string. An incompressible 19 KB file for an 80x80 image is the tell, and decoding the extracted text gives the flag."
         },
@@ -557,7 +555,6 @@
           "name": "Soul in the Shadows",
           "category": "forensics",
           "subtitle": "LSB, base64 and a VORMIR XOR",
-          "points": 100,
           "flag": "OWASP{the_soul_was_here}",
           "blurb": "Nothing is appended to the PNG, but the pixels carry a base64 string in their LSBs. The decoded bytes are ciphertext, and the key VORMIR is teased by the image's tEXt comment and the title."
         },
@@ -566,7 +563,6 @@
           "name": "Invisible Signal",
           "category": "forensics",
           "subtitle": "a message drawn as a scatter plot",
-          "points": 200,
           "flag": "OWASP{Sou15_c4nt_b3_533n_bY_n0rm41_3y3s}",
           "blurb": "A matplotlib scatter plot hides 40 double-size markers among hundreds of noise points. Calibrating the axes from the gridlines and reading each y-value as an ASCII code spells a leetspeak sentence."
         },
@@ -575,7 +571,6 @@
           "name": "Broken Soul Vault",
           "category": "forensics",
           "subtitle": "hex payload in a mislabelled .bin",
-          "points": 100,
           "flag": "OWASP{br0k3n_s0ul_v4ult_r3c0v3r3d}",
           "blurb": "The .bin file is plain text, with guard values around a hex line. Decoding the middle line and checking it against the OWASP pattern picks the valid recovered block."
         },
@@ -584,7 +579,6 @@
           "name": "Soul Memory",
           "category": "forensics",
           "subtitle": "process extract with a decoy hint",
-          "points": 100,
           "flag": "OWASP{s0ul_m3m0ry_n3v3r_d13s}",
           "blurb": "The memory dump is a small key=value extract. A vault_hint line points past the cache key, but the flag is just carried in the data field."
         },
@@ -593,7 +587,6 @@
           "name": "Echoes of the Snap",
           "category": "forensics",
           "subtitle": "hex in a DNS TXT field",
-          "points": 200,
           "flag": "OWASP{3ch03s_0f_th3_sn4p_r3m41n}",
           "blurb": "The capture summary shows one stream with a long even-length hex string in a TXT record. Piping it through xxd -r -p gives readable leetspeak."
         },
@@ -602,7 +595,6 @@
           "name": "Echoes of Vormir: Mem-1",
           "category": "forensics",
           "subtitle": "timestamp from a Windows memory image",
-          "points": 100,
           "flag": "OWASP{2026-10-08 05:07:43}",
           "blurb": "The first memory forensics warm-up asks when the dump was taken. Volatility 3 windows.info reports the SystemTime from KUSER_SHARED_DATA, which is the flag."
         },
@@ -611,7 +603,6 @@
           "name": "Echoes of Vormir: Mem-2",
           "category": "forensics",
           "subtitle": "a renamed PowerShell in the process list",
-          "points": 200,
           "flag": "OWASP{SoulHunt_7F31}",
           "blurb": "One process does not belong: SoulHunt_7F31 spawned from powershell.exe. Its command line and dumped strings show it is a renamed copy of PowerShell."
         },
@@ -620,7 +611,6 @@
           "name": "Echoes of Vormir: Mem-3",
           "category": "forensics",
           "subtitle": "a painted image cached in memory",
-          "points": 300,
           "flag": "OWASP{soulstone_memory_84c2}",
           "blurb": "The hint says the answer is something seen. Filescan on the dump lists a cached Sacrifice.png, and dumping it shows a wallpaper with the flag painted on top in black text."
         },
@@ -629,7 +619,6 @@
           "name": "Echoes of Vormir: Mem-4",
           "category": "forensics",
           "subtitle": "a leftover fragment in command history",
-          "points": 250,
           "flag": "OWASP{soulstone_cmd_741f}",
           "blurb": "A fragment survives outside the tidy mapped files. Console and heap leftovers in the raw dump carry a hex-encoded OWASP flag from the same family, which decodes with xxd. The value is a reconstruction, not confirmed against the scoreboard."
         },
@@ -638,7 +627,6 @@
           "name": "Echoes of Vormir: Mem-5",
           "category": "forensics",
           "subtitle": "browser history in the memory dump",
-          "points": 200,
           "flag": "OWASP{soulstone_web_8b2d}",
           "blurb": "The last trace is browser activity. Carving the mapped History object shows Bing searches for FTK Imager and winpmem, and the dump holds the matching flag in hex and UTF-16LE form."
         },
@@ -647,7 +635,6 @@
           "name": "Echoes of Vormir: Mem-6",
           "category": "forensics",
           "subtitle": "the forgotten expedition note",
-          "points": 250,
           "flag": "OWASP{soulstone_note_3c91}",
           "blurb": "A small expedition.txt note is carved from memory. Its artifact reference is a hex string that decodes straight to the flag."
         },
@@ -656,7 +643,6 @@
           "name": "The Last Memory of Vormir",
           "category": "forensics",
           "subtitle": "reversed speech and a WAV trailer",
-          "points": 100,
           "flag": "OWASP{th3_k3y_1s_s4cr1f1c3}",
           "blurb": "The WAV speaks backwards and says the key is sacrifice. 213 bytes sit past the declared RIFF end as hex pairs, and XORing them with that key yields the riddle."
         },
@@ -673,7 +659,6 @@
           "name": "Soul Forge",
           "category": "crypto",
           "subtitle": "two-time pad and crib dragging",
-          "points": 100,
           "flag": "OWASP{s0ul_f0rge_pr1m3s_4r3_n3v3r_r4nd0m}",
           "blurb": "Two ciphertexts share a keystream and the first 12 bytes match. XORing them and dragging cribs from the shared prefix recovers both plaintexts."
         },
@@ -682,7 +667,6 @@
           "name": "Vormir Common Modulus",
           "category": "crypto",
           "subtitle": "RSA common modulus attack",
-          "points": 100,
           "flag": "OWASP{v0rm1r_tw1st3d_rsa_l34ks_th3_s0ul}",
           "blurb": "The same message is encrypted under one modulus with e=65537 and e=65539. The extended Euclidean algorithm gives a and b with a*e1 + b*e2 = 1, so m = c1^a * c2^b mod n."
         },
@@ -691,7 +675,6 @@
           "name": "Double Trouble",
           "category": "crypto",
           "subtitle": "shared RSA prime and an XOR key",
-          "points": 100,
           "flag": "OWASP{soul_stone_claimed}",
           "blurb": "The gcd of the two moduli is a shared prime, which decrypts both. One plaintext is base64 and the other is the XOR key GAMORA that unlocks it."
         },
@@ -700,7 +683,6 @@
           "name": "Soul's Whisper",
           "category": "rev",
           "subtitle": "stack-built strings in an ELF",
-          "points": 100,
           "flag": "OWASP{th3_s0ul_st0n3_wh1sp3r}",
           "blurb": "Strings shows four overlapping 8-byte fragments that nearly spell the flag. Reading soul_stone() shows the real layout and the gate string soul, so the naive concatenation is a trap."
         },
@@ -709,7 +691,6 @@
           "name": "Soul's Weakness",
           "category": "pwn",
           "subtitle": "gets() overflow to a win function",
-          "points": 200,
           "flag": "OWASP{S0ul_St0ne_Buff3r_0v3rfl0w}",
           "blurb": "An unstripped, non-PIE binary with no canary and a gets() into a 32-byte buffer. 40 bytes of padding and the address of soul_stone hijacks the return, verified against the remote."
         },
@@ -718,7 +699,6 @@
           "name": "Return to Win",
           "category": "pwn",
           "subtitle": "ret2win with a 10-byte buffer",
-          "points": 100,
           "flag": "OWASP{g3ts_1s_4_s3cur1ty_n1ghtm4r3}",
           "blurb": "A classic gets() overflow into hello()'s 10-byte buffer. 18 bytes of padding reach the return address, which is pointed at win()."
         },
@@ -727,7 +707,6 @@
           "name": "Red Skull's Trail",
           "category": "osint",
           "subtitle": "GitHub history to a PNG trailer",
-          "points": 100,
           "flag": "OWASP{PhantomSoul}",
           "blurb": "A riddle names Vormir-616, whose GitHub repo has a tampered record. The git history reveals an image rename, and base64 trailing the PNG's IEND chunk gives the username."
         },
@@ -736,7 +715,6 @@
           "name": "Level 0: First Fragment",
           "category": "misc",
           "subtitle": "QR code split into 3x3 tiles",
-          "points": 100,
           "flag": "OWASP{Th3_f1rst_fr4gm3nt}",
           "blurb": "A WinZip AES archive opens with the password OWASP. Its nine shuffled tiles are slices of one QR code, rebuilt by locating finder patterns and validating the decode."
         },
@@ -745,7 +723,6 @@
           "name": "Level 1: Shattered Memories",
           "category": "misc",
           "subtitle": "rotated 4x4 QR tiles",
-          "points": 100,
           "flag": "OWASP{Sh4tt3r3d_m3m0r13s}",
           "blurb": "Sixteen binary tiles are shuffled and rotated. Edge-signature matching with backtracking, validated by a QR decoder, assembles the code."
         }
@@ -897,7 +874,6 @@
           "name": "SlopGate",
           "category": "pwn",
           "subtitle": "QEMU escape",
-          "points": 182,
           "solved": "Aug 30, 06:14",
           "flag": "kaspersky{I_th1nk_w3_b0th_g0t_dumb3r_wh1l3_s0lvin6_this_t4sk}",
           "blurb": "The hardened SlopGate PCI device is a decoy. The serial console still drops to the QEMU monitor, and `migrate \"exec:...\"` runs a command on the host."
@@ -907,7 +883,6 @@
           "name": "Lumberjack",
           "category": "ai",
           "subtitle": "ML / OOB read",
-          "points": 89,
           "solved": "Aug 30, 19:35",
           "flag": "kaspersky{3d87a80c-9ab7-4c35-aeb4-f64bbae9bb44}",
           "blurb": "An ONNX-to-native compiler never bounds-checks `feature_idx`. A negative index reads the `FLAG` env pointer off the stack, one float at a time, through a tree-classifier oracle."
@@ -917,7 +892,6 @@
           "name": "chroot-bronze",
           "category": "misc",
           "subtitle": "chroot escape",
-          "points": 77,
           "solved": "Aug 29, 20:45",
           "flag": "kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}",
           "blurb": "Root inside a bare chroot. Ship an ELF with `printf` octal escapes, run it via `ld.so` to dodge the missing `+x`, then the classic `chroot`/`chdir(\"..\")` walk-out."
@@ -927,7 +901,6 @@
           "name": "awasmsafe",
           "category": "rev",
           "subtitle": "WASM + Electron",
-          "points": 74,
           "solved": "Aug 30, 04:28",
           "flag": "kaspersky{w4sm_3lectrif1ed_7d19ae15}",
           "blurb": "The password check is a WASM RC4 whose key is derived from the page's own source and CSP hash, gated behind ~56 anti-Node fingerprint checks. Run the real Electron renderer, then solve the RC4 algebraically."
@@ -937,7 +910,6 @@
           "name": "chroot-silver",
           "category": "misc",
           "subtitle": "sandbox escape",
-          "points": 64,
           "solved": "Aug 30, 03:14",
           "flag": "kaspersky{a9f61e72-504f-4d36-8094-be8147e05f42}",
           "blurb": "`SOCAT_PPID=1` gives it away: the jailer lives outside the jail. Build a musl PIE, upload it with all-3-digit octal `printf`, run via the musl loader, and escape through a saved root fd."
@@ -947,7 +919,6 @@
           "name": "Sudokrypt",
           "category": "crypto",
           "subtitle": "custom cipher",
-          "points": 50,
           "solved": "Aug 30, 03:49",
           "flag": "kaspersky{D4mn_1m_s0_c00l!!_1_c4n_d0_sud0ku_n0w_st4cy_t0t4lly_g01ng_t0_pr0m_w1th_m3}",
           "blurb": "The Feistel and sudoku layers are keyless and publicly invertible. Two design leaks recover both secret permutations, and a shared block counter exposes the spectral keystream as a degree-56 linear recurrence."
@@ -957,7 +928,6 @@
           "name": "Shiny Sweetie Curve",
           "category": "crypto",
           "subtitle": "elliptic curve",
-          "points": 50,
           "solved": "Aug 30, 03:15",
           "flag": "kaspersky{g4mbl1ng_1s_b4d_t4k3_c4r3_0f_y0urs3lf}",
           "blurb": "A fresh random curve every round, only x-coordinates leaked. X-only addition identities plus a resultant-and-GCD trick recover the secret prime, then `a`, `b`, and the step point."
@@ -967,7 +937,6 @@
           "name": "biblocker",
           "category": "rev",
           "subtitle": "SIGSEGV \"TPM\"",
-          "points": 50,
           "solved": "Aug 30, 01:57",
           "flag": "kaspersky{s1gn4l5_pr0v1d3d_tPm_k1nd4_sus}",
           "blurb": "The \"Trusted Potato Module\" is a SIGSEGV handler that hands back AES key material derived from the fault address via XTEA. Re-implement the CRC and XTEA statically. The key is `target_key XOR mask`."
@@ -977,7 +946,6 @@
           "name": "Censored",
           "category": "crypto",
           "subtitle": "HNP / lattice",
-          "points": 50,
           "solved": "Aug 29, 22:01",
           "flag": "kaspersky{N0w_4ll_tH3_4nsW3rs_4r3_1n_y0ur_h4nds!!!!}",
           "blurb": "Each Schnorr signature ships a \"diagnostic\" blob whose XOR masks are computable from public data. Unmask it for ~16 bits of nonce per signature, then solve the Hidden Number Problem by lattice reduction."
@@ -1006,7 +974,6 @@
           "name": "Discord Shenanigans V6",
           "category": "misc",
           "subtitle": "acrostic in #announcements",
-          "points": 340,
           "flag": "TFCCTF{CASTLE}",
           "blurb": "The pre-event announcement is an acrostic. First letters spell LCASTLE, and the opening words \"Less than\" tell you to drop the leading L. The hidden word is CASTLE."
         },
@@ -1015,7 +982,6 @@
           "name": "MATH OR METH?",
           "category": "crypto",
           "subtitle": "hidden row in a lattice",
-          "points": 298,
           "flag": "TFCCTF{this_is_a_very_very_long_flag_for_a_short_ctf_chall_ggs}",
           "blurb": "One row of a small-entry matrix is the flag's base-33 digits, and only `h = a A mod p` is published. Two LLL passes recover the hidden row lattice, and one vector decodes to printable text."
         },
@@ -1024,7 +990,6 @@
           "name": "RULES",
           "category": "misc",
           "subtitle": "read the rules page",
-          "points": 128,
           "flag": "TFCCTF{M4ny_ch4ng3s...m0r3_3ff0rt}",
           "blurb": "The flag-format section of the site rules page uses a real flag as its example. Visiting the page marks the challenge solved."
         },
@@ -1078,7 +1043,6 @@
           "name": "Welcome",
           "category": "misc",
           "subtitle": "Flag in a markdown comment",
-          "points": 50,
           "flag": "hitcon{/goal_Solve_ALL_challenges_on_<https://ctf2026.hitcon.org>_!}",
           "blurb": "The flag sits in a [//]: # (...) link reference definition, which markdown never renders. Reading the raw description shows it."
         },

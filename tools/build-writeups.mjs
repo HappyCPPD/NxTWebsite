@@ -188,6 +188,13 @@ function scorelineSpans(ev, placeClass) {
 /* ---------- home page: sections generated between marker comments ---------- */
 const ARROW = '<svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg>';
 
+function whoLine(ev) {
+  const solvers = cfg.members.filter((m) => (m.events || []).includes(ev.id)).map((m) => m.handle);
+  return ev.attribution === 'solo'
+    ? `Solo &middot; ${esc((solvers.length ? solvers : [ev.team]).join(', '))}`
+    : `Team &middot; ${esc(ev.team)}${ev.org ? `, ${esc(ev.org)}` : ''}`;
+}
+
 function eventCards() {
   const recent = [...cfg.events]
     .sort((a, b) => Date.parse(b.result.date) - Date.parse(a.result.date))
@@ -196,15 +203,11 @@ function eventCards() {
     .map((ev) => {
       const r = ev.result;
       const rest = r.league || r.field || '';
-      const solvers = cfg.members.filter((m) => (m.events || []).includes(ev.id)).map((m) => m.handle);
-      const who = ev.attribution === 'solo'
-        ? `Solo &middot; ${esc((solvers.length ? solvers : [ev.team]).join(', '))}`
-        : `Team &middot; ${esc(ev.team)}${ev.org ? `, ${esc(ev.org)}` : ''}`;
       const meta = [`${r.solves} ${r.solves === 1 ? 'solve' : 'solves'}`];
       if (r.points != null) meta.push(`${r.points} points`);
-      meta.push(who);
+      meta.push(whoLine(ev));
       return `      <li class="event-card">
-        <a class="card-link" href="writeups.html#${esc(ev.id)}">
+        <a class="card-link" href="events/${esc(ev.id)}.html">
           <p class="event-date">${esc(r.date)}</p>
           <h3 class="event-name">${esc(ev.event)}</h3>
           <p class="event-place"><b>${esc(r.placement)}</b>${rest ? ` ${esc(rest)}` : ''}</p>
@@ -220,7 +223,11 @@ ${cards}
     <p class="section-more"><a href="writeups.html">All writeups ${ARROW}</a></p>`;
 }
 
+/* Team cards list every CTF the member joined, newest first, so participation
+ * is visible from the homepage. The card is a box rather than one big link
+ * because each event row links to its writeups. */
 function teamCards() {
+  const byId = new Map(cfg.events.map((e) => [e.id, e]));
   const cards = [...cfg.members]
     .sort((a, b) => (a.order ?? 99) - (b.order ?? 99))
     .map((m) => {
@@ -229,20 +236,33 @@ function teamCards() {
         ...(m.focus || []).map((f) => `<span class="tag">${esc(f)}</span>`),
       ].filter(Boolean).join('\n            ');
       const status = m.status === 'active' ? '<span class="member-status"><span class="status-dot is-on"></span>Active</span>' : '';
+      const joined = (m.events || [])
+        .map((id) => byId.get(id))
+        .filter(Boolean)
+        .sort((a, b) => Date.parse(b.result.date) - Date.parse(a.result.date));
+      const ctfs = joined.length
+        ? `<ul class="member-ctfs">
+${joined.map((ev) => `              <li><a href="events/${esc(ev.id)}.html"><span class="member-ctf-name" title="${esc(ev.event)}">${esc(ev.event)}</span><span class="member-ctf-place">${esc(ev.result.placement)}</span></a></li>`).join('\n')}
+            </ul>`
+        : '<p class="member-ctfs-empty">No CTFs yet.</p>';
       return `      <li class="member-card">
-        <a class="card-link" href="members/${esc(m.slug)}.html">
+        <div class="card-box">
           <div class="member-top">
             <img class="member-avatar" src="${esc(m.avatar)}" alt="" width="56" height="56" loading="lazy" />
             <div>
-              <h3 class="member-name">${esc(m.handle)}</h3>
+              <h3 class="member-name"><a href="members/${esc(m.slug)}.html">${esc(m.handle)}</a></h3>
               ${status}
             </div>
           </div>
           <div class="member-tags">
             ${tags}
           </div>
-          <span class="card-go">View page ${ARROW}</span>
-        </a>
+          <div class="member-joined">
+            <p class="member-joined-head">CTFs joined <b>${joined.length}</b></p>
+            ${ctfs}
+          </div>
+          <a class="card-go" href="members/${esc(m.slug)}.html">View page ${ARROW}</a>
+        </div>
       </li>`;
     })
     .join('\n');
@@ -272,75 +292,75 @@ function buildHome() {
 
 const CAT_ORDER = ['web', 'pwn', 'rev', 'crypto', 'forensics', 'osint', 'ai', 'misc'];
 
-/* ---------- writeups index ---------- */
-function buildIndex() {
-  const eventNames = cfg.events.map((e) => e.event).join(' and ');
-  const total = cfg.events.reduce((n, e) => n + e.challenges.length, 0);
-  const cats = CAT_ORDER.filter((k) => cfg.events.some((e) => e.challenges.some((c) => c.category === k)));
+/* ---------- writeups index + one page per competition ---------- */
+const eventsNewestFirst = () =>
+  [...cfg.events].sort((a, b) => Date.parse(b.result.date) - Date.parse(a.result.date));
 
-  const groups = cfg.events
-    .map((ev) => {
-      const rows = ev.challenges
-        .map((c) => `        <li class="wu-row" data-cat="${c.category}">
-          <a class="wu-row-link" href="writeups/${c.slug}.html">
-            <span class="wu-row-title"><span class="wu-row-name">${esc(c.name)}</span><span class="wu-row-sub">${esc(c.subtitle)}</span></span>
-            <span class="wu-cat wu-cat-${c.category}">${catLabel[c.category] || c.category}</span>
-            <span class="wu-row-pts">${c.points != null ? `${c.points} pts` : ''}</span>
-            <span class="wu-row-blurb">${esc(c.blurb)}</span>
-          </a>
-        </li>`)
-        .join('\n');
+const eventCats = (ev) => CAT_ORDER
+  .map((k) => [k, ev.challenges.filter((c) => c.category === k).length])
+  .filter(([, n]) => n > 0);
 
-      return `    <div class="wu-eventgroup" id="${ev.id}" data-event="${ev.id}">
-      <div class="wu-eventgroup-head">
-        <h2>${esc(ev.event)}</h2>
-        <div class="wu-scoreline">
-      ${scorelineSpans(ev)}
-        </div>
-        <p class="wu-eventgroup-count" data-count>${ev.challenges.length} ${ev.challenges.length === 1 ? 'writeup' : 'writeups'}</p>
-      </div>
-      <ul class="wu-list-rows">
-${rows}
-      </ul>
-    </div>`;
-    })
-    .join('\n\n');
+const plural = (n, word) => `${n} ${n === 1 ? word : `${word}s`}`;
 
-  const chip = (attr, value, label, extraClass = '', pressed = false) =>
-    `<button type="button" class="chip${extraClass}" ${attr}="${value}" aria-pressed="${pressed}">${label}</button>`;
+const chip = (attr, value, label, extraClass = '', pressed = false) =>
+  `<button type="button" class="chip${extraClass}" ${attr}="${value}" aria-pressed="${pressed}">${label}</button>`;
 
-  const filters = `<div class="wu-filters" role="group" aria-label="Filter writeups">
+function catFilter(cats, count, label) {
+  return `<div class="wu-filters" role="group" aria-label="${label}">
       <div class="wu-filter-row">
         <span class="wu-filter-label" id="fCatLabel">Category</span>
         <div class="wu-filter-chips" role="group" aria-labelledby="fCatLabel">
           ${[chip('data-cat', 'all', 'All', '', true), ...cats.map((k) => chip('data-cat', k, catLabel[k] || k, ` chip-dot wu-cat-${k}`))].join('\n          ')}
         </div>
       </div>
-      <div class="wu-filter-row">
-        <span class="wu-filter-label" id="fEventLabel">Event</span>
-        <div class="wu-filter-chips" role="group" aria-labelledby="fEventLabel">
-          ${[chip('data-event', 'all', 'All', '', true), ...cfg.events.map((e) => chip('data-event', e.id, esc(e.event)))].join('\n          ')}
-        </div>
-      </div>
-      <p class="wu-count" id="wuCount" aria-live="polite">${total} writeups</p>
+      <p class="wu-count" id="wuCount" aria-live="polite">${count}</p>
     </div>`;
+}
+
+function buildIndex() {
+  const eventNames = cfg.events.map((e) => e.event).join(' and ');
+  const total = cfg.events.reduce((n, e) => n + e.challenges.length, 0);
+  const cats = CAT_ORDER.filter((k) => cfg.events.some((e) => e.challenges.some((c) => c.category === k)));
+
+  const cards = eventsNewestFirst()
+    .map((ev) => {
+      const r = ev.result;
+      const rest = r.league || r.field || '';
+      const href = `events/${esc(ev.id)}.html`;
+      const catChips = eventCats(ev)
+        .map(([k, n]) => `<a class="chip chip-dot wu-cat-${k}" href="${href}?cat=${k}" data-cat="${k}">${catLabel[k] || k} <span class="comp-cat-n">${n}</span></a>`)
+        .join('\n            ');
+      return `      <li class="comp-card" data-event="${esc(ev.id)}" data-cats="${eventCats(ev).map(([k]) => k).join(' ')}">
+        <div class="card-box">
+          <p class="event-date">${esc(r.date)}</p>
+          <h2 class="comp-name"><a href="${href}">${esc(ev.event)}</a></h2>
+          <p class="event-place"><b>${esc(r.placement)}</b>${rest ? ` ${esc(rest)}` : ''}</p>
+          <p class="event-meta">${plural(ev.challenges.length, 'writeup')} &middot; ${whoLine(ev)}</p>
+          <div class="comp-cats" aria-label="Open ${esc(ev.event)} filtered by category">
+            ${catChips}
+          </div>
+          <a class="card-go" href="${href}" data-base="${href}">Open writeups ${ARROW}</a>
+        </div>
+      </li>`;
+    })
+    .join('\n');
 
   const header = pageHeader({
     crumbs: [{ href: 'index.html#top', label: 'nxt_ctfs' }, { label: 'writeups' }],
     title: 'Writeups',
-    meta: `${total} writeups across ${cfg.events.length} events`,
-    desc: 'How each challenge was solved, root cause first and then the exploit. Grouped by event.',
+    meta: `${total} writeups across ${cfg.events.length} competitions`,
+    desc: 'How each challenge was solved, root cause first and then the exploit. Pick a competition, or filter by category to see which ones have it.',
   });
 
   const body = `<main class="page-main container" id="top">
   ${header}
 
-  ${filters}
+  ${catFilter(cats, plural(cfg.events.length, 'competition'), 'Filter competitions')}
 
-  <div class="wu-groups" id="wuGroups">
-${groups}
-  </div>
-  <p class="wu-empty" id="wuEmpty" hidden>No writeups match these filters.</p>
+  <ul class="event-grid comp-grid" id="compGrid">
+${cards}
+  </ul>
+  <p class="wu-empty" id="wuEmpty" hidden>No competitions have writeups in this category.</p>
   <p class="wu-note">Solve scripts and challenge archives aren't published here. Ask in <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>.</p>
 </main>`;
 
@@ -356,6 +376,50 @@ ${groups}
   console.log('wrote writeups.html');
 }
 
+function buildEvent(ev) {
+  const rows = ev.challenges
+    .map((c) => `        <li class="wu-row" data-cat="${c.category}">
+          <a class="wu-row-link" href="../writeups/${c.slug}.html">
+            <span class="wu-row-title"><span class="wu-row-name">${esc(c.name)}</span><span class="wu-row-sub">${esc(c.subtitle)}</span></span>
+            <span class="wu-cat wu-cat-${c.category}">${catLabel[c.category] || c.category}</span>
+            <span class="wu-row-blurb">${esc(c.blurb)}</span>
+          </a>
+        </li>`)
+    .join('\n');
+
+  const header = pageHeader({
+    crumbs: [{ href: '../index.html#top', label: 'nxt_ctfs' }, { href: '../writeups.html', label: 'writeups' }, { label: esc(ev.id) }],
+    title: esc(ev.event),
+    meta: ev.result.date ? `<span>${esc(ev.result.date)}</span>` : '',
+    extra: `<div class="results-scoreline">
+      ${scorelineSpans(ev, true)}
+      </div>`,
+  });
+
+  const body = `<main class="page-main container" id="top">
+  ${header}
+
+  ${catFilter(eventCats(ev).map(([k]) => k), plural(ev.challenges.length, 'writeup'), `Filter ${esc(ev.event)} writeups`)}
+
+  <ul class="wu-list-rows" id="wuRows">
+${rows}
+  </ul>
+  <p class="wu-empty" id="wuEmpty" hidden>No writeups in this category.</p>
+  <p class="wu-note"><a href="../writeups.html">All competitions</a></p>
+</main>`;
+
+  writeFileSync(
+    join(root, 'events', `${ev.id}.html`),
+    page({
+      prefix: '../',
+      title: `${ev.event} writeups · NXT_CTFS`,
+      desc: `NXT_CTFS writeups for ${ev.event}: ${plural(ev.challenges.length, 'challenge')}.`,
+      body,
+    })
+  );
+  console.log(`wrote events/${ev.id}.html`);
+}
+
 /* ---------- detail pages ---------- */
 function buildDetail(ev, c, i) {
   const md = readFileSync(join(root, 'writeups/src', `${c.slug}.md`), 'utf8');
@@ -366,12 +430,13 @@ function buildDetail(ev, c, i) {
 
   const tocHtml = renderToc(toc);
 
+  const evHref = `../events/${ev.id}.html`;
   const prevCard = prev
     ? `<a class="wu-pager-link wu-pager-prev" href="${prev.slug}.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">${esc(prev.name)}</span></a>`
-    : `<a class="wu-pager-link wu-pager-prev wu-pager-index" href="../writeups.html"><span class="wu-pager-dir">Index</span><span class="wu-pager-name">All writeups</span></a>`;
+    : `<a class="wu-pager-link wu-pager-prev wu-pager-index" href="${evHref}"><span class="wu-pager-dir">Competition</span><span class="wu-pager-name">${esc(ev.event)}</span></a>`;
   const nextCard = next
     ? `<a class="wu-pager-link wu-pager-next" href="${next.slug}.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">${esc(next.name)}</span></a>`
-    : `<a class="wu-pager-link wu-pager-next wu-pager-index" href="../writeups.html"><span class="wu-pager-dir">Index</span><span class="wu-pager-name">All writeups</span></a>`;
+    : `<a class="wu-pager-link wu-pager-next wu-pager-index" href="${evHref}"><span class="wu-pager-dir">Competition</span><span class="wu-pager-name">${esc(ev.event)}</span></a>`;
   const pager = `<nav class="wu-pager" aria-label="More writeups">
     ${prevCard}
     ${nextCard}
@@ -379,12 +444,11 @@ function buildDetail(ev, c, i) {
 
   const headMeta = [
     `<span class="wu-cat wu-cat-${c.category}">${catLabel[c.category] || c.category}</span>`,
-    c.points != null ? `<span>${c.points} pts</span>` : '',
     c.solved ? `<span>solved ${esc(c.solved)}</span>` : '',
   ].filter(Boolean).join('\n      ');
 
   const header = pageHeader({
-    crumbs: [{ href: '../index.html#top', label: 'nxt_ctfs' }, { href: '../writeups.html', label: 'writeups' }, { label: esc(c.slug) }],
+    crumbs: [{ href: '../index.html#top', label: 'nxt_ctfs' }, { href: '../writeups.html', label: 'writeups' }, { href: evHref, label: esc(ev.id) }, { label: esc(c.slug) }],
     title: `${esc(c.name)} <span class="page-sub">${esc(c.subtitle)}</span>`,
     meta: headMeta,
     extra: `<div class="wu-flagrow">
@@ -427,7 +491,6 @@ function memberEventBlock(ev) {
     .map((c) => `          <tr>
             <th scope="row" class="solve-chal"><a href="../writeups/${c.slug}.html">${esc(c.name)}</a></th>
             <td class="solve-cat"><span class="wu-cat wu-cat-${c.category}">${catLabel[c.category] || c.category}</span></td>
-            <td class="solve-pts">${c.points != null ? c.points : ''}</td>
             ${hasWhen ? `<td class="solve-when">${c.solved ? esc(c.solved) : ''}</td>` : ''}
           </tr>`)
     .join('\n');
@@ -444,7 +507,7 @@ function memberEventBlock(ev) {
 
   return `    <article class="mp-event">
       <div class="mp-event-head">
-        <h2>${esc(ev.event)}</h2>
+        <h2><a href="../events/${esc(ev.id)}.html">${esc(ev.event)}</a></h2>
         ${ev.result.date ? `<p class="mp-event-date">${esc(ev.result.date)}</p>` : ''}
       </div>
       <div class="mp-event-summary">
@@ -460,7 +523,6 @@ function memberEventBlock(ev) {
             <tr>
               <th scope="col">Challenge</th>
               <th scope="col">Category</th>
-              <th scope="col" style="text-align:right">Points</th>
               ${hasWhen ? '<th scope="col">Solved</th>' : ''}
             </tr>
           </thead>
@@ -526,6 +588,8 @@ ${eventsHtml}
 /* ---------- run ---------- */
 buildHome();
 buildIndex();
+mkdirSync(join(root, 'events'), { recursive: true });
+cfg.events.forEach(buildEvent);
 cfg.events.forEach((ev) => ev.challenges.forEach((c, i) => buildDetail(ev, c, i)));
 buildMembers();
 

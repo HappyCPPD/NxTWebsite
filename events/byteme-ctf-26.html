@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ByteMe CTF 26 writeups · NXT_CTFS</title>
+<meta name="description" content="NXT_CTFS writeups for ByteMe CTF 26: 25 challenges." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>byteme-ctf-26</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>ByteMe CTF 26</h1>
+      <div class="page-meta"><span>9 October 2026</span></div>
+      
+      <div class="results-scoreline">
+      <span class="is-place"><b>87th</b> of 300</span>
+      <span><b>24</b> solves</span>
+      <span><b>NxT, TxN</b></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="wu-filters" role="group" aria-label="Filter ByteMe CTF 26 writeups">
+      <div class="wu-filter-row">
+        <span class="wu-filter-label" id="fCatLabel">Category</span>
+        <div class="wu-filter-chips" role="group" aria-labelledby="fCatLabel">
+          <button type="button" class="chip" data-cat="all" aria-pressed="true">All</button>
+          <button type="button" class="chip chip-dot wu-cat-pwn" data-cat="pwn" aria-pressed="false">pwn</button>
+          <button type="button" class="chip chip-dot wu-cat-rev" data-cat="rev" aria-pressed="false">rev</button>
+          <button type="button" class="chip chip-dot wu-cat-crypto" data-cat="crypto" aria-pressed="false">crypto</button>
+          <button type="button" class="chip chip-dot wu-cat-forensics" data-cat="forensics" aria-pressed="false">forensics</button>
+          <button type="button" class="chip chip-dot wu-cat-osint" data-cat="osint" aria-pressed="false">osint</button>
+          <button type="button" class="chip chip-dot wu-cat-misc" data-cat="misc" aria-pressed="false">misc</button>
+        </div>
+      </div>
+      <p class="wu-count" id="wuCount" aria-live="polite">25 writeups</p>
+    </div>
+
+  <ul class="wu-list-rows" id="wuRows">
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/hidden-soul.html">
+            <span class="wu-row-title"><span class="wu-row-name">Hidden Soul</span><span class="wu-row-sub">LSB stego in an 80x80 PNG</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A plain ASCII flag sits in the least-significant bits of every R, G and B value. zsteg finds it at b1,rgb,lsb,xy, and a short Pillow script confirms the same bytes.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/soul-world.html">
+            <span class="wu-row-title"><span class="wu-row-name">Soul World</span><span class="wu-row-sub">LSB stego, two independent extractions</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">Another RGB LSB image, this time with the flag at the very start of the bitstream. zsteg and a from-scratch row-major extractor produce byte-identical output.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/the-last-soul.html">
+            <span class="wu-row-title"><span class="wu-row-name">The Last Soul</span><span class="wu-row-sub">LSB stego carrying base64</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The LSB layer is itself a base64 string. An incompressible 19 KB file for an 80x80 image is the tell, and decoding the extracted text gives the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/soul-in-the-shadows.html">
+            <span class="wu-row-title"><span class="wu-row-name">Soul in the Shadows</span><span class="wu-row-sub">LSB, base64 and a VORMIR XOR</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">Nothing is appended to the PNG, but the pixels carry a base64 string in their LSBs. The decoded bytes are ciphertext, and the key VORMIR is teased by the image's tEXt comment and the title.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/invisible-signal.html">
+            <span class="wu-row-title"><span class="wu-row-name">Invisible Signal</span><span class="wu-row-sub">a message drawn as a scatter plot</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A matplotlib scatter plot hides 40 double-size markers among hundreds of noise points. Calibrating the axes from the gridlines and reading each y-value as an ASCII code spells a leetspeak sentence.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/broken-soul-vault.html">
+            <span class="wu-row-title"><span class="wu-row-name">Broken Soul Vault</span><span class="wu-row-sub">hex payload in a mislabelled .bin</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The .bin file is plain text, with guard values around a hex line. Decoding the middle line and checking it against the OWASP pattern picks the valid recovered block.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/soul-memory.html">
+            <span class="wu-row-title"><span class="wu-row-name">Soul Memory</span><span class="wu-row-sub">process extract with a decoy hint</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The memory dump is a small key=value extract. A vault_hint line points past the cache key, but the flag is just carried in the data field.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/echoes-of-the-snap.html">
+            <span class="wu-row-title"><span class="wu-row-name">Echoes of the Snap</span><span class="wu-row-sub">hex in a DNS TXT field</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The capture summary shows one stream with a long even-length hex string in a TXT record. Piping it through xxd -r -p gives readable leetspeak.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/echoes-of-vormir-mem-1.html">
+            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-1</span><span class="wu-row-sub">timestamp from a Windows memory image</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The first memory forensics warm-up asks when the dump was taken. Volatility 3 windows.info reports the SystemTime from KUSER_SHARED_DATA, which is the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/echoes-of-vormir-mem-2.html">
+            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-2</span><span class="wu-row-sub">a renamed PowerShell in the process list</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">One process does not belong: SoulHunt_7F31 spawned from powershell.exe. Its command line and dumped strings show it is a renamed copy of PowerShell.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/echoes-of-vormir-mem-3.html">
+            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-3</span><span class="wu-row-sub">a painted image cached in memory</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The hint says the answer is something seen. Filescan on the dump lists a cached Sacrifice.png, and dumping it shows a wallpaper with the flag painted on top in black text.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/echoes-of-vormir-mem-4.html">
+            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-4</span><span class="wu-row-sub">a leftover fragment in command history</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A fragment survives outside the tidy mapped files. Console and heap leftovers in the raw dump carry a hex-encoded OWASP flag from the same family, which decodes with xxd. The value is a reconstruction, not confirmed against the scoreboard.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/echoes-of-vormir-mem-5.html">
+            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-5</span><span class="wu-row-sub">browser history in the memory dump</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The last trace is browser activity. Carving the mapped History object shows Bing searches for FTK Imager and winpmem, and the dump holds the matching flag in hex and UTF-16LE form.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/echoes-of-vormir-mem-6.html">
+            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-6</span><span class="wu-row-sub">the forgotten expedition note</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A small expedition.txt note is carved from memory. Its artifact reference is a hex string that decodes straight to the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/last-memory-of-vormir.html">
+            <span class="wu-row-title"><span class="wu-row-name">The Last Memory of Vormir</span><span class="wu-row-sub">reversed speech and a WAV trailer</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The WAV speaks backwards and says the key is sacrifice. 213 bytes sit past the declared RIFF end as hex pairs, and XORing them with that key yields the riddle.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/sacrifice.html">
+            <span class="wu-row-title"><span class="wu-row-name">Sacrifice</span><span class="wu-row-sub">PCAP, FTP files and nested archives</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A PCAP's FTP streams carry a JPEG whose comment holds a password and whose embedded ZIP holds comms.bin. Peeling gzip, bzip2 and gzip off to a tar leaves one oversized log with a base64 flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/soul-forge.html">
+            <span class="wu-row-title"><span class="wu-row-name">Soul Forge</span><span class="wu-row-sub">two-time pad and crib dragging</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">Two ciphertexts share a keystream and the first 12 bytes match. XORing them and dragging cribs from the shared prefix recovers both plaintexts.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/vormir-common-modulus.html">
+            <span class="wu-row-title"><span class="wu-row-name">Vormir Common Modulus</span><span class="wu-row-sub">RSA common modulus attack</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">The same message is encrypted under one modulus with e=65537 and e=65539. The extended Euclidean algorithm gives a and b with a*e1 + b*e2 = 1, so m = c1^a * c2^b mod n.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/double-trouble.html">
+            <span class="wu-row-title"><span class="wu-row-name">Double Trouble</span><span class="wu-row-sub">shared RSA prime and an XOR key</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">The gcd of the two moduli is a shared prime, which decrypts both. One plaintext is base64 and the other is the XOR key GAMORA that unlocks it.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/souls-whisper.html">
+            <span class="wu-row-title"><span class="wu-row-name">Soul's Whisper</span><span class="wu-row-sub">stack-built strings in an ELF</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">Strings shows four overlapping 8-byte fragments that nearly spell the flag. Reading soul_stone() shows the real layout and the gate string soul, so the naive concatenation is a trap.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="pwn">
+          <a class="wu-row-link" href="../writeups/souls-weakness.html">
+            <span class="wu-row-title"><span class="wu-row-name">Soul's Weakness</span><span class="wu-row-sub">gets() overflow to a win function</span></span>
+            <span class="wu-cat wu-cat-pwn">pwn</span>
+            <span class="wu-row-blurb">An unstripped, non-PIE binary with no canary and a gets() into a 32-byte buffer. 40 bytes of padding and the address of soul_stone hijacks the return, verified against the remote.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="pwn">
+          <a class="wu-row-link" href="../writeups/return-to-win.html">
+            <span class="wu-row-title"><span class="wu-row-name">Return to Win</span><span class="wu-row-sub">ret2win with a 10-byte buffer</span></span>
+            <span class="wu-cat wu-cat-pwn">pwn</span>
+            <span class="wu-row-blurb">A classic gets() overflow into hello()'s 10-byte buffer. 18 bytes of padding reach the return address, which is pointed at win().</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="osint">
+          <a class="wu-row-link" href="../writeups/red-skulls-trail.html">
+            <span class="wu-row-title"><span class="wu-row-name">Red Skull's Trail</span><span class="wu-row-sub">GitHub history to a PNG trailer</span></span>
+            <span class="wu-cat wu-cat-osint">osint</span>
+            <span class="wu-row-blurb">A riddle names Vormir-616, whose GitHub repo has a tampered record. The git history reveals an image rename, and base64 trailing the PNG's IEND chunk gives the username.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/level-0-first-fragment.html">
+            <span class="wu-row-title"><span class="wu-row-name">Level 0: First Fragment</span><span class="wu-row-sub">QR code split into 3x3 tiles</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">A WinZip AES archive opens with the password OWASP. Its nine shuffled tiles are slices of one QR code, rebuilt by locating finder patterns and validating the decode.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/level-1-shattered-memories.html">
+            <span class="wu-row-title"><span class="wu-row-name">Level 1: Shattered Memories</span><span class="wu-row-sub">rotated 4x4 QR tiles</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">Sixteen binary tiles are shuffled and rotated. Edge-signature matching with backtracking, validated by a QR decoder, assembles the code.</span>
+          </a>
+        </li>
+  </ul>
+  <p class="wu-empty" id="wuEmpty" hidden>No writeups in this category.</p>
+  <p class="wu-note"><a href="../writeups.html">All competitions</a></p>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

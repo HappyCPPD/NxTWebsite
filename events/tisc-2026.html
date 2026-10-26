@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TISC 2026 writeups · NXT_CTFS</title>
+<meta name="description" content="NXT_CTFS writeups for TISC 2026: 7 challenges." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>tisc-2026</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>TISC 2026</h1>
+      <div class="page-meta"><span>20 September 2026</span></div>
+      
+      <div class="results-scoreline">
+      <span class="is-place"><b>Top 50</b> of 1,119</span>
+      <span><b>7</b> solves</span>
+      <span><b>NxT</b> &middot; solo</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="wu-filters" role="group" aria-label="Filter TISC 2026 writeups">
+      <div class="wu-filter-row">
+        <span class="wu-filter-label" id="fCatLabel">Category</span>
+        <div class="wu-filter-chips" role="group" aria-labelledby="fCatLabel">
+          <button type="button" class="chip" data-cat="all" aria-pressed="true">All</button>
+          <button type="button" class="chip chip-dot wu-cat-pwn" data-cat="pwn" aria-pressed="false">pwn</button>
+          <button type="button" class="chip chip-dot wu-cat-rev" data-cat="rev" aria-pressed="false">rev</button>
+          <button type="button" class="chip chip-dot wu-cat-forensics" data-cat="forensics" aria-pressed="false">forensics</button>
+          <button type="button" class="chip chip-dot wu-cat-osint" data-cat="osint" aria-pressed="false">osint</button>
+          <button type="button" class="chip chip-dot wu-cat-ai" data-cat="ai" aria-pressed="false">AI</button>
+        </div>
+      </div>
+      <p class="wu-count" id="wuCount" aria-live="polite">7 writeups</p>
+    </div>
+
+  <ul class="wu-list-rows" id="wuRows">
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/redacted.html">
+            <span class="wu-row-title"><span class="wu-row-name">REDACTED</span><span class="wu-row-sub">PDF redaction bypass</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A five-page PDF's black-box redactions never touched the underlying text. pdftotext -layout recovers a Base64 string hidden under a section titled The Flag, decoding straight to the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="osint">
+          <a class="wu-row-link" href="../writeups/printer-secret.html">
+            <span class="wu-row-title"><span class="wu-row-name">My Printer Has a Secret</span><span class="wu-row-sub">HCCB stego + tracking dots + OSINT</span></span>
+            <span class="wu-cat wu-cat-osint">osint</span>
+            <span class="wu-row-blurb">A printed cover-sheet PNG hides an HCCB-style colour tag (a 36x36 triangle grid pointing to an archive) and a fake tracking-dot pattern (the archive password), then a passive OSINT chain across aucfan, Flickr, a hobby site and a shop finds the seller's username, pants colour, and model number.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/lion-city-layover.html">
+            <span class="wu-row-title"><span class="wu-row-name">Lion City Layover</span><span class="wu-row-sub">fake WASM VM + Fermat RSA</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">A Singapore-themed maze hides a fake WebAssembly VM whose validator and interpreter parse different custom sections; duplicating a wasm section bypasses the opcode blocklist to dump a Fermat-weak RSA blob, factored to recover the boarding-pass claim, all while dodging LLM prompt-injection honeypots.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="ai">
+          <a class="wu-row-link" href="../writeups/zygpt.html">
+            <span class="wu-row-title"><span class="wu-row-name">ZyGPT</span><span class="wu-row-sub">LSB-sealed LLM weights</span></span>
+            <span class="wu-cat wu-cat-ai">AI</span>
+            <span class="wu-row-blurb">A Qwen3-1.7B fine-tune seals a flag in one MLP tensor's LSBs, keyed by a 5-record live handshake among 69 self-verifying provisioning rows. The model's own recited manual misdirects toward a false reserved-rows subset; brute-forcing all 69-choose-5 combinations against a flip-mask oracle finds the real one.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/trash-talk.html">
+            <span class="wu-row-title"><span class="wu-row-name">Trash Talk</span><span class="wu-row-sub">GTS Pokemon trash-byte stego</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">A Nintendo GTS emulator hides messages in Pokemon nickname trash bytes across two game generations. A Gen 4 Porygon's trash reveals the XOR key for Gen 5 Porygon2 trash (recipient PIDs plus an OT-name instruction to trade a female Buizel), and performing that trade unlocks a hidden Porygon-Z whose trash XORs with its own PID into the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/provenance.html">
+            <span class="wu-row-title"><span class="wu-row-name">Provenance Expert</span><span class="wu-row-sub">forged Rich header</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A PE32+ binary's Rich header and linker version were forged to claim Visual Studio 2017, but the load-config layout and COFF timestamp (Aug 2026) prove Visual Studio 2022. Repairing every Rich-header build number to the matching VS2022 17.13 build and recomputing the checksum satisfies the grader's provenance check.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="pwn">
+          <a class="wu-row-link" href="../writeups/omnitrix.html">
+            <span class="wu-row-title"><span class="wu-row-name">Omnitrix</span><span class="wu-row-sub">race condition + dlopen pwn</span></span>
+            <span class="wu-cat wu-cat-pwn">pwn</span>
+            <span class="wu-row-blurb">A stripped Rust/tokio service gates a dlopen primitive behind a policy-mask bit no static code path can set. A data race in capability-cache reconcile flips the shared mask, letting a hand-crafted .so slip past content filters and get dlopen'd to run the execute-only flag binary.</span>
+          </a>
+        </li>
+  </ul>
+  <p class="wu-empty" id="wuEmpty" hidden>No writeups in this category.</p>
+  <p class="wu-note"><a href="../writeups.html">All competitions</a></p>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

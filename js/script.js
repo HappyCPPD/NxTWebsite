@@ -859,53 +859,63 @@ document.addEventListener('click', () => {
   document.querySelectorAll('.wu-gloss[data-open="true"]').forEach((el) => el.removeAttribute('data-open'));
 });
 
-/* ---------- Writeups index: category + event filters ---------- */
-const wuGroups = document.getElementById('wuGroups');
+/* ---------- Writeups index + competition pages: category filter ----------
+ * The index filters competition cards (a card stays if it has any writeup in
+ * the category); a competition page filters its own writeup rows. Both accept
+ * ?cat=crypto as a deep link and keep the URL in sync. */
+const compGrid = document.getElementById('compGrid');
+const wuRows = document.getElementById('wuRows');
 
-if (wuGroups) {
-  const groups = Array.from(wuGroups.querySelectorAll('.wu-eventgroup'));
+/* writeups.html#<event-id> used to be an anchor on the index; send old links
+ * to the competition's own page. */
+if (compGrid && location.hash) {
+  const old = compGrid.querySelector(`.comp-card[data-event="${CSS.escape(location.hash.slice(1))}"]`);
+  if (old) location.replace(`events/${old.dataset.event}.html`);
+}
+
+if (compGrid || wuRows) {
+  const items = compGrid
+    ? Array.from(compGrid.querySelectorAll('.comp-card'))
+    : Array.from(wuRows.querySelectorAll('.wu-row'));
   const chips = Array.from(document.querySelectorAll('.wu-filters .chip'));
   const countEl = document.getElementById('wuCount');
   const emptyEl = document.getElementById('wuEmpty');
-  const state = { cat: 'all', event: 'all' };
-  const plural = (n) => `${n} ${n === 1 ? 'writeup' : 'writeups'}`;
+  const noun = compGrid ? 'competition' : 'writeup';
+  const plural = (n) => `${n} ${n === 1 ? noun : `${noun}s`}`;
+  let cat = 'all';
+
+  const has = (item) => cat === 'all' || (compGrid ? item.dataset.cats.split(' ').includes(cat) : item.dataset.cat === cat);
 
   const apply = () => {
-    let total = 0;
-    groups.forEach((group) => {
-      const eventOk = state.event === 'all' || group.dataset.event === state.event;
-      let shown = 0;
-      group.querySelectorAll('.wu-row').forEach((row) => {
-        const ok = eventOk && (state.cat === 'all' || row.dataset.cat === state.cat);
-        row.hidden = !ok;
-        if (ok) shown += 1;
-      });
-      group.hidden = shown === 0;
-      const count = group.querySelector('[data-count]');
-      if (count) count.textContent = plural(shown);
-      total += shown;
+    let shown = 0;
+    items.forEach((item) => {
+      const ok = has(item);
+      item.hidden = !ok;
+      if (ok) shown += 1;
+      if (compGrid) {
+        item.querySelectorAll('.comp-cats .chip').forEach((c) => c.classList.toggle('is-match', c.dataset.cat === cat));
+        const go = item.querySelector('.card-go');
+        go.href = cat === 'all' ? go.dataset.base : `${go.dataset.base}?cat=${cat}`;
+      }
     });
-    if (countEl) countEl.textContent = plural(total);
-    if (emptyEl) emptyEl.hidden = total > 0;
-    chips.forEach((chip) => {
-      const key = chip.dataset.cat !== undefined ? 'cat' : 'event';
-      chip.setAttribute('aria-pressed', String(chip.dataset[key] === state[key]));
-    });
+    if (countEl) countEl.textContent = plural(shown);
+    if (emptyEl) emptyEl.hidden = shown > 0;
+    chips.forEach((chip) => chip.setAttribute('aria-pressed', String(chip.dataset.cat === cat)));
   };
 
   chips.forEach((chip) => {
     chip.addEventListener('click', () => {
-      if (chip.dataset.cat !== undefined) state.cat = chip.dataset.cat;
-      else state.event = chip.dataset.event;
+      cat = chip.dataset.cat;
+      const url = new URL(location.href);
+      if (cat === 'all') url.searchParams.delete('cat');
+      else url.searchParams.set('cat', cat);
+      history.replaceState(null, '', url);
       apply();
     });
   });
 
-  /* optional deep link: writeups.html?cat=crypto&event=tisc-2026 */
-  const params = new URLSearchParams(window.location.search);
-  const known = (key) => chips.some((c) => c.dataset[key] === params.get(key));
-  if (known('cat')) state.cat = params.get('cat');
-  if (known('event')) state.event = params.get('event');
+  const param = new URLSearchParams(location.search).get('cat');
+  if (chips.some((c) => c.dataset.cat === param)) cat = param;
   apply();
 }
 

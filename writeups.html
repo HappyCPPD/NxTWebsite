@@ -8,8 +8,8 @@
 <link rel="icon" href="images/brand/logo-v2.png" type="image/png" />
 <link rel="stylesheet" href="css/fonts.css?v=80d02232" />
 <link rel="stylesheet" href="css/base.css?v=158fffd0" />
-<link rel="stylesheet" href="css/components.css?v=0e2bdd96" />
-<link rel="stylesheet" href="css/pages.css?v=8dc67e7f" />
+<link rel="stylesheet" href="css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="css/pages.css?v=15906e9c" />
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -54,13 +54,13 @@
     
     <div class="page-head-body">
       <h1>Writeups</h1>
-      <div class="page-meta">117 writeups across 8 events</div>
-      <p class="page-desc">How each challenge was solved, root cause first and then the exploit. Grouped by event.</p>
+      <div class="page-meta">117 writeups across 8 competitions</div>
+      <p class="page-desc">How each challenge was solved, root cause first and then the exploit. Pick a competition, or filter by category to see which ones have it.</p>
       
     </div>
   </header>
 
-  <div class="wu-filters" role="group" aria-label="Filter writeups">
+  <div class="wu-filters" role="group" aria-label="Filter competitions">
       <div class="wu-filter-row">
         <span class="wu-filter-label" id="fCatLabel">Category</span>
         <div class="wu-filter-chips" role="group" aria-labelledby="fCatLabel">
@@ -75,1075 +75,139 @@
           <button type="button" class="chip chip-dot wu-cat-misc" data-cat="misc" aria-pressed="false">misc</button>
         </div>
       </div>
-      <div class="wu-filter-row">
-        <span class="wu-filter-label" id="fEventLabel">Event</span>
-        <div class="wu-filter-chips" role="group" aria-labelledby="fEventLabel">
-          <button type="button" class="chip" data-event="all" aria-pressed="true">All</button>
-          <button type="button" class="chip" data-event="solarctf-2026" aria-pressed="false">SolarCTF 2026</button>
-          <button type="button" class="chip" data-event="cryovault-ctf-2026" aria-pressed="false">CryoVault CTF 2026</button>
-          <button type="button" class="chip" data-event="byteme-ctf-26" aria-pressed="false">ByteMe CTF 26</button>
-          <button type="button" class="chip" data-event="skillbit-flash-ctf-2026-09" aria-pressed="false">September 2026 SkillBit Flash CTF</button>
-          <button type="button" class="chip" data-event="tisc-2026" aria-pressed="false">TISC 2026</button>
-          <button type="button" class="chip" data-event="kaspersky-ctf-2026" aria-pressed="false">Kaspersky CTF 2026</button>
-          <button type="button" class="chip" data-event="tfc-ctf-26" aria-pressed="false">TFC CTF 26</button>
-          <button type="button" class="chip" data-event="hitcon-ctf-2026" aria-pressed="false">HITCON CTF 2026</button>
-        </div>
-      </div>
-      <p class="wu-count" id="wuCount" aria-live="polite">117 writeups</p>
+      <p class="wu-count" id="wuCount" aria-live="polite">8 competitions</p>
     </div>
 
-  <div class="wu-groups" id="wuGroups">
-    <div class="wu-eventgroup" id="solarctf-2026" data-event="solarctf-2026">
-      <div class="wu-eventgroup-head">
-        <h2>SolarCTF 2026</h2>
-        <div class="wu-scoreline">
-      <span><b>123rd</b> of 580</span>
-      <span><b>13</b> solves</span>
-      <span><b>NxT, TxN</b></span>
+  <ul class="event-grid comp-grid" id="compGrid">
+      <li class="comp-card" data-event="solarctf-2026" data-cats="web rev crypto forensics osint misc">
+        <div class="card-box">
+          <p class="event-date">17 October 2026</p>
+          <h2 class="comp-name"><a href="events/solarctf-2026.html">SolarCTF 2026</a></h2>
+          <p class="event-place"><b>123rd</b> of 580</p>
+          <p class="event-meta">13 writeups &middot; Team &middot; NxT, TxN</p>
+          <div class="comp-cats" aria-label="Open SolarCTF 2026 filtered by category">
+            <a class="chip chip-dot wu-cat-web" href="events/solarctf-2026.html?cat=web" data-cat="web">web <span class="comp-cat-n">4</span></a>
+            <a class="chip chip-dot wu-cat-rev" href="events/solarctf-2026.html?cat=rev" data-cat="rev">rev <span class="comp-cat-n">2</span></a>
+            <a class="chip chip-dot wu-cat-crypto" href="events/solarctf-2026.html?cat=crypto" data-cat="crypto">crypto <span class="comp-cat-n">2</span></a>
+            <a class="chip chip-dot wu-cat-forensics" href="events/solarctf-2026.html?cat=forensics" data-cat="forensics">forensics <span class="comp-cat-n">2</span></a>
+            <a class="chip chip-dot wu-cat-osint" href="events/solarctf-2026.html?cat=osint" data-cat="osint">osint <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-misc" href="events/solarctf-2026.html?cat=misc" data-cat="misc">misc <span class="comp-cat-n">2</span></a>
+          </div>
+          <a class="card-go" href="events/solarctf-2026.html" data-base="events/solarctf-2026.html">Open writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a>
         </div>
-        <p class="wu-eventgroup-count" data-count>13 writeups</p>
-      </div>
-      <ul class="wu-list-rows">
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/neuropet.html">
-            <span class="wu-row-title"><span class="wu-row-name">Neuropet</span><span class="wu-row-sub">Android backup, hidden DEX, native core</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">An Android backup unpacks to a Tamagotchi APK whose skin.dat is really an LCG-XORed DEX. Calling the native core directly, without JNI or the watchdog, gives up four &quot;neuron&quot; payloads that concatenate into the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="web">
-          <a class="wu-row-link" href="writeups/kumir-behind-the-wall.html">
-            <span class="wu-row-title"><span class="wu-row-name">KuMir Behind the Wall</span><span class="wu-row-sub">SSRF through an avatar URL</span></span>
-            <span class="wu-cat wu-cat-web">web</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Forum breadcrumbs point at an internal checker API. The avatar URL field fetches server-side, so a wrong answer submitted through it makes the checker report the expected answer, which is the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/the-missing-archive.html">
-            <span class="wu-row-title"><span class="wu-row-name">The Missing Archive</span><span class="wu-row-sub">RSA with leaked high bits, Coppersmith</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Four RSA-2048 instances each leak the top 518 bits of one prime. Coppersmith with a 4-bit brute force factors all four, and the last 8 bytes of each plaintext join into the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/shellbreach.html">
-            <span class="wu-row-title"><span class="wu-row-name">ShellBreach</span><span class="wu-row-sub">NTFS alternate data stream, LNK-derived key</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A dynamic VHD holds an NTFS volume that is all decoy except one 44-byte alternate data stream. The XOR key is the odd-one-out ObjectID tail in a shortcut file's TrackerDataBlock.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="misc">
-          <a class="wu-row-link" href="writeups/ventilator303.html">
-            <span class="wu-row-title"><span class="wu-row-name">Ventilator303</span><span class="wu-row-sub">Galaksija cassette audio to Z80</span></span>
-            <span class="wu-cat wu-cat-misc">misc</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A 1987 radio broadcast turns out to be a Galaksija home computer tape. Demodulating the WAV gives a TAP file, and reversing the Z80 code loaded at 0x8000 recovers the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/unreal-duck.html">
-            <span class="wu-row-title"><span class="wu-row-name">Unreal Duck</span><span class="wu-row-sub">UE5 client, hidden cheat codes</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">An Unreal Engine 5.7 duck game only sends the flag after a route with three trigger volumes, each wanting a secret 5-letter code. The codes brute force offline from hashes in the client, then a scripted run under Wine collects the flag image.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="web">
-          <a class="wu-row-link" href="writeups/stecademia.html">
-            <span class="wu-row-title"><span class="wu-row-name">Stecademia</span><span class="wu-row-sub">OAuth open redirect, PKCE bypass</span></span>
-            <span class="wu-cat wu-cat-web">web</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">An open redirect in the OAuth state handling leaks the victim's authorization code. PKCE doesn't help when the attacker generated the challenge, so the stolen code redeems into a teacher session.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="osint">
-          <a class="wu-row-link" href="writeups/faded-trace.html">
-            <span class="wu-row-title"><span class="wu-row-name">Faded Trace</span><span class="wu-row-sub">Geolocating a castle photo</span></span>
-            <span class="wu-cat wu-cat-osint">osint</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A photo covered in stickers, cropped clean and run through Yandex, matches the Jankowski House. The answer is the camera position, worked out from the zoom and angle of the shot.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="web">
-          <a class="wu-row-link" href="writeups/vintage-bank.html">
-            <span class="wu-row-title"><span class="wu-row-name">Vintage Bank</span><span class="wu-row-sub">IDOR via predictable UUIDv1</span></span>
-            <span class="wu-cat wu-cat-web">web</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Safe deposit boxes are keyed by UUIDv1 tokens with a fixed MAC, fixed clock sequence and whole-second timestamps. A public ledger leaks the rental time, so the target box's UUID can be rebuilt directly.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="misc">
-          <a class="wu-row-link" href="writeups/lockpick.html">
-            <span class="wu-row-title"><span class="wu-row-name">Lockpick</span><span class="wu-row-sub">iCE40 bitstream keystream device</span></span>
-            <span class="wu-cat wu-cat-misc">misc</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">An iCE40 bitstream decompiles to a keystream generator with a 32-bit key comparator. The key itself is a decoy. The flag is what the device prints, once the data bus bit order is derived from the ROM bytes it XORs in.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/easier-than-it-seems.html">
-            <span class="wu-row-title"><span class="wu-row-name">Easier Than It Seems</span><span class="wu-row-sub">UAC triage to a VM-packed implant</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A UAC archive from a never-rebooted web box leads to the malware still running. It hides behind an aegis_vm layer and anti-debug checks, so an LD_PRELOAD shim fakes TracerPid and the flag comes out at the comparison call.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="web">
-          <a class="wu-row-link" href="writeups/kommunalochka.html">
-            <span class="wu-row-title"><span class="wu-row-name">Kommunalochka</span><span class="wu-row-sub">Wildcard DNS room takeover</span></span>
-            <span class="wu-cat wu-cat-web">web</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Rooms are addressed as username subdomains on nip.io. Swapping the username in Burp for upravdom, the building manager, opens the manager's room and the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/zero-report.html">
-            <span class="wu-row-title"><span class="wu-row-name">Zero Report</span><span class="wu-row-sub">Self-referential hash invariant</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The auditor accepts any (a, b) on the line (1 - h)a + hb = 0 mod 2^127 - 1, where h hashes the submitted source. The program can compute H(SOURCE) itself, so a = h, b = h - 1 always passes.</span>
-          </a>
-        </li>
-      </ul>
-    </div>
-
-    <div class="wu-eventgroup" id="cryovault-ctf-2026" data-event="cryovault-ctf-2026">
-      <div class="wu-eventgroup-head">
-        <h2>CryoVault CTF 2026</h2>
-        <div class="wu-scoreline">
-      <span><b>87th</b> of 504</span>
-      <span><b>48</b> solves</span>
-      <span><b>NxT</b> &middot; solo</span>
+      </li>
+      <li class="comp-card" data-event="cryovault-ctf-2026" data-cats="web pwn rev crypto forensics osint ai">
+        <div class="card-box">
+          <p class="event-date">11 October 2026</p>
+          <h2 class="comp-name"><a href="events/cryovault-ctf-2026.html">CryoVault CTF 2026</a></h2>
+          <p class="event-place"><b>87th</b> of 504</p>
+          <p class="event-meta">48 writeups &middot; Solo &middot; NxT</p>
+          <div class="comp-cats" aria-label="Open CryoVault CTF 2026 filtered by category">
+            <a class="chip chip-dot wu-cat-web" href="events/cryovault-ctf-2026.html?cat=web" data-cat="web">web <span class="comp-cat-n">5</span></a>
+            <a class="chip chip-dot wu-cat-pwn" href="events/cryovault-ctf-2026.html?cat=pwn" data-cat="pwn">pwn <span class="comp-cat-n">8</span></a>
+            <a class="chip chip-dot wu-cat-rev" href="events/cryovault-ctf-2026.html?cat=rev" data-cat="rev">rev <span class="comp-cat-n">11</span></a>
+            <a class="chip chip-dot wu-cat-crypto" href="events/cryovault-ctf-2026.html?cat=crypto" data-cat="crypto">crypto <span class="comp-cat-n">8</span></a>
+            <a class="chip chip-dot wu-cat-forensics" href="events/cryovault-ctf-2026.html?cat=forensics" data-cat="forensics">forensics <span class="comp-cat-n">12</span></a>
+            <a class="chip chip-dot wu-cat-osint" href="events/cryovault-ctf-2026.html?cat=osint" data-cat="osint">osint <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-ai" href="events/cryovault-ctf-2026.html?cat=ai" data-cat="ai">AI <span class="comp-cat-n">3</span></a>
+          </div>
+          <a class="card-go" href="events/cryovault-ctf-2026.html" data-base="events/cryovault-ctf-2026.html">Open writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a>
         </div>
-        <p class="wu-eventgroup-count" data-count>48 writeups</p>
-      </div>
-      <ul class="wu-list-rows">
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/leaky-eval.html">
-            <span class="wu-row-title"><span class="wu-row-name">leaky-eval</span><span class="wu-row-sub">Ring-LWE decryption leak</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The service publishes one exact noise coefficient per Ring-LWE sample. Each leak is a full linear equation over Z_Q, so 72 samples solve for the ternary secret by plain Gaussian elimination and open the AES-GCM flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/hidden-weights.html">
-            <span class="wu-row-title"><span class="wu-row-name">hidden-weights</span><span class="wu-row-sub">orthogonal relation lattice</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Both the subset-sum weights and the 0/1 selection matrix are hidden, so the usual embedding is useless. LLL on the relation lattice exposes 40 short kernel vectors that pin down the secret rows, and a linear solve mod M recovers the weights.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/free-lunch.html">
-            <span class="wu-row-title"><span class="wu-row-name">free-lunch</span><span class="wu-row-sub">CICO on a cube-root permutation</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A 20-round cube-root permutation over GF(p)^2 must map (x, 0) to an output ending in zero. Written as a backward recurrence, the degree only triples every two steps, so the whole problem collapses to roots of one degree-59049 polynomial.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/implicit-twins.html">
-            <span class="wu-row-title"><span class="wu-row-name">implicit-twins</span><span class="wu-row-sub">implicit factorization of two RSA moduli</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Two 1280-bit moduli share a long run of low bits in their 1024-bit primes. Because the other primes are only 256 bits, the short vector (q1, q2) in a 2-D lattice falls out of plain Gauss reduction and factors both.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/half-truths.html">
-            <span class="wu-row-title"><span class="wu-row-name">half-truths</span><span class="wu-row-sub">Reed-Solomon list decoding</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">512 Shamir shares with only 185 honest, far past what any unique decoder can fix. Sudan-style list decoding with a carefully chosen degree bound recovers the polynomial, and a de-branched root finder pulls out the coefficients.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/toxic-waste.html">
-            <span class="wu-row-title"><span class="wu-row-name">toxic-waste</span><span class="wu-row-sub">Cheon's attack on a trimmed KZG setup</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Keeping only the first and last powers of tau looked like a space saving. Cheon's attack turns those two group elements into two baby-step giant-step phases of about 2^22 steps each, recovering tau and the flag key.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/sparse-change.html">
-            <span class="wu-row-title"><span class="wu-row-name">sparse-change</span><span class="wu-row-sub">Prony's problem over a finite field</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Only 48 evaluations of a secret 24-term sparse polynomial are given. The samples form a sum of exponentials, so a Hankel system finds the recurrence, Cantor-Zassenhaus splits it, and Pohlig-Hellman turns the roots into exponents.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/one-more.html">
-            <span class="wu-row-title"><span class="wu-row-name">one-more</span><span class="wu-row-sub">polynomial-time ROS attack on blind Schnorr</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A blind Schnorr signing oracle that lets you open 256 concurrent sessions. The polynomial-time ROS attack forges one more valid signature than sessions answered in a few seconds, with no Wagner tree and no heavy memory.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/the-recurrence.html">
-            <span class="wu-row-title"><span class="wu-row-name">The-Recurrence</span><span class="wu-row-sub">Lucas sequence and discrete log</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The 28-byte input is a 224-bit scalar fed through a Lucas V-sequence ladder. The check reduces to a quadratic in alpha^k, and the group order is smooth enough for Pohlig-Hellman to recover the scalar in milliseconds.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/the-loom.html">
-            <span class="wu-row-title"><span class="wu-row-name">The-Loom</span><span class="wu-row-sub">second-order reversible automaton</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A million rounds of a nonlinear update look expensive, but the recurrence P[n+1] = g(P[n]) xor P[n-1] is its own inverse. Walking backward from the two exposed states recovers the input.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/the-press.html">
-            <span class="wu-row-title"><span class="wu-row-name">the-press</span><span class="wu-row-sub">inverting an LZMA-style range coder</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">32 bytes in, 36 bytes out, with hand-rolled arithmetic coding after an XOR-diff pass. Running the matching range decoder over the target and then undoing the prefix XOR gives the input.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/palimpest.html">
-            <span class="wu-row-title"><span class="wu-row-name">Palimpest</span><span class="wu-row-sub">bitcode VM solved with SMT</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A Zig-built VM re-keys itself from its own register state on every one of 320 steps. Rather than invert it by hand, the whole loop is symbolised for bitwuzla with printable-ASCII constraints and solved in one query.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/ouroboros.html">
-            <span class="wu-row-title"><span class="wu-row-name">OUROBOROS</span><span class="wu-row-sub">JIT code with a self-referential key</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The binary synthesises its own checker at runtime, one block per 8 input bytes. The fixed function prologue is free known plaintext against the keystream, so each block's seed and word follow with no 2^64 search.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/the-ledger.html">
-            <span class="wu-row-title"><span class="wu-row-name">The Ledger</span><span class="wu-row-sub">subset-sum via lattice reduction</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The check is an exact integer subset sum over 128 entries of 400 bits, a density of about 0.32. BKZ with block size 20 on the standard low-density lattice yields the 128-bit selector, which is the input.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/turning-chart.html">
-            <span class="wu-row-title"><span class="wu-row-name">Turning Chart</span><span class="wu-row-sub">inverting a fixed 320-round program</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Every round's operation comes from a PRNG that never sees the input, so the whole thing is a fixed invertible byte program. Logging the ops under gdb and applying their inverses in reverse order recovers the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/ghost-in-the-spooler.html">
-            <span class="wu-row-title"><span class="wu-row-name">Ghost in the Spooler</span><span class="wu-row-sub">spooler shadow file and tracking dots</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The flag hashes a username, printer serial and timestamp. The .SHD file gives the owner and FILETIME, and the faint yellow DocuColor dots in the scan decode to the machine's serial and confirm the time.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/signed-which-original.html">
-            <span class="wu-row-title"><span class="wu-row-name">signed, but which original?</span><span class="wu-row-sub">provenance chain audit</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Five signed checkpoints, only some of them genuinely valid. Finding the largest correct tree head scopes the log, and strict RFC 8785 and ordering checks single out the one redacted derivative that passes.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/frost-ledger.html">
-            <span class="wu-row-title"><span class="wu-row-name">frost-ledger</span><span class="wu-row-sub">custom copy-on-write page format</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A volume with a stale format note and no walk subcommand. The real layout packs payloads against the end of each page with offsets counting backward, which lets the B+tree be walked by hand to an overflow chain holding the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/the-image-that-forgot.html">
-            <span class="wu-row-title"><span class="wu-row-name">The Image That Forgot</span><span class="wu-row-sub">timeline normalisation and OCI resolution</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Events in eight different UTC offsets must be normalised before the live instance can be identified. Resolving the OCI index to the right platform manifest then selects the key version that decrypts the incident note.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/the-last-committed-message.html">
-            <span class="wu-row-title"><span class="wu-row-name">the last committed message</span><span class="wu-row-sub">SQLite WAL multi-generation replay</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The target operation was overwritten in the final database but survives in an older WAL generation. Replaying generations commit by commit and snapshotting at each boundary recovers the note and its attachment record.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/last-packet.html">
-            <span class="wu-row-title"><span class="wu-row-name">last packet</span><span class="wu-row-sub">debug header leak in a pcap</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A developer left X-Debug-Mode on against an internal API, and the verbose reply carried an internal_key. It decodes through hex, base64 and a single-byte XOR whose key the known flag prefix gives away.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/write-hole.html">
-            <span class="wu-row-title"><span class="wu-row-name">Write-Hole</span><span class="wu-row-sub">RAID5 write hole and AEAD recovery</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Three raw drive images from a crashed NAS. Using e2fsck as the oracle recovers the RAID geometry, and the one record whose GCM tag was destroyed is decrypted independently of the tag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/journal-necromancy.html">
-            <span class="wu-row-title"><span class="wu-row-name">Journal Necromancy</span><span class="wu-row-sub">deleted NTFS data clusters</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The journal is wiped, but the data clusters of deleted files survive. Three tagged key shares are carved out by magic bytes, and the AES-GCM tag settles which byte layout is correct.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/phantom-mesh.html">
-            <span class="wu-row-title"><span class="wu-row-name">Phantom Mesh</span><span class="wu-row-sub">CPA on a software-AES mesh</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The rogue node's AES current draw modulates its transmitter bias, so the I/Q envelope is a power trace. Correlation power analysis recovers the fleet-wide link key, which unwraps the network key and the diagnostic report.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/end-mark.html">
-            <span class="wu-row-title"><span class="wu-row-name">end-mark</span><span class="wu-row-sub">SQLite WAL snapshot isolation</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A trace records reader and writer order but not the bytes returned. Working out which WAL snapshot each deferred reader pinned, including the stale generation left by a RESTART checkpoint, reconstructs all 24 reads.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="web">
-          <a class="wu-row-link" href="writeups/attestation.html">
-            <span class="wu-row-title"><span class="wu-row-name">attestation</span><span class="wu-row-sub">tar PAX smuggling and referrer confusion</span></span>
-            <span class="wu-cat wu-cat-web">web</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">An intake filter checks only the raw USTAR name while the opening desk honours a PAX path override. Smuggling the release record through that gap and building a two-child index launders a sealed case into a live one.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="web">
-          <a class="wu-row-link" href="writeups/canonical-sin.html">
-            <span class="wu-row-title"><span class="wu-row-name">Canonical Sin</span><span class="wu-row-sub">CBOR canonicalization differential</span></span>
-            <span class="wu-cat wu-cat-web">web</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Two byte-level filters guard the admin claim. An indefinite-length string slips past the raw blocklist and tag 55799 slips past the semantic one, and the final decoder still reads role as admin.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="web">
-          <a class="wu-row-link" href="writeups/draftpad.html">
-            <span class="wu-row-title"><span class="wu-row-name">Draftpad</span><span class="wu-row-sub">CRDT range redaction leak</span></span>
-            <span class="wu-cat wu-cat-web">web</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Redaction is computed from block index positions at request time while the content is always shipped. Merges shift indices, so the private window drifts off the flag block and the public export prints it.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="web">
-          <a class="wu-row-link" href="writeups/the-hidden-test-case.html">
-            <span class="wu-row-title"><span class="wu-row-name">The Hidden Test Case</span><span class="wu-row-sub">UNION SQL injection</span></span>
-            <span class="wu-cat wu-cat-web">web</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A lone quote returns 400 but a balanced payload returns every row, so the search is injectable. Four columns and a read of sqlite_master expose an internal_notes table holding the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="web">
-          <a class="wu-row-link" href="writeups/the-meridian.html">
-            <span class="wu-row-title"><span class="wu-row-name">The Meridian</span><span class="wu-row-sub">prototype pollution to derived key</span></span>
-            <span class="wu-cat wu-cat-web">web</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A static museum app hides a sealed vault behind a polluted shared-view link. Pollution through a unicode-escaped __proto__ key, plus the right pepper and a registrar audit, derives the AEAD key.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/tearing.html">
-            <span class="wu-row-title"><span class="wu-row-name">tearing</span><span class="wu-row-sub">TOCTOU race on shared state</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The vault's win guard is checked separately from the update and shared across every connection. A burst of 64 threads makes many claims land inside the window at once.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/mirage.html">
-            <span class="wu-row-title"><span class="wu-row-name">mirage</span><span class="wu-row-sub">blind format string, no binary</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">No binary is shipped, only an echo service that leaks more than it should. Leaking stack words proves a static non-PIE image, and a positional arbitrary read pulls the flag straight from memory.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/slab.html">
-            <span class="wu-row-title"><span class="wu-row-name">slab</span><span class="wu-row-sub">slab allocator aliasing to code execution</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A freed note's XOR-encoded free-list link is attacker-controlled, so a note can be made to alias the slot table. That gives arbitrary read and write, enough to dump the program and hijack a function pointer.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/echochamber-user.html">
-            <span class="wu-row-title"><span class="wu-row-name">echochamber-user</span><span class="wu-row-sub">SSTI to RCE and a nonce-gated socket</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Default credentials lead to a Jinja2 preview feature that renders unsanitised input. RCE as analyst exposes the sentinel source, so the time-based socket nonce can be computed and used to read the user flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/echochamber-root.html">
-            <span class="wu-row-title"><span class="wu-row-name">echochamber-root</span><span class="wu-row-sub">inherited CAP_DAC_READ_SEARCH</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The sentinel process holds CAP_DAC_READ_SEARCH and passes it to anything it spawns. Running a command through its socket reads the root flag with no classic privesc needed.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/keystone-user.html">
-            <span class="wu-row-title"><span class="wu-row-name">KeyStone-User</span><span class="wu-row-sub">SSTI and a forged TPM quote</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The vault verifies a quote against an attestation key the client itself supplies and never performs credential activation. After SSTI for a foothold, any RSA key can pose as the TPM and be handed a leaked SSH key.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/keystone-root.html">
-            <span class="wu-row-title"><span class="wu-row-name">KeyStone-Root</span><span class="wu-row-sub">TOCTOU in a setuid measurement helper</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The helper hashes and allowlists a path, sleeps 20 ms, then opens the same path again to execute. Flipping a symlink between the two opens runs the attacker payload as root.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/phantom-15.html">
-            <span class="wu-row-title"><span class="wu-row-name">PHANTOM-15</span><span class="wu-row-sub">802.15.4 CCM*, Reed-Solomon and CPA</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Three radio monitors and lab measurements must be combined to recover a missed diagnostic record. Getting the CCM* nonce byte order right, RS erasure decoding and a jitter-aware CPA for the key each unlock one stage.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/ghost-13.html">
-            <span class="wu-row-title"><span class="wu-row-name">GHOST-13</span><span class="wu-row-sub">journal rollover, ECDSA nonce reuse, DTMF</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Four artifacts chain together. A wrapped 16-bit journal picks the active config, two Modbus signatures reuse an ECDSA nonce to leak the scalar, and DTMF tones from a WAV finish the key for the OTA unseal.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/fluxgate-g3.html">
-            <span class="wu-row-title"><span class="wu-row-name">Fluxgate G3</span><span class="wu-row-sub">composing signed firmware parts</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Each firmware artifact is verified alone but never as a set. One same-counter sidegrade adds an unlock opcode and a tab upgrade lowers its capability requirement, so a basic token can unlock.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/flaguard.html">
-            <span class="wu-row-title"><span class="wu-row-name">FlaGuard</span><span class="wu-row-sub">shadow dex decoy and a missing flip()</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A shadow dex is meant to swap in a second flag checker, but the buffer is never flipped before loading, so the loader sees zero bytes. The visible checker is the real one, and it inverts byte by byte.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/mirror-garden.html">
-            <span class="wu-row-title"><span class="wu-row-name">Mirror Garden</span><span class="wu-row-sub">1024 z3 leaves and native JNI</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">1024 generated Java leaves each encode a system of byte equations. All are solved with z3, one decodes differently, and Unicorn emulation of the native bloom() finishes the transform without reversing it by hand.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/faraday-cage.html">
-            <span class="wu-row-title"><span class="wu-row-name">Faraday Cage</span><span class="wu-row-sub">permuted-handler custom cipher</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The native checker is a bytecode VM whose 48 handlers are shuffled at runtime. Rebuilding the ISA in Python, validated against Unicorn, exposes a custom AES-like cipher that inverts by hand.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/oatmeal.html">
-            <span class="wu-row-title"><span class="wu-row-name">Oatmeal</span><span class="wu-row-sub">ART OAT is authoritative over the APK</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">The APK's notes are a staging decoy and the device actually ran the odex. Its checkFlag_v2 bytecode VM reduces to one invertible constraint per byte, and an FNV-1a finaliser turns the secret into the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="ai">
-          <a class="wu-row-link" href="writeups/the-aggregate-remembers.html">
-            <span class="wu-row-title"><span class="wu-row-name">the-aggregate-remembers</span><span class="wu-row-sub">federated gradient inversion</span></span>
-            <span class="wu-cat wu-cat-ai">AI</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Per-round weight updates from a federated linear-regression client leak its data. Rank analysis across six reused checkpoints shows a batch of two, and the raw 16-byte records are recovered from the gradients.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="ai">
-          <a class="wu-row-link" href="writeups/the-shape-of-silence.html">
-            <span class="wu-row-title"><span class="wu-row-name">the-shape-of-silence</span><span class="wu-row-sub">hidden ReLU network and a version trap</span></span>
-            <span class="wu-cat wu-cat-ai">AI</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Clustered probe points fit exact integer affine pieces, so the model is a ReLU net. Four captures belong to a different model version, and dropping them resolves nine units that predict the targets.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="ai">
-          <a class="wu-row-link" href="writeups/the-deletion-echo.html">
-            <span class="wu-row-title"><span class="wu-row-name">The Deletion Echo</span><span class="wu-row-sub">inverting a ridge-regression oracle</span></span>
-            <span class="wu-cat wu-cat-ai">AI</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Published means and variances leak the Hessian and label moments of each release. Ordering the snapshots and isolating the deletion step, then an integer MILP, names the deleted records and their labels.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="osint">
-          <a class="wu-row-link" href="writeups/one-pound-fish.html">
-            <span class="wu-row-title"><span class="wu-row-name">One Pound Fish</span><span class="wu-row-sub">reverse image geolocation</span></span>
-            <span class="wu-cat wu-cat-osint">osint</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">An unindexed fish market photo with a white blur over the signage. TinEye, Yandex and Bing all missed, but Google Lens placed it at Russell Market in Shivajinagar, Bengaluru.</span>
-          </a>
-        </li>
-      </ul>
-    </div>
-
-    <div class="wu-eventgroup" id="byteme-ctf-26" data-event="byteme-ctf-26">
-      <div class="wu-eventgroup-head">
-        <h2>ByteMe CTF 26</h2>
-        <div class="wu-scoreline">
-      <span><b>87th</b> of 300</span>
-      <span><b>24</b> solves</span>
-      <span><b>NxT, TxN</b></span>
+      </li>
+      <li class="comp-card" data-event="byteme-ctf-26" data-cats="pwn rev crypto forensics osint misc">
+        <div class="card-box">
+          <p class="event-date">9 October 2026</p>
+          <h2 class="comp-name"><a href="events/byteme-ctf-26.html">ByteMe CTF 26</a></h2>
+          <p class="event-place"><b>87th</b> of 300</p>
+          <p class="event-meta">25 writeups &middot; Team &middot; NxT, TxN</p>
+          <div class="comp-cats" aria-label="Open ByteMe CTF 26 filtered by category">
+            <a class="chip chip-dot wu-cat-pwn" href="events/byteme-ctf-26.html?cat=pwn" data-cat="pwn">pwn <span class="comp-cat-n">2</span></a>
+            <a class="chip chip-dot wu-cat-rev" href="events/byteme-ctf-26.html?cat=rev" data-cat="rev">rev <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-crypto" href="events/byteme-ctf-26.html?cat=crypto" data-cat="crypto">crypto <span class="comp-cat-n">3</span></a>
+            <a class="chip chip-dot wu-cat-forensics" href="events/byteme-ctf-26.html?cat=forensics" data-cat="forensics">forensics <span class="comp-cat-n">16</span></a>
+            <a class="chip chip-dot wu-cat-osint" href="events/byteme-ctf-26.html?cat=osint" data-cat="osint">osint <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-misc" href="events/byteme-ctf-26.html?cat=misc" data-cat="misc">misc <span class="comp-cat-n">2</span></a>
+          </div>
+          <a class="card-go" href="events/byteme-ctf-26.html" data-base="events/byteme-ctf-26.html">Open writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a>
         </div>
-        <p class="wu-eventgroup-count" data-count>25 writeups</p>
-      </div>
-      <ul class="wu-list-rows">
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/hidden-soul.html">
-            <span class="wu-row-title"><span class="wu-row-name">Hidden Soul</span><span class="wu-row-sub">LSB stego in an 80x80 PNG</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A plain ASCII flag sits in the least-significant bits of every R, G and B value. zsteg finds it at b1,rgb,lsb,xy, and a short Pillow script confirms the same bytes.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/soul-world.html">
-            <span class="wu-row-title"><span class="wu-row-name">Soul World</span><span class="wu-row-sub">LSB stego, two independent extractions</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Another RGB LSB image, this time with the flag at the very start of the bitstream. zsteg and a from-scratch row-major extractor produce byte-identical output.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/the-last-soul.html">
-            <span class="wu-row-title"><span class="wu-row-name">The Last Soul</span><span class="wu-row-sub">LSB stego carrying base64</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">200 pts</span>
-            <span class="wu-row-blurb">The LSB layer is itself a base64 string. An incompressible 19 KB file for an 80x80 image is the tell, and decoding the extracted text gives the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/soul-in-the-shadows.html">
-            <span class="wu-row-title"><span class="wu-row-name">Soul in the Shadows</span><span class="wu-row-sub">LSB, base64 and a VORMIR XOR</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">Nothing is appended to the PNG, but the pixels carry a base64 string in their LSBs. The decoded bytes are ciphertext, and the key VORMIR is teased by the image's tEXt comment and the title.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/invisible-signal.html">
-            <span class="wu-row-title"><span class="wu-row-name">Invisible Signal</span><span class="wu-row-sub">a message drawn as a scatter plot</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">200 pts</span>
-            <span class="wu-row-blurb">A matplotlib scatter plot hides 40 double-size markers among hundreds of noise points. Calibrating the axes from the gridlines and reading each y-value as an ASCII code spells a leetspeak sentence.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/broken-soul-vault.html">
-            <span class="wu-row-title"><span class="wu-row-name">Broken Soul Vault</span><span class="wu-row-sub">hex payload in a mislabelled .bin</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">The .bin file is plain text, with guard values around a hex line. Decoding the middle line and checking it against the OWASP pattern picks the valid recovered block.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/soul-memory.html">
-            <span class="wu-row-title"><span class="wu-row-name">Soul Memory</span><span class="wu-row-sub">process extract with a decoy hint</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">The memory dump is a small key=value extract. A vault_hint line points past the cache key, but the flag is just carried in the data field.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/echoes-of-the-snap.html">
-            <span class="wu-row-title"><span class="wu-row-name">Echoes of the Snap</span><span class="wu-row-sub">hex in a DNS TXT field</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">200 pts</span>
-            <span class="wu-row-blurb">The capture summary shows one stream with a long even-length hex string in a TXT record. Piping it through xxd -r -p gives readable leetspeak.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/echoes-of-vormir-mem-1.html">
-            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-1</span><span class="wu-row-sub">timestamp from a Windows memory image</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">The first memory forensics warm-up asks when the dump was taken. Volatility 3 windows.info reports the SystemTime from KUSER_SHARED_DATA, which is the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/echoes-of-vormir-mem-2.html">
-            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-2</span><span class="wu-row-sub">a renamed PowerShell in the process list</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">200 pts</span>
-            <span class="wu-row-blurb">One process does not belong: SoulHunt_7F31 spawned from powershell.exe. Its command line and dumped strings show it is a renamed copy of PowerShell.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/echoes-of-vormir-mem-3.html">
-            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-3</span><span class="wu-row-sub">a painted image cached in memory</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">300 pts</span>
-            <span class="wu-row-blurb">The hint says the answer is something seen. Filescan on the dump lists a cached Sacrifice.png, and dumping it shows a wallpaper with the flag painted on top in black text.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/echoes-of-vormir-mem-4.html">
-            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-4</span><span class="wu-row-sub">a leftover fragment in command history</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">250 pts</span>
-            <span class="wu-row-blurb">A fragment survives outside the tidy mapped files. Console and heap leftovers in the raw dump carry a hex-encoded OWASP flag from the same family, which decodes with xxd. The value is a reconstruction, not confirmed against the scoreboard.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/echoes-of-vormir-mem-5.html">
-            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-5</span><span class="wu-row-sub">browser history in the memory dump</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">200 pts</span>
-            <span class="wu-row-blurb">The last trace is browser activity. Carving the mapped History object shows Bing searches for FTK Imager and winpmem, and the dump holds the matching flag in hex and UTF-16LE form.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/echoes-of-vormir-mem-6.html">
-            <span class="wu-row-title"><span class="wu-row-name">Echoes of Vormir: Mem-6</span><span class="wu-row-sub">the forgotten expedition note</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">250 pts</span>
-            <span class="wu-row-blurb">A small expedition.txt note is carved from memory. Its artifact reference is a hex string that decodes straight to the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/last-memory-of-vormir.html">
-            <span class="wu-row-title"><span class="wu-row-name">The Last Memory of Vormir</span><span class="wu-row-sub">reversed speech and a WAV trailer</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">The WAV speaks backwards and says the key is sacrifice. 213 bytes sit past the declared RIFF end as hex pairs, and XORing them with that key yields the riddle.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/sacrifice.html">
-            <span class="wu-row-title"><span class="wu-row-name">Sacrifice</span><span class="wu-row-sub">PCAP, FTP files and nested archives</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A PCAP's FTP streams carry a JPEG whose comment holds a password and whose embedded ZIP holds comms.bin. Peeling gzip, bzip2 and gzip off to a tar leaves one oversized log with a base64 flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/soul-forge.html">
-            <span class="wu-row-title"><span class="wu-row-name">Soul Forge</span><span class="wu-row-sub">two-time pad and crib dragging</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">Two ciphertexts share a keystream and the first 12 bytes match. XORing them and dragging cribs from the shared prefix recovers both plaintexts.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/vormir-common-modulus.html">
-            <span class="wu-row-title"><span class="wu-row-name">Vormir Common Modulus</span><span class="wu-row-sub">RSA common modulus attack</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">The same message is encrypted under one modulus with e=65537 and e=65539. The extended Euclidean algorithm gives a and b with a*e1 + b*e2 = 1, so m = c1^a * c2^b mod n.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/double-trouble.html">
-            <span class="wu-row-title"><span class="wu-row-name">Double Trouble</span><span class="wu-row-sub">shared RSA prime and an XOR key</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">The gcd of the two moduli is a shared prime, which decrypts both. One plaintext is base64 and the other is the XOR key GAMORA that unlocks it.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/souls-whisper.html">
-            <span class="wu-row-title"><span class="wu-row-name">Soul's Whisper</span><span class="wu-row-sub">stack-built strings in an ELF</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">Strings shows four overlapping 8-byte fragments that nearly spell the flag. Reading soul_stone() shows the real layout and the gate string soul, so the naive concatenation is a trap.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/souls-weakness.html">
-            <span class="wu-row-title"><span class="wu-row-name">Soul's Weakness</span><span class="wu-row-sub">gets() overflow to a win function</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts">200 pts</span>
-            <span class="wu-row-blurb">An unstripped, non-PIE binary with no canary and a gets() into a 32-byte buffer. 40 bytes of padding and the address of soul_stone hijacks the return, verified against the remote.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/return-to-win.html">
-            <span class="wu-row-title"><span class="wu-row-name">Return to Win</span><span class="wu-row-sub">ret2win with a 10-byte buffer</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">A classic gets() overflow into hello()'s 10-byte buffer. 18 bytes of padding reach the return address, which is pointed at win().</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="osint">
-          <a class="wu-row-link" href="writeups/red-skulls-trail.html">
-            <span class="wu-row-title"><span class="wu-row-name">Red Skull's Trail</span><span class="wu-row-sub">GitHub history to a PNG trailer</span></span>
-            <span class="wu-cat wu-cat-osint">osint</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">A riddle names Vormir-616, whose GitHub repo has a tampered record. The git history reveals an image rename, and base64 trailing the PNG's IEND chunk gives the username.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="misc">
-          <a class="wu-row-link" href="writeups/level-0-first-fragment.html">
-            <span class="wu-row-title"><span class="wu-row-name">Level 0: First Fragment</span><span class="wu-row-sub">QR code split into 3x3 tiles</span></span>
-            <span class="wu-cat wu-cat-misc">misc</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">A WinZip AES archive opens with the password OWASP. Its nine shuffled tiles are slices of one QR code, rebuilt by locating finder patterns and validating the decode.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="misc">
-          <a class="wu-row-link" href="writeups/level-1-shattered-memories.html">
-            <span class="wu-row-title"><span class="wu-row-name">Level 1: Shattered Memories</span><span class="wu-row-sub">rotated 4x4 QR tiles</span></span>
-            <span class="wu-cat wu-cat-misc">misc</span>
-            <span class="wu-row-pts">100 pts</span>
-            <span class="wu-row-blurb">Sixteen binary tiles are shuffled and rotated. Edge-signature matching with backtracking, validated by a QR decoder, assembles the code.</span>
-          </a>
-        </li>
-      </ul>
-    </div>
-
-    <div class="wu-eventgroup" id="skillbit-flash-ctf-2026-09" data-event="skillbit-flash-ctf-2026-09">
-      <div class="wu-eventgroup-head">
-        <h2>September 2026 SkillBit Flash CTF</h2>
-        <div class="wu-scoreline">
-      <span><b>Participant</b> 2-hour flash CTF</span>
-      <span><b>5</b> solves</span>
-      <span><b>NxT</b> &middot; solo</span>
+      </li>
+      <li class="comp-card" data-event="skillbit-flash-ctf-2026-09" data-cats="web rev forensics misc">
+        <div class="card-box">
+          <p class="event-date">24 September 2026</p>
+          <h2 class="comp-name"><a href="events/skillbit-flash-ctf-2026-09.html">September 2026 SkillBit Flash CTF</a></h2>
+          <p class="event-place"><b>Participant</b> 2-hour flash CTF</p>
+          <p class="event-meta">5 writeups &middot; Solo &middot; NxT</p>
+          <div class="comp-cats" aria-label="Open September 2026 SkillBit Flash CTF filtered by category">
+            <a class="chip chip-dot wu-cat-web" href="events/skillbit-flash-ctf-2026-09.html?cat=web" data-cat="web">web <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-rev" href="events/skillbit-flash-ctf-2026-09.html?cat=rev" data-cat="rev">rev <span class="comp-cat-n">2</span></a>
+            <a class="chip chip-dot wu-cat-forensics" href="events/skillbit-flash-ctf-2026-09.html?cat=forensics" data-cat="forensics">forensics <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-misc" href="events/skillbit-flash-ctf-2026-09.html?cat=misc" data-cat="misc">misc <span class="comp-cat-n">1</span></a>
+          </div>
+          <a class="card-go" href="events/skillbit-flash-ctf-2026-09.html" data-base="events/skillbit-flash-ctf-2026-09.html">Open writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a>
         </div>
-        <p class="wu-eventgroup-count" data-count>5 writeups</p>
-      </div>
-      <ul class="wu-list-rows">
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/coilvm.html">
-            <span class="wu-row-title"><span class="wu-row-name">CoilVM</span><span class="wu-row-sub">SIGTRAP-driven VM</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A stripped x86-64 binary runs its checks entirely inside a SIGTRAP handler, one int3 per input byte, with self-modifying XOR blocks and an rdtsc anti-debug gate. The FNV-1a verification chain inverts cleanly step by step, recovering the input and the decryption key in one forward pass.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="misc">
-          <a class="wu-row-link" href="writeups/gitsleuth.html">
-            <span class="wu-row-title"><span class="wu-row-name">Git Sleuth</span><span class="wu-row-sub">git-only shell, 501 haystack files</span></span>
-            <span class="wu-cat wu-cat-misc">misc</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A restricted shell only runs git, with `flag`, `grep`, `diff` and `:` all blocklisted. Committing the haystack and diffing blob hashes finds the one odd file among 500 decoys, and `git cat-file -p &lt;hash&gt;` reads it straight by SHA with no blocked syntax.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="web">
-          <a class="wu-row-link" href="writeups/trackme.html">
-            <span class="wu-row-title"><span class="wu-row-name">TrackMe</span><span class="wu-row-sub">log poisoning via User-Agent</span></span>
-            <span class="wu-cat wu-cat-web">web</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A PHP log viewer `include`s the access log instead of reading it, and the User-Agent header is logged unsanitized. Poisoning the log with a PHP snippet in the User-Agent, then viewing it through the include, executes it and dumps the runtime-generated flag file.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/carry-on.html">
-            <span class="wu-row-title"><span class="wu-row-name">Carry On</span><span class="wu-row-sub">ZIP appended after PNG IEND</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A checkpoint-layout PNG carries a ZIP archive appended after its IEND chunk, invisible to image viewers but readable by unzip. The extracted memo hides the flag in plain sight, labeled as a diagnostic recovery key.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/careless-talk.html">
-            <span class="wu-row-title"><span class="wu-row-name">Careless Talk</span><span class="wu-row-sub">plaintext flag in decoy noise</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A watchword-prompt binary never needs to be run or reversed: the flag sits split across two plaintext strings in the data section, buried under dozens of decoy lines that a targeted grep cuts straight through.</span>
-          </a>
-        </li>
-      </ul>
-    </div>
-
-    <div class="wu-eventgroup" id="tisc-2026" data-event="tisc-2026">
-      <div class="wu-eventgroup-head">
-        <h2>TISC 2026</h2>
-        <div class="wu-scoreline">
-      <span><b>Top 50</b> of 1,119</span>
-      <span><b>7</b> solves</span>
-      <span><b>NxT</b> &middot; solo</span>
+      </li>
+      <li class="comp-card" data-event="tisc-2026" data-cats="pwn rev forensics osint ai">
+        <div class="card-box">
+          <p class="event-date">20 September 2026</p>
+          <h2 class="comp-name"><a href="events/tisc-2026.html">TISC 2026</a></h2>
+          <p class="event-place"><b>Top 50</b> of 1,119</p>
+          <p class="event-meta">7 writeups &middot; Solo &middot; NxT</p>
+          <div class="comp-cats" aria-label="Open TISC 2026 filtered by category">
+            <a class="chip chip-dot wu-cat-pwn" href="events/tisc-2026.html?cat=pwn" data-cat="pwn">pwn <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-rev" href="events/tisc-2026.html?cat=rev" data-cat="rev">rev <span class="comp-cat-n">2</span></a>
+            <a class="chip chip-dot wu-cat-forensics" href="events/tisc-2026.html?cat=forensics" data-cat="forensics">forensics <span class="comp-cat-n">2</span></a>
+            <a class="chip chip-dot wu-cat-osint" href="events/tisc-2026.html?cat=osint" data-cat="osint">osint <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-ai" href="events/tisc-2026.html?cat=ai" data-cat="ai">AI <span class="comp-cat-n">1</span></a>
+          </div>
+          <a class="card-go" href="events/tisc-2026.html" data-base="events/tisc-2026.html">Open writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a>
         </div>
-        <p class="wu-eventgroup-count" data-count>7 writeups</p>
-      </div>
-      <ul class="wu-list-rows">
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/redacted.html">
-            <span class="wu-row-title"><span class="wu-row-name">REDACTED</span><span class="wu-row-sub">PDF redaction bypass</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A five-page PDF's black-box redactions never touched the underlying text. pdftotext -layout recovers a Base64 string hidden under a section titled The Flag, decoding straight to the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="osint">
-          <a class="wu-row-link" href="writeups/printer-secret.html">
-            <span class="wu-row-title"><span class="wu-row-name">My Printer Has a Secret</span><span class="wu-row-sub">HCCB stego + tracking dots + OSINT</span></span>
-            <span class="wu-cat wu-cat-osint">osint</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A printed cover-sheet PNG hides an HCCB-style colour tag (a 36x36 triangle grid pointing to an archive) and a fake tracking-dot pattern (the archive password), then a passive OSINT chain across aucfan, Flickr, a hobby site and a shop finds the seller's username, pants colour, and model number.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/lion-city-layover.html">
-            <span class="wu-row-title"><span class="wu-row-name">Lion City Layover</span><span class="wu-row-sub">fake WASM VM + Fermat RSA</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A Singapore-themed maze hides a fake WebAssembly VM whose validator and interpreter parse different custom sections; duplicating a wasm section bypasses the opcode blocklist to dump a Fermat-weak RSA blob, factored to recover the boarding-pass claim, all while dodging LLM prompt-injection honeypots.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="ai">
-          <a class="wu-row-link" href="writeups/zygpt.html">
-            <span class="wu-row-title"><span class="wu-row-name">ZyGPT</span><span class="wu-row-sub">LSB-sealed LLM weights</span></span>
-            <span class="wu-cat wu-cat-ai">AI</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A Qwen3-1.7B fine-tune seals a flag in one MLP tensor's LSBs, keyed by a 5-record live handshake among 69 self-verifying provisioning rows. The model's own recited manual misdirects toward a false reserved-rows subset; brute-forcing all 69-choose-5 combinations against a flip-mask oracle finds the real one.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/trash-talk.html">
-            <span class="wu-row-title"><span class="wu-row-name">Trash Talk</span><span class="wu-row-sub">GTS Pokemon trash-byte stego</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A Nintendo GTS emulator hides messages in Pokemon nickname trash bytes across two game generations. A Gen 4 Porygon's trash reveals the XOR key for Gen 5 Porygon2 trash (recipient PIDs plus an OT-name instruction to trade a female Buizel), and performing that trade unlocks a hidden Porygon-Z whose trash XORs with its own PID into the flag.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="forensics">
-          <a class="wu-row-link" href="writeups/provenance.html">
-            <span class="wu-row-title"><span class="wu-row-name">Provenance Expert</span><span class="wu-row-sub">forged Rich header</span></span>
-            <span class="wu-cat wu-cat-forensics">forensics</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A PE32+ binary's Rich header and linker version were forged to claim Visual Studio 2017, but the load-config layout and COFF timestamp (Aug 2026) prove Visual Studio 2022. Repairing every Rich-header build number to the matching VS2022 17.13 build and recomputing the checksum satisfies the grader's provenance check.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/omnitrix.html">
-            <span class="wu-row-title"><span class="wu-row-name">Omnitrix</span><span class="wu-row-sub">race condition + dlopen pwn</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A stripped Rust/tokio service gates a dlopen primitive behind a policy-mask bit no static code path can set. A data race in capability-cache reconcile flips the shared mask, letting a hand-crafted .so slip past content filters and get dlopen'd to run the execute-only flag binary.</span>
-          </a>
-        </li>
-      </ul>
-    </div>
-
-    <div class="wu-eventgroup" id="kaspersky-ctf-2026" data-event="kaspersky-ctf-2026">
-      <div class="wu-eventgroup-head">
-        <h2>Kaspersky CTF 2026</h2>
-        <div class="wu-scoreline">
-      <span><b>69th</b> Asia regional league</span>
-      <span><b>736</b> points</span>
-      <span><b>9</b> solves</span>
-      <span><b>NxT</b> &middot; ITE College West</span>
+      </li>
+      <li class="comp-card" data-event="tfc-ctf-26" data-cats="crypto osint misc">
+        <div class="card-box">
+          <p class="event-date">6 September 2026</p>
+          <h2 class="comp-name"><a href="events/tfc-ctf-26.html">TFC CTF 26</a></h2>
+          <p class="event-place"><b>162nd</b> of 1,027 teams</p>
+          <p class="event-meta">7 writeups &middot; Solo &middot; NxT</p>
+          <div class="comp-cats" aria-label="Open TFC CTF 26 filtered by category">
+            <a class="chip chip-dot wu-cat-crypto" href="events/tfc-ctf-26.html?cat=crypto" data-cat="crypto">crypto <span class="comp-cat-n">4</span></a>
+            <a class="chip chip-dot wu-cat-osint" href="events/tfc-ctf-26.html?cat=osint" data-cat="osint">osint <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-misc" href="events/tfc-ctf-26.html?cat=misc" data-cat="misc">misc <span class="comp-cat-n">2</span></a>
+          </div>
+          <a class="card-go" href="events/tfc-ctf-26.html" data-base="events/tfc-ctf-26.html">Open writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a>
         </div>
-        <p class="wu-eventgroup-count" data-count>9 writeups</p>
-      </div>
-      <ul class="wu-list-rows">
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/slopgate.html">
-            <span class="wu-row-title"><span class="wu-row-name">SlopGate</span><span class="wu-row-sub">QEMU escape</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts">182 pts</span>
-            <span class="wu-row-blurb">The hardened SlopGate PCI device is a decoy. The serial console still drops to the QEMU monitor, and `migrate &quot;exec:...&quot;` runs a command on the host.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="ai">
-          <a class="wu-row-link" href="writeups/lumberjack.html">
-            <span class="wu-row-title"><span class="wu-row-name">Lumberjack</span><span class="wu-row-sub">ML / OOB read</span></span>
-            <span class="wu-cat wu-cat-ai">AI</span>
-            <span class="wu-row-pts">89 pts</span>
-            <span class="wu-row-blurb">An ONNX-to-native compiler never bounds-checks `feature_idx`. A negative index reads the `FLAG` env pointer off the stack, one float at a time, through a tree-classifier oracle.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="misc">
-          <a class="wu-row-link" href="writeups/chroot-bronze.html">
-            <span class="wu-row-title"><span class="wu-row-name">chroot-bronze</span><span class="wu-row-sub">chroot escape</span></span>
-            <span class="wu-cat wu-cat-misc">misc</span>
-            <span class="wu-row-pts">77 pts</span>
-            <span class="wu-row-blurb">Root inside a bare chroot. Ship an ELF with `printf` octal escapes, run it via `ld.so` to dodge the missing `+x`, then the classic `chroot`/`chdir(&quot;..&quot;)` walk-out.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/awasmsafe.html">
-            <span class="wu-row-title"><span class="wu-row-name">awasmsafe</span><span class="wu-row-sub">WASM + Electron</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts">74 pts</span>
-            <span class="wu-row-blurb">The password check is a WASM RC4 whose key is derived from the page's own source and CSP hash, gated behind ~56 anti-Node fingerprint checks. Run the real Electron renderer, then solve the RC4 algebraically.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="misc">
-          <a class="wu-row-link" href="writeups/chroot-silver.html">
-            <span class="wu-row-title"><span class="wu-row-name">chroot-silver</span><span class="wu-row-sub">sandbox escape</span></span>
-            <span class="wu-cat wu-cat-misc">misc</span>
-            <span class="wu-row-pts">64 pts</span>
-            <span class="wu-row-blurb">`SOCAT_PPID=1` gives it away: the jailer lives outside the jail. Build a musl PIE, upload it with all-3-digit octal `printf`, run via the musl loader, and escape through a saved root fd.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/sudokrypt.html">
-            <span class="wu-row-title"><span class="wu-row-name">Sudokrypt</span><span class="wu-row-sub">custom cipher</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts">50 pts</span>
-            <span class="wu-row-blurb">The Feistel and sudoku layers are keyless and publicly invertible. Two design leaks recover both secret permutations, and a shared block counter exposes the spectral keystream as a degree-56 linear recurrence.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/shiny-sweetie-curve.html">
-            <span class="wu-row-title"><span class="wu-row-name">Shiny Sweetie Curve</span><span class="wu-row-sub">elliptic curve</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts">50 pts</span>
-            <span class="wu-row-blurb">A fresh random curve every round, only x-coordinates leaked. X-only addition identities plus a resultant-and-GCD trick recover the secret prime, then `a`, `b`, and the step point.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="rev">
-          <a class="wu-row-link" href="writeups/biblocker.html">
-            <span class="wu-row-title"><span class="wu-row-name">biblocker</span><span class="wu-row-sub">SIGSEGV &quot;TPM&quot;</span></span>
-            <span class="wu-cat wu-cat-rev">rev</span>
-            <span class="wu-row-pts">50 pts</span>
-            <span class="wu-row-blurb">The &quot;Trusted Potato Module&quot; is a SIGSEGV handler that hands back AES key material derived from the fault address via XTEA. Re-implement the CRC and XTEA statically. The key is `target_key XOR mask`.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/censored.html">
-            <span class="wu-row-title"><span class="wu-row-name">Censored</span><span class="wu-row-sub">HNP / lattice</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts">50 pts</span>
-            <span class="wu-row-blurb">Each Schnorr signature ships a &quot;diagnostic&quot; blob whose XOR masks are computable from public data. Unmask it for ~16 bits of nonce per signature, then solve the Hidden Number Problem by lattice reduction.</span>
-          </a>
-        </li>
-      </ul>
-    </div>
-
-    <div class="wu-eventgroup" id="tfc-ctf-26" data-event="tfc-ctf-26">
-      <div class="wu-eventgroup-head">
-        <h2>TFC CTF 26</h2>
-        <div class="wu-scoreline">
-      <span><b>162nd</b> of 1,027 teams</span>
-      <span><b>77.08</b> CTFtime weight</span>
-      <span><b>7</b> solves</span>
-      <span><b>NxT</b> &middot; solo</span>
+      </li>
+      <li class="comp-card" data-event="kaspersky-ctf-2026" data-cats="pwn rev crypto ai misc">
+        <div class="card-box">
+          <p class="event-date">30 August 2026</p>
+          <h2 class="comp-name"><a href="events/kaspersky-ctf-2026.html">Kaspersky CTF 2026</a></h2>
+          <p class="event-place"><b>69th</b> Asia regional league</p>
+          <p class="event-meta">9 writeups &middot; Team &middot; NxT, ITE College West</p>
+          <div class="comp-cats" aria-label="Open Kaspersky CTF 2026 filtered by category">
+            <a class="chip chip-dot wu-cat-pwn" href="events/kaspersky-ctf-2026.html?cat=pwn" data-cat="pwn">pwn <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-rev" href="events/kaspersky-ctf-2026.html?cat=rev" data-cat="rev">rev <span class="comp-cat-n">2</span></a>
+            <a class="chip chip-dot wu-cat-crypto" href="events/kaspersky-ctf-2026.html?cat=crypto" data-cat="crypto">crypto <span class="comp-cat-n">3</span></a>
+            <a class="chip chip-dot wu-cat-ai" href="events/kaspersky-ctf-2026.html?cat=ai" data-cat="ai">AI <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-misc" href="events/kaspersky-ctf-2026.html?cat=misc" data-cat="misc">misc <span class="comp-cat-n">2</span></a>
+          </div>
+          <a class="card-go" href="events/kaspersky-ctf-2026.html" data-base="events/kaspersky-ctf-2026.html">Open writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a>
         </div>
-        <p class="wu-eventgroup-count" data-count>7 writeups</p>
-      </div>
-      <ul class="wu-list-rows">
-        <li class="wu-row" data-cat="misc">
-          <a class="wu-row-link" href="writeups/discord-shenanigans-v6.html">
-            <span class="wu-row-title"><span class="wu-row-name">Discord Shenanigans V6</span><span class="wu-row-sub">acrostic in #announcements</span></span>
-            <span class="wu-cat wu-cat-misc">misc</span>
-            <span class="wu-row-pts">340 pts</span>
-            <span class="wu-row-blurb">The pre-event announcement is an acrostic. First letters spell LCASTLE, and the opening words &quot;Less than&quot; tell you to drop the leading L. The hidden word is CASTLE.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/math-or-meth.html">
-            <span class="wu-row-title"><span class="wu-row-name">MATH OR METH?</span><span class="wu-row-sub">hidden row in a lattice</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts">298 pts</span>
-            <span class="wu-row-blurb">One row of a small-entry matrix is the flag's base-33 digits, and only `h = a A mod p` is published. Two LLL passes recover the hidden row lattice, and one vector decodes to printable text.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="misc">
-          <a class="wu-row-link" href="writeups/rules.html">
-            <span class="wu-row-title"><span class="wu-row-name">RULES</span><span class="wu-row-sub">read the rules page</span></span>
-            <span class="wu-cat wu-cat-misc">misc</span>
-            <span class="wu-row-pts">128 pts</span>
-            <span class="wu-row-blurb">The flag-format section of the site rules page uses a real flag as its example. Visiting the page marks the challenge solved.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/cer-frumos.html">
-            <span class="wu-row-title"><span class="wu-row-name">CER FRUMOS</span><span class="wu-row-sub">MT19937 state recovery</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">625 partial Mersenne Twister outputs over-determine the 19968-bit state. Model the twist and temper in Z3, add the leaked bits as constraints, then read off the two words that seed the AES key and IV.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/one-plus-one.html">
-            <span class="wu-row-title"><span class="wu-row-name">1+1</span><span class="wu-row-sub">approximate GCD</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Ten samples `x_i = p * q_i + r_i` share the secret `p` (the flag) with small noise `r_i`. A Howgrave-Graham AGCD lattice with the right scale recovers `q_0`, and `p = x_0 / q_0`.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/mid.html">
-            <span class="wu-row-title"><span class="wu-row-name">mid</span><span class="wu-row-sub">a lying binary-search oracle</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A 30-character password behind a comparison oracle that answers truthfully only while your submitted state matches a hidden mood. One provably-safe probe detects the mood flip; char-by-char search contains the damage.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="osint">
-          <a class="wu-row-link" href="writeups/fishing-not-phishing.html">
-            <span class="wu-row-title"><span class="wu-row-name">FISHING NOT PHISHING</span><span class="wu-row-sub">vessel tracking via AIS</span></span>
-            <span class="wu-cat wu-cat-osint">osint</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">Reverse image search identifies the trawler STEAUA DE MARE 1. Global Fishing Watch gives the September 2023 voyage from Constanta, the first fishing event, and the coordinates for a haversine distance.</span>
-          </a>
-        </li>
-      </ul>
-    </div>
-
-    <div class="wu-eventgroup" id="hitcon-ctf-2026" data-event="hitcon-ctf-2026">
-      <div class="wu-eventgroup-head">
-        <h2>HITCON CTF 2026</h2>
-        <div class="wu-scoreline">
-      <span><b>Participant</b> qualifier</span>
-      <span><b>3</b> solves</span>
-      <span><b>NxT, TxN, NxD, DxT</b></span>
+      </li>
+      <li class="comp-card" data-event="hitcon-ctf-2026" data-cats="pwn crypto misc">
+        <div class="card-box">
+          <p class="event-date">28 August 2026</p>
+          <h2 class="comp-name"><a href="events/hitcon-ctf-2026.html">HITCON CTF 2026</a></h2>
+          <p class="event-place"><b>Participant</b> qualifier</p>
+          <p class="event-meta">3 writeups &middot; Team &middot; NxT, TxN, NxD, DxT</p>
+          <div class="comp-cats" aria-label="Open HITCON CTF 2026 filtered by category">
+            <a class="chip chip-dot wu-cat-pwn" href="events/hitcon-ctf-2026.html?cat=pwn" data-cat="pwn">pwn <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-crypto" href="events/hitcon-ctf-2026.html?cat=crypto" data-cat="crypto">crypto <span class="comp-cat-n">1</span></a>
+            <a class="chip chip-dot wu-cat-misc" href="events/hitcon-ctf-2026.html?cat=misc" data-cat="misc">misc <span class="comp-cat-n">1</span></a>
+          </div>
+          <a class="card-go" href="events/hitcon-ctf-2026.html" data-base="events/hitcon-ctf-2026.html">Open writeups <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a>
         </div>
-        <p class="wu-eventgroup-count" data-count>3 writeups</p>
-      </div>
-      <ul class="wu-list-rows">
-        <li class="wu-row" data-cat="misc">
-          <a class="wu-row-link" href="writeups/welcome.html">
-            <span class="wu-row-title"><span class="wu-row-name">Welcome</span><span class="wu-row-sub">Flag in a markdown comment</span></span>
-            <span class="wu-cat wu-cat-misc">misc</span>
-            <span class="wu-row-pts">50 pts</span>
-            <span class="wu-row-blurb">The flag sits in a [//]: # (...) link reference definition, which markdown never renders. Reading the raw description shows it.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="crypto">
-          <a class="wu-row-link" href="writeups/spi-tpm-free-trial.html">
-            <span class="wu-row-title"><span class="wu-row-name">SPI TPM Free Trial</span><span class="wu-row-sub">Homemade TPM cipher, HNP lattice attack</span></span>
-            <span class="wu-cat wu-cat-crypto">crypto</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">An aarch64 VM fronts a &quot;TPM firmware&quot; .so that runs natively on x86-64, so the cipher can be studied offline. A 9-bit key-check leak per query becomes a Hidden Number Problem, and the flag blob's own key-check is the 27th leak that makes the lattice solvable.</span>
-          </a>
-        </li>
-        <li class="wu-row" data-cat="pwn">
-          <a class="wu-row-link" href="writeups/book-of-eclipse.html">
-            <span class="wu-row-title"><span class="wu-row-name">Book of Eclipse</span><span class="wu-row-sub">One bit flip in IA32_FMASK</span></span>
-            <span class="wu-cat wu-cat-pwn">pwn</span>
-            <span class="wu-row-pts"></span>
-            <span class="wu-row-blurb">A kernel ioctl flips one bit of IA32_FMASK. Unmasking DF makes copy_to_user and copy_from_user run backwards, which gives a KASLR leak and a stack return-address overwrite, with extra care because FSRM changes the copy path on the remote.</span>
-          </a>
-        </li>
-      </ul>
-    </div>
-  </div>
-  <p class="wu-empty" id="wuEmpty" hidden>No writeups match these filters.</p>
+      </li>
+  </ul>
+  <p class="wu-empty" id="wuEmpty" hidden>No competitions have writeups in this category.</p>
   <p class="wu-note">Solve scripts and challenge archives aren't published here. Ask in <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>.</p>
 </main>
 
@@ -1169,6 +233,6 @@
   </div>
 </footer>
 
-<script src="js/script.js?v=4dd8bec6"></script>
+<script src="js/script.js?v=2912532e"></script>
 </body>
 </html>
