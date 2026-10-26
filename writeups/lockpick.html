@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lockpick · SolarCTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="An iCE40 bitstream decompiles to a keystream generator with a 32-bit key comparator. The key itself is a decoy. The flag is what the device prints, once the data bus bit order is derived from the ROM bytes it XORs in." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>lockpick</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Lockpick <span class="page-sub">iCE40 bitstream keystream device</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">SOLARCTF{5pl1t_l0ck_g0es_brr}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>SOLARCTF{5pl1t_l0ck_g0es_brr}</code>
+<strong>Artifact:</strong> <code>lockpick.bin</code> - 32 220-byte Lattice <strong>iCE40 HX1K</strong> bitstream
+<strong>Author:</strong> <code>z4vr1k_official</code>
+<strong>Prompt:</strong> <em>&quot;A bitstream device requiring a 32-bit unlock key has been intercepted.&quot;</em></p>
+<hr>
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<ol>
+<li><code>iceunpack</code> + <code>icebox_vlog</code> turn the bitstream into a gate-level netlist: <strong>417 LUT, 105 FF,
+78 CARRY, one <code>SB_RAM40_4K</code></strong> in 512×8 mode, 35 inputs / 15 outputs.</li>
+<li>The device is a <strong>keystream generator</strong>: 32 key pins in, an 8-bit data bus out (one byte
+every 2 clocks). A 256-byte block RAM is XORed into the bus during a 26-clock burst once
+per <strong>59-clock period</strong>.</li>
+<li>There <em>is</em> a hard-coded 32-bit comparator (<code>io_2_0_1</code>), unique key in 2³² = <code>0x308a653c</code> -
+but the key is <strong>not</strong> the flag. The flag format for this event is a leet phrase
+(<code>SOLARCTF{NGC_n3v3r_sl33ps_0nl1n3}</code>), and hours went into pin-order permutations of that
+hex before that sank in.</li>
+<li><strong>The flag is what the device prints.</strong> With the correct key the output stream <em>is</em>
+<code>SOLARCTF{5pl1t_l0ck_g0es_brr}</code>, emitted once per period.</li>
+<li>The one genuine unknown is the <strong>data-bus bit order</strong> - the author&#39;s <code>.pcf</code> is not in the
+bitstream - and it is <em>derivable</em>, because the author XORs the ROM byte into the keystream
+byte bitwise: ROM byte bit <em>i</em> must leave the chip on the same pin as design bit <em>i</em>.</li>
+<li>With that pinned down, <strong>exactly 1 of the 40 320 bit orders</strong> makes the stream contain the
+literal <code>SOLARCTF{</code> → <code>perm = (7,4,5,0,6,3,1,2)</code> → flag.</li>
+</ol>
+<hr>
+<h2 id="1-from-bitstream-to-netlist"><a class="wu-anchor" href="#1-from-bitstream-to-netlist" aria-hidden="true">#</a>1. From bitstream to netlist</h2>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">git <span class="hljs-built_in">clone</span> --depth 1 https://github.com/YosysHQ/icestorm.git ~/tools/icestorm</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-built_in">cd</span> ~/tools/icestorm &amp;&amp; make -j16                       <span class="hljs-comment"># icepack / iceunpack / icebox</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">icebox/iceunpack lockpick.bin /tmp/lp.asc              <span class="hljs-comment"># NOT the -c variant</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-built_in">cd</span> icebox &amp;&amp; python3 icebox_vlog.py -n lockpick /tmp/lp.asc &gt; lockpick.v</span></span></code></pre>
+      
+    </figure><p><code>icebox_vlog.py</code> needs a one-line patch to read the in-tree <code>chipdb-1k.txt</code>, and <code>iceunpack</code>
+must be run <strong>without</strong> <code>-c</code>, or the routing is dropped and the netlist is empty.</p>
+<p>Inventory of <code>lockpick.v</code>: 417 LUTs, 105 flip-flops, 78 CARRY cells, one <code>SB_RAM40_4K</code>;
+35 inputs - 32 key pins plus clock <code>io_6_0_1</code>, reset <code>io_0_8_0</code>, run <code>io_5_17_1</code> - and 15
+outputs: the 8 data pins <code>io_0_3_0 io_0_2_0 io_0_2_1 io_2_0_0 io_3_0_0 io_4_0_0 io_4_0_1 io_5_17_0</code>, a 4-bit counter, a ready flag, and <code>io_2_0_1</code>.</p>
+<h2 id="2-what-the-device-does"><a class="wu-anchor" href="#2-what-the-device-does" aria-hidden="true">#</a>2. What the device does</h2>
+<p>Protocol: reset (<code>io_0_8_0</code>) held high for 2 clocks, then <code>io_5_17_1</code> = 1. The data bus
+updates <strong>one byte every 2 clocks</strong>. Per <strong>59-clock period</strong> the design runs a 26-clock
+RAM burst (cycles 20…45, then 79…104, 138…163, …) and the 13 bytes emitted inside that burst
+are</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">bus[m] = keystream(key)[m] XOR P(rom_byte)</code></pre>
+      
+    </figure><p>where <code>P</code> is a fixed bit permutation of the ROM byte onto the bus pins. Outside the burst the
+byte is pure keystream. The keystream depends only on the key: there is no ROM feedback into
+the state, and the read addresses do not depend on the key.</p>
+<p>Measured with <code>sim.py</code> (our model of the netlist - see §5 for why it was wrong twice):</p>
+<ul>
+<li>period <strong>59 clocks</strong>; burst = 26 clocks = <strong>13 emitted bytes</strong></li>
+<li>the injection constant is key-independent:
+<code>C = 14 13 3c a0 2a 8d 6f c4 45 93 23 78 d8</code></li>
+<li>the ROM words read are the same for every key, e.g. word 36 alone shifts the output on
+10 cycles of the burst, word 34 and word 37 likewise; an unread word such as 200 changes
+nothing.</li>
+</ul>
+<h2 id="3-the-trap-the-io-2-0-1-comparator"><a class="wu-anchor" href="#3-the-trap-the-io-2-0-1-comparator" aria-hidden="true">#</a>3. The trap: the <code>io_2_0_1</code> comparator</h2>
+<p>Of the 105 flip-flops exactly one - <code>io_2_0_1</code> - has a D-cone that touches the 32 key pins and
+<strong>nothing else</strong>: no other state, no ROM, no control pin. It is a <code>key == CONST</code> built from
+XOR/XNOR/AND LUTs, and SAT shows the constant is a <strong>single minterm</strong>: exactly one key value
+in 2³² makes the pin high.</p>
+<table>
+<thead>
+<tr>
+<th>check</th>
+<th>command</th>
+<th>result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>SAT for a key that raises the pin</td>
+<td><code>satpin.py io_2_0_1</code></td>
+<td><strong>SAT - key = 0x308a653c</strong></td>
+</tr>
+<tr>
+<td>is it unique?</td>
+<td><code>satpin.py io_2_0_1 --excl 308a653c</code></td>
+<td><strong>UNSAT</strong> ⇒ one key in 2³²</td>
+</tr>
+<tr>
+<td>does it fire in simulation?</td>
+<td><code>runkey.py 308a653c</code></td>
+<td>pin goes 1 at cycle 4, stays 1</td>
+</tr>
+<tr>
+<td>false positives?</td>
+<td><code>pinrate.py</code></td>
+<td>0/200 random keys, 0 for key 0/1/all-ones</td>
+</tr>
+</tbody></table>
+<p>So the device really does take a 32-bit key, and there is exactly one. The tempting answer is
+<code>SOLARCTF{308a653c}</code> - and it is wrong. Two reasons to distrust it, in order of how long they
+took to appreciate:</p>
+<ul>
+<li>this event&#39;s flags are <strong>leet phrases</strong> (<code>SOLARCTF{NGC_n3v3r_sl33ps_0nl1n3}</code>), not hex blobs;</li>
+<li>the comparator hands you the <em>key</em>, not the <em>payload</em>. A lock does not contain its own
+combination as text.</li>
+</ul>
+<p>Before concluding that, we burned a long time on the pin→bit order (the comparator fixes the
+value of every pin, but the ordering that turns 32 pin values into a 32-bit number lives in
+the author&#39;s missing <code>.pcf</code>). 28 plausible orderings were scanned; none spells a word or a
+memorable constant, which is itself the tell: if the author had wanted a hex flag, they would
+have made the number recognisable.</p>
+<h2 id="4-recovering-the-flag-the-output-stream-and-its-bit-order"><a class="wu-anchor" href="#4-recovering-the-flag-the-output-stream-and-its-bit-order" aria-hidden="true">#</a>4. Recovering the flag: the output stream, and its bit order</h2>
+<p>Simulate the netlist with the key and dump the bus. The naive dump looks like noise, because
+my pin order for the data byte is an arbitrary reading of the netlist. Deriving the real order
+is the whole trick:</p>
+<ol>
+<li><p>The author&#39;s Verilog XORs the two operands <strong>bitwise</strong> - <code>data &lt;= rom_byte ^ ks_byte</code> - so
+design bit <em>i</em> of the ROM byte and design bit <em>i</em> of the keystream byte must leave the chip
+on the <strong>same pin</strong>, and the pin order for the ROM byte therefore <em>is</em> the pin order for the
+data byte.</p>
+</li>
+<li><p>ROM byte bit <em>i</em> is <code>RDATA[2i]</code> - hardware-defined, not an authorial choice. So toggle ROM
+byte bit <em>i</em> and observe which bus pin moves. On a <strong>zero-ROM baseline</strong> (keystream zero)
+the pin that moves <em>is</em> design bit <em>i</em>.</p>
+</li>
+<li><p>Measuring all eight gives the order up to a small residual ambiguity. The flag removes it:
+render the burst under each of the 40 320 bit orders and demand the literal <code>SOLARCTF{</code>.
+<strong>Exactly one order qualifies:</strong></p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">perm = (7, 4, 5, 0, 6, 3, 1, 2)</code></pre>
+      
+    </figure></li>
+</ol>
+<p>The stream then reads</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">SOLARCTF{5pl1t_l0ck_g0es_brr}}SOLARCTF{5pl1t_l0ck_g0es_brr}SOLARCTF{...</code></pre>
+      
+    </figure><p>The doubled <code>}</code> is not a typo - it is the byte-cadence phase drift: 59 clocks is odd, so
+successive bursts land on alternating clock parity and consecutive copies of the flag are 29 or
+30 emitted bytes apart (measured gaps: 30, 29, 30, 29, …).</p>
+<p>A cross-check that ties the two halves of the story together: the 13 ROM-patched slots decode
+to <code>{5pl1t_l0ck_g</code> - which is exactly <code>flag[8:21]</code>. So the author let the keystream carry the
+first 8 and last 8 characters of the flag and patched the <strong>middle</strong> through the block RAM.
+(The map key→keystream is affine, so a key matching a fixed text can be <em>solved</em> for, not
+searched; the key that produces the flag is the same <code>0x308a653c</code> the comparator wants.)</p>
+<p><strong>Flag: <code>SOLARCTF{5pl1t_l0ck_g0es_brr}</code></strong></p>
+<h2 id="5-the-two-simulator-bugs-that-made-this-hard"><a class="wu-anchor" href="#5-the-two-simulator-bugs-that-made-this-hard" aria-hidden="true">#</a>5. The two simulator bugs that made this hard</h2>
+<p>To have ground truth we wrote <code>sim.py</code>, a gate-level simulator for <code>lockpick.v</code>. It was wrong
+twice, in the same peripheral, and both bugs sent the investigation the wrong way.</p>
+<p><strong>Bug 1 - RAM read-mode bit order.</strong> <code>icebox_vlog</code> prints the RAM&#39;s <code>.RDATA</code> port MSB-first, so
+parsed index <em>j</em> is <code>RDATA[15-j]</code>. The first model wrote <code>(word &gt;&gt; (j + half)) &amp; 1</code> at even <em>j</em>,
+i.e. onto the <em>unconnected</em> <code>open_*</code> RDATA pins, leaving the eight connected nets permanently
+zero - <strong>no ROM bit ever reached the netlist</strong>. The conclusion drawn from that (&quot;the 256-byte
+RAM is a decoy&quot;) was an artifact of the model, not a property of the design.</p>
+<p><strong>Bug 2 - lane selector.</strong> The fix put data on the right pins but inverted the lane. The
+correct semantics, taken from Yosys <code>share/ice40/cells_sim.v</code> (READ_MODE=1):</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">RMASK   = RADDR[8]==0 ? 16'hAAAA : 16'h5555
+RDATA_I = memory[RADDR[7:0]] &amp; ~RMASK      # lane 0 keeps the EVEN bits
+RDATA   = {1'b0,|RDATA_I[15:14], 1'b0,|RDATA_I[13:12], ...}   # byte on the even pins
+⇒ byte bit i = memory[addr &amp; 255][2i + RADDR[8]]</code></pre>
+      
+    </figure><p>Both bugs were caught the same way: writing an <em>independent</em> implementation of those
+<code>cells_sim.v</code> rules and diffing it against <code>sim.py</code> across hundreds of addresses, including the
+addresses the design actually reads. Only then was the fix a derivation rather than a guess -
+and only then did the ROM&#39;s real role (patching the middle of the flag) become visible.</p>
+<h2 id="6-verification"><a class="wu-anchor" href="#6-verification" aria-hidden="true">#</a>6. Verification</h2>
+<p>The solve and verification scripts:</p>
+<ul>
+<li><code>python3 solve_flag.py</code> - walks all 40 320 bit orders, prints the single one containing
+<code>SOLARCTF{</code> (<code>perm = (7,4,5,0,6,3,1,2)</code>, offset 0) and the flag.</li>
+<li><code>python3 verify_flag.py</code>, <code>python3 verify_flag2.py</code> - the flag sits at offset 0; every
+complete occurrence equals <code>SOLARCTF{5pl1t_l0ck_g0es_brr}</code>; gaps ∈ {29,30}; the ROM-patched
+slots decode to <code>flag[8:21]</code>; and a negative control (identity bit order) produces neither the
+prefix nor the flag.</li>
+<li><code>python3 satpin.py io_2_0_1</code> → <code>SAT key = 0x308a653c</code>;
+<code>python3 satpin.py io_2_0_1 --excl 308a653c</code> → <code>UNSAT</code> (uniqueness of the key).</li>
+</ul>
+<h2 id="7-pitfalls-worth-remembering"><a class="wu-anchor" href="#7-pitfalls-worth-remembering" aria-hidden="true">#</a>7. Pitfalls worth remembering</h2>
+<ul>
+<li><code>iceunpack</code> <strong>without</strong> <code>-c</code>; <code>icebox_vlog</code> needs the in-tree <code>chipdb-1k.txt</code>.</li>
+<li>Yosys <code>sat</code> cannot ingest <code>icebox_vlog</code>&#39;s async-reset FFs as-is - use <code>-seq</code> /
+<code>-set-init-zero</code>; select one top module and <code>flatten</code> first; make the observed signal a
+<strong>port</strong>, or <code>opt_clean</code> deletes the design (&quot;Imported 0 cells&quot;).</li>
+<li>A hand-written gate-level simulator is only as good as its primitive models. Diff them
+against the vendor/Yosys model <em>before</em> trusting any negative result - both of our bugs
+produced confident, false &quot;the ROM doesn&#39;t matter&quot; conclusions.</li>
+<li>If a SAT harness encodes a temporal assumption (&quot;the shift register is filled by step <em>t</em>&quot;),
+gate it explicitly: an ungated version will happily satisfy your constraint on an unfilled
+register and hand you a bogus model.</li>
+<li>When the artifact is a <em>device</em>, ask what it <strong>emits</strong>, not only what it <strong>contains</strong>. The
+comparator was real, unique and solvable - and completely irrelevant to the flag.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#1-from-bitstream-to-netlist">1. From bitstream to netlist</a></li><li><a href="#2-what-the-device-does">2. What the device does</a></li><li><a href="#3-the-trap-the-io-2-0-1-comparator">3. The trap: the io_2_0_1 comparator</a></li><li><a href="#4-recovering-the-flag-the-output-stream-and-its-bit-order">4. Recovering the flag: the output stream, and its bit order</a></li><li><a href="#5-the-two-simulator-bugs-that-made-this-hard">5. The two simulator bugs that made this hard</a></li><li><a href="#6-verification">6. Verification</a></li><li><a href="#7-pitfalls-worth-remembering">7. Pitfalls worth remembering</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="vintage-bank.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Vintage Bank</span></a>
+    <a class="wu-pager-link wu-pager-next" href="easier-than-it-seems.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Easier Than It Seems</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

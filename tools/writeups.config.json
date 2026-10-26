@@ -1,6 +1,124 @@
 {
   "events": [
     {
+      "id": "solarctf-2026",
+      "event": "SolarCTF 2026",
+      "team": "NxT, TxN",
+      "result": {
+        "placement": "123rd",
+        "field": "of 580",
+        "solves": 13,
+        "date": "17 October 2026"
+      },
+      "challenges": [
+        {
+          "slug": "neuropet",
+          "name": "Neuropet",
+          "category": "rev",
+          "subtitle": "Android backup, hidden DEX, native core",
+          "points": 100,
+          "flag": "SOLARCTF{FR1d0Mp_Sc4n_p4G3s_in_GamEEE}",
+          "blurb": "An Android backup unpacks to a Tamagotchi APK whose skin.dat is really an LCG-XORed DEX. Calling the native core directly, without JNI or the watchdog, gives up four \"neuron\" payloads that concatenate into the flag."
+        },
+        {
+          "slug": "kumir-behind-the-wall",
+          "name": "KuMir Behind the Wall",
+          "category": "web",
+          "subtitle": "SSRF through an avatar URL",
+          "flag": "SOLARCTF{n3_s0tv0r1_s3b3_kum1r4}",
+          "blurb": "Forum breadcrumbs point at an internal checker API. The avatar URL field fetches server-side, so a wrong answer submitted through it makes the checker report the expected answer, which is the flag."
+        },
+        {
+          "slug": "the-missing-archive",
+          "name": "The Missing Archive",
+          "category": "crypto",
+          "subtitle": "RSA with leaked high bits, Coppersmith",
+          "flag": "SOLARCTF{31a1e6f428f7b196ac1fe4}",
+          "blurb": "Four RSA-2048 instances each leak the top 518 bits of one prime. Coppersmith with a 4-bit brute force factors all four, and the last 8 bytes of each plaintext join into the flag."
+        },
+        {
+          "slug": "shellbreach",
+          "name": "ShellBreach",
+          "category": "forensics",
+          "subtitle": "NTFS alternate data stream, LNK-derived key",
+          "flag": "SOLARCTF{sh3llb4g_m4nual_pars1ng_is_th3_w4y}",
+          "blurb": "A dynamic VHD holds an NTFS volume that is all decoy except one 44-byte alternate data stream. The XOR key is the odd-one-out ObjectID tail in a shortcut file's TrackerDataBlock."
+        },
+        {
+          "slug": "ventilator303",
+          "name": "Ventilator303",
+          "category": "misc",
+          "subtitle": "Galaksija cassette audio to Z80",
+          "flag": "SOLARCTF{YuG0sl4v1a-Galaks1ja-DIY-Z1L0G80Z}",
+          "blurb": "A 1987 radio broadcast turns out to be a Galaksija home computer tape. Demodulating the WAV gives a TAP file, and reversing the Z80 code loaded at 0x8000 recovers the flag."
+        },
+        {
+          "slug": "unreal-duck",
+          "name": "Unreal Duck",
+          "category": "rev",
+          "subtitle": "UE5 client, hidden cheat codes",
+          "flag": "SOLARCTF{unr34l_3ng1n3_p4th_f1nd1ng_0n_w1nd0ws}",
+          "blurb": "An Unreal Engine 5.7 duck game only sends the flag after a route with three trigger volumes, each wanting a secret 5-letter code. The codes brute force offline from hashes in the client, then a scripted run under Wine collects the flag image."
+        },
+        {
+          "slug": "stecademia",
+          "name": "Stecademia",
+          "category": "web",
+          "subtitle": "OAuth open redirect, PKCE bypass",
+          "flag": "SOLARCTF{...}",
+          "blurb": "An open redirect in the OAuth state handling leaks the victim's authorization code. PKCE doesn't help when the attacker generated the challenge, so the stolen code redeems into a teacher session."
+        },
+        {
+          "slug": "faded-trace",
+          "name": "Faded Trace",
+          "category": "osint",
+          "subtitle": "Geolocating a castle photo",
+          "flag": "42.60585, 131.17785",
+          "blurb": "A photo covered in stickers, cropped clean and run through Yandex, matches the Jankowski House. The answer is the camera position, worked out from the zoom and angle of the shot."
+        },
+        {
+          "slug": "vintage-bank",
+          "name": "Vintage Bank",
+          "category": "web",
+          "subtitle": "IDOR via predictable UUIDv1",
+          "flag": "SOLARCTF{idor_s4fe_d3posit_b0x}",
+          "blurb": "Safe deposit boxes are keyed by UUIDv1 tokens with a fixed MAC, fixed clock sequence and whole-second timestamps. A public ledger leaks the rental time, so the target box's UUID can be rebuilt directly."
+        },
+        {
+          "slug": "lockpick",
+          "name": "Lockpick",
+          "category": "misc",
+          "subtitle": "iCE40 bitstream keystream device",
+          "flag": "SOLARCTF{5pl1t_l0ck_g0es_brr}",
+          "blurb": "An iCE40 bitstream decompiles to a keystream generator with a 32-bit key comparator. The key itself is a decoy. The flag is what the device prints, once the data bus bit order is derived from the ROM bytes it XORs in."
+        },
+        {
+          "slug": "easier-than-it-seems",
+          "name": "Easier Than It Seems",
+          "category": "forensics",
+          "subtitle": "UAC triage to a VM-packed implant",
+          "flag": "SOLARCTF{NGC_n3v3r_sl33ps_0nl1n3}",
+          "blurb": "A UAC archive from a never-rebooted web box leads to the malware still running. It hides behind an aegis_vm layer and anti-debug checks, so an LD_PRELOAD shim fakes TracerPid and the flag comes out at the comparison call."
+        },
+        {
+          "slug": "kommunalochka",
+          "name": "Kommunalochka",
+          "category": "web",
+          "subtitle": "Wildcard DNS room takeover",
+          "flag": "SOLARCTF{W1ldc4rd_DN3_R00m}",
+          "blurb": "Rooms are addressed as username subdomains on nip.io. Swapping the username in Burp for upravdom, the building manager, opens the manager's room and the flag."
+        },
+        {
+          "slug": "zero-report",
+          "name": "Zero Report",
+          "category": "crypto",
+          "subtitle": "Self-referential hash invariant",
+          "flag": "SOLARCTF{y0u_h4sh3d_th3_wr0ng_th1ng}",
+          "blurb": "The auditor accepts any (a, b) on the line (1 - h)a + hb = 0 mod 2^127 - 1, where h hashes the submitted source. The program can compute H(SOURCE) itself, so a = h, b = h - 1 always passes."
+        }
+      ]
+    },
+    {
       "id": "cryovault-ctf-2026",
       "event": "CryoVault CTF 2026",
       "team": "NxT",
@@ -943,6 +1061,44 @@
           "blurb": "Reverse image search identifies the trawler STEAUA DE MARE 1. Global Fishing Watch gives the September 2023 voyage from Constanta, the first fishing event, and the coordinates for a haversine distance."
         }
       ]
+    },
+    {
+      "id": "hitcon-ctf-2026",
+      "event": "HITCON CTF 2026",
+      "team": "NxT, TxN, NxD, DxT",
+      "result": {
+        "placement": "Participant",
+        "field": "qualifier",
+        "solves": 3,
+        "date": "28 August 2026"
+      },
+      "challenges": [
+        {
+          "slug": "welcome",
+          "name": "Welcome",
+          "category": "misc",
+          "subtitle": "Flag in a markdown comment",
+          "points": 50,
+          "flag": "hitcon{/goal_Solve_ALL_challenges_on_<https://ctf2026.hitcon.org>_!}",
+          "blurb": "The flag sits in a [//]: # (...) link reference definition, which markdown never renders. Reading the raw description shows it."
+        },
+        {
+          "slug": "spi-tpm-free-trial",
+          "name": "SPI TPM Free Trial",
+          "category": "crypto",
+          "subtitle": "Homemade TPM cipher, HNP lattice attack",
+          "flag": "hitcon{531f_dE5i6N_cRy9T0Gr4Ph1C_41G0r1ThM_15_9r0B4b1Y_4_64D_1D3a_QQ}",
+          "blurb": "An aarch64 VM fronts a \"TPM firmware\" .so that runs natively on x86-64, so the cipher can be studied offline. A 9-bit key-check leak per query becomes a Hidden Number Problem, and the flag blob's own key-check is the 27th leak that makes the lattice solvable."
+        },
+        {
+          "slug": "book-of-eclipse",
+          "name": "Book of Eclipse",
+          "category": "pwn",
+          "subtitle": "One bit flip in IA32_FMASK",
+          "flag": "hitcon{Card_Effect:Flip_any_one_bit_in_IA32_FMASK!At_the_end_of_this_turn_you_will_gain_a_root_shell!!!}",
+          "blurb": "A kernel ioctl flips one bit of IA32_FMASK. Unmasking DF makes copy_to_user and copy_from_user run backwards, which gives a KASLR leak and a stack return-address overwrite, with extra care because FSRM changes the copy path on the remote."
+        }
+      ]
     }
   ],
   "members": [
@@ -961,12 +1117,14 @@
       "bio": "Forensics and OSINT by habit, crypto when a lattice is involved. Runs the occasional CTF solo under the handle NxT.",
       "linkedin": "https://www.linkedin.com/in/ashton-ang-wu-zun-846999353/",
       "events": [
+        "solarctf-2026",
         "cryovault-ctf-2026",
         "byteme-ctf-26",
         "skillbit-flash-ctf-2026-09",
         "tisc-2026",
         "tfc-ctf-26",
-        "kaspersky-ctf-2026"
+        "kaspersky-ctf-2026",
+        "hitcon-ctf-2026"
       ]
     },
     {
@@ -985,23 +1143,52 @@
       "bio": "Team lead. Web, binary exploitation, and reverse engineering.",
       "linkedin": "https://www.linkedin.com/in/andrei-yeo-qiu-shi-799b25386/",
       "events": [
+        "solarctf-2026",
         "byteme-ctf-26",
-        "kaspersky-ctf-2026"
+        "kaspersky-ctf-2026",
+        "hitcon-ctf-2026"
       ]
     },
     {
       "slug": "dxt",
       "handle": "DxT",
       "avatar": "images/avatars/dxt.png",
-      "tag": "newest member",
+      "tag": "member",
       "status": "active",
-      "role": "Newest member",
       "order": 3,
       "focus": [
         "OSINT"
       ],
-      "bio": "Newest member of the team. OSINT focus.",
+      "bio": "OSINT focus.",
       "linkedin": "https://www.linkedin.com/in/sanjeev-kumar-senthil-kumar-6683023a6/",
+      "events": [
+        "hitcon-ctf-2026"
+      ]
+    },
+    {
+      "slug": "nxd",
+      "handle": "NxD",
+      "avatar": "images/avatars/nxd.jpg",
+      "tag": "new member",
+      "status": "active",
+      "role": "New member",
+      "order": 4,
+      "focus": [],
+      "bio": "New member of the team.",
+      "events": [
+        "hitcon-ctf-2026"
+      ]
+    },
+    {
+      "slug": "nxr",
+      "handle": "NxR",
+      "avatar": "images/avatars/nxr.jpg",
+      "tag": "new member",
+      "status": "active",
+      "role": "New member",
+      "order": 5,
+      "focus": [],
+      "bio": "New member of the team.",
       "events": []
     }
   ]

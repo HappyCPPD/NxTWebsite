@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Book of Eclipse · HITCON CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A kernel ioctl flips one bit of IA32_FMASK. Unmasking DF makes copy_to_user and copy_from_user run backwards, which gives a KASLR leak and a stack return-address overwrite, with extra care because FSRM changes the copy path on the remote." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>book-of-eclipse</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Book of Eclipse <span class="page-sub">One bit flip in IA32_FMASK</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-pwn">pwn</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hitcon{Card_Effect:Flip_any_one_bit_in_IA32_FMASK!At_the_end_of_this_turn_you_will_gain_a_root_shell!!!}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>The final exploit works both on a host with FSRM and on one without it, which is what the remote runs.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">hitcon{Card_Effect:Flip_any_one_bit_in_IA32_FMASK!At_the_end_of_this_turn_you_will_gain_a_root_shell!!!}</code></pre>
+      
+    </figure><h2 id="1-the-bug"><a class="wu-anchor" href="#1-the-bug" aria-hidden="true">#</a>1. The bug</h2>
+<p><code>book_of_eclipse_ioctl</code> (cmd <code>0x41004500</code>) copies a 0x100-byte user buffer,
+reads <code>buf[0]</code> as a bit index (&lt; 0x20), and <strong>toggles that bit in
+<code>IA32_FMASK</code></strong> (<code>0xc0000084</code>), then latches <code>effect_activated = 1</code> (one-shot).</p>
+<p><code>IA32_FMASK</code> is the mask of RFLAGS bits the CPU <em>clears</em> on <code>SYSCALL</code>. Default
+<code>0x257fd5</code> contains bit 10 (DF). Clearing bit 10 <strong>unmasks DF</strong>: userland DF now
+survives into the kernel, so <code>rep movsb</code> inside <code>copy_from_user</code>/<code>copy_to_user</code>
+runs backwards.</p>
+<h2 id="2-kaslr-leak"><a class="wu-anchor" href="#2-kaslr-leak" aria-hidden="true">#</a>2. KASLR leak</h2>
+<p><code>uname</code> <code>copy_to_user</code>s a stack <code>new_utsname</code>. With DF=1 it walks backwards and
+leaks the kernel stack below that buffer into <code>[dst-~0x30, dst)</code>. One of the
+leaked qwords is a return address into <code>__do_sys_newuname+0x8e</code>
+(static <code>0xffffffff810a900e</code>); matching it modulo 0x200000 yields the slide.</p>
+<h2 id="3-stack-return-address-overwrite"><a class="wu-anchor" href="#3-stack-return-address-overwrite" aria-hidden="true">#</a>3. Stack return-address overwrite</h2>
+<p><code>msgctl(IPC_SET)</code> → <code>ksys_msgctl.constprop.0</code> calls the <strong>frame-less</strong> helper
+<code>copy_msqid_from_user.constprop.0</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">mov edx,0x78
+call _copy_from_user          ; dst = rsp+0x20 = B
+mov rdx,-14; test rax,rax; cmovne rax,rdx; jmp __x86_return_thunk</code></pre>
+      
+    </figure><p>Frame-less helper ⇒ the hijackable slot (<code>_copy_from_user</code>&#39;s <code>ret</code>) is
+<code>B-0x30</code>. With DF=1 and <code>src = P+0x78</code>: <code>mem[B-k] = P[0x78-k]</code> - the whole
+region <code>[B-0x77, B]</code> is attacker-controlled.</p>
+<p>Two practical notes (both measured):</p>
+<ul>
+<li>glibc&#39;s <code>syscall()</code> clears DF, so any copy that must run <em>forward</em> has to use
+raw inline-asm <code>syscall</code> (and <code>cld</code>/<code>std</code> explicitly).</li>
+<li>A DF=0 <code>msgctl(IPC_SET)</code> on the same frame copies <code>[B, B+0x77]</code> <strong>forward</strong>
+(a &quot;groom&quot;) - useful for filling the slots above <code>B</code> - but <code>msgctl_down</code>
+rewrites the buffer when the msqid is valid, so the groom must use an invalid
+msqid. <strong>Any deep syscall in between destroys the groom</strong> (a <code>printf</code>→<code>write</code>
+eats ~0x300 of stack): groom and hijack must be adjacent, with no syscall
+between.</li>
+</ul>
+<h2 id="4-escalation"><a class="wu-anchor" href="#4-escalation" aria-hidden="true">#</a>4. Escalation</h2>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">[B-0x30] pop rdi ; ret
+[B-0x28] &amp;init_cred
+[B-0x20] commit_creds
+[B-0x18] 0xffffffff82001637        ; full KPTI trampoline
+[B-0x10] ...</code></pre>
+      
+    </figure><p><code>commit_creds(&amp;init_cred)</code> works - the oops report shows <code>UID: 0</code>. <code>init_cred</code>
+is used rather than a fake cred on purpose: a fake cred lives on the kernel
+stack and is destroyed by the syscall-exit path before userland ever runs.</p>
+<h2 id="5-returning-to-userland-with-pti-on"><a class="wu-anchor" href="#5-returning-to-userland-with-pti-on" aria-hidden="true">#</a>5. Returning to userland with PTI on</h2>
+<p>The short trampoline <code>0xffffffff8200160a</code> (<code>swapgs; …; iretq</code>, <strong>no CR3
+switch</strong>) reaches userland with the <em>kernel</em> CR3, where user text is NX:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">segfault at 401c10 ip 0000000000401c10 sp 00000000004ba9b0 error 15</code></pre>
+      
+    </figure><p><code>error 15</code> = instruction-fetch protection fault. The correct primitive is the
+full KPTI user-return trampoline, <strong>entered at <code>0xffffffff82001637</code></strong>
+(<code>mov %rsp,%rdi; mov %gs:sp0,%rsp; push frame; SWITCH_TO_USER_CR3; pop; swapgs; iretq</code>). Entering just past <code>POP_REGS</code> means the iret frame is read from
+<code>[rdi+0x10 .. rdi+0x30]</code> = <code>[B .. B+0x20]</code> when the chain leaves <code>rsp = B-0x10</code>
+entirely inside the forward-groom window. <strong>No stack leak and no <code>pop rsp</code>
+pivot are needed.</strong></p>
+<h2 id="6-the-subtle-one-fsrm-changes-the-copy-dispatch"><a class="wu-anchor" href="#6-the-subtle-one-fsrm-changes-the-copy-dispatch" aria-hidden="true">#</a>6. The subtle one: FSRM changes the copy dispatch</h2>
+<p>Everything above works locally, but the remote panicked with <code>RIP: 0x0</code>. The
+remote host lacks <code>fsrm</code> (qemu: <code>host doesn&#39;t support requested feature: CPUID.07H:EDX.fsrm</code>). Dumping the runtime bytes showed <code>_copy_from_user</code> is
+<strong>byte-identical</strong> in both configs - yet the behaviour differs. The difference
+is in how the copy is <em>dispatched</em>:</p>
+<ul>
+<li><strong>FSRM present</strong>: the copy is inline (<code>mov %rcx,%rdx; rep movsb</code>); the
+hijackable slot is <code>_copy_from_user</code>&#39;s own ret at <code>B-0x30</code> → gadget <code>P[0x48]</code>.</li>
+<li><strong>FSRM absent</strong>: the site is patched into a <strong><code>call</code> to an out-of-line helper
+(<code>0xffffffff81f5b8a0</code>)</strong>. The <code>call</code> pushes a return address at <code>B-0x40</code>, and
+the DF=1 backward copy walks over it, so the helper&#39;s <code>ret</code> pops the attacker
+value at <code>B-0x40</code> → gadget <code>P[0x38]</code>.</li>
+</ul>
+<p>A clean 0x10 shift of the entry point. Proven by putting a self-loop gadget at
+<code>P[0x48]</code> (returns to <code>P[0x38]</code>) and at <code>P[0x38]</code> (hangs), deterministically.</p>
+<p><strong>Fix - a unified payload</strong> that duplicates the first two cells so both entries
+converge before <code>commit_creds</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">P[0x38] = pop rdi ; ret      ; [B-0x40]  no-FSRM entry
+P[0x40] = &amp;init_cred
+P[0x48] = pop rdi ; ret      ; [B-0x30]  FSRM entry
+P[0x50] = &amp;init_cred
+P[0x58] = commit_creds       ; [B-0x20]
+P[0x60] = 0xffffffff82001637 ; [B-0x18]</code></pre>
+      
+    </figure><p>Both paths reach <code>commit_creds</code> with <code>rsp = B-0x18</code>, return into the trampoline
+with <code>rsp = B-0x10</code>, and read the same <code>[B .. B+0x20]</code> frame. The frame is
+placed in <strong>both</strong> the backward (P) and forward (G) windows, so it is right
+whether the copy lands 1 byte or 8 bytes at <code>[B]</code>.</p>
+<h2 id="7-remote-harness"><a class="wu-anchor" href="#7-remote-harness" aria-hidden="true">#</a>7. Remote harness</h2>
+<p><code>nc bookofeclipse.chal.hitconctf.com 13370</code> → SHA256 PoW (6 zeros) →
+<code>NEED_UPLOAD_EXPLOIT (y/n)</code> → <code>y</code> → <code>Input your exploit url :</code> (serve the raw
+ELF from a public URL) → the service boots the VM; type <code>/tmp/e</code> at the <code>~ $</code>
+prompt (it does not auto-run).</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-the-bug">1. The bug</a></li><li><a href="#2-kaslr-leak">2. KASLR leak</a></li><li><a href="#3-stack-return-address-overwrite">3. Stack return-address overwrite</a></li><li><a href="#4-escalation">4. Escalation</a></li><li><a href="#5-returning-to-userland-with-pti-on">5. Returning to userland with PTI on</a></li><li><a href="#6-the-subtle-one-fsrm-changes-the-copy-dispatch">6. The subtle one: FSRM changes the copy dispatch</a></li><li><a href="#7-remote-harness">7. Remote harness</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="spi-tpm-free-trial.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">SPI TPM Free Trial</span></a>
+    <a class="wu-pager-link wu-pager-next wu-pager-index" href="../writeups.html"><span class="wu-pager-dir">Index</span><span class="wu-pager-name">All writeups</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

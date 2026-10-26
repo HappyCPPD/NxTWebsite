@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Easier Than It Seems · SolarCTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A UAC archive from a never-rebooted web box leads to the malware still running. It hides behind an aegis_vm layer and anti-debug checks, so an LD_PRELOAD shim fakes TracerPid and the flag comes out at the comparison call." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>easier-than-it-seems</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Easier Than It Seems <span class="page-sub">UAC triage to a VM-packed implant</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">SOLARCTF{NGC_n3v3r_sl33ps_0nl1n3}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Flag: <code>SOLARCTF{NGC_n3v3r_sl33ps_0nl1n3}</code></p>
+<h2 id="recon"><a class="wu-anchor" href="#recon" aria-hidden="true">#</a>Recon</h2>
+<p>The task gives you a UAC archive (uac-webtestinc-linux-20261014085246.tar.gz) from a compromised
+web testing box. Description says the attackers got in, the system was never rebooted, find the
+malware and pull the flag out of it. The &quot;never rebooted&quot; part is the hint that matters, it means
+runtime artifacts are still there.</p>
+<p>After unpacking, the process listing has two things that jump out:</p>
+<ul>
+<li>PID 18400 running <code>/usr/sbin/sshd</code> with the binary marked <strong>(deleted)</strong> in maps, started at 08:41,
+not a child of systemd (the real sshd listener is PID 1397)</li>
+<li>two kernel threads named <code>[psimon]</code> (774 and 17715), which is not a kernel thread name any
+distro ships, so probably some rootkit module, but that turned out to be flavor text</li>
+</ul>
+<p>The fake sshd is listening on port 41095. Classic deleted-but-running backdoor, and exactly why
+you don&#39;t reboot a compromised box before triage.</p>
+<p>UAC saved us one step: because the process was still alive, it copied <code>/proc/18400/exe</code> for us as
+<code>recovered_exe</code>. That is the malware sample, 3.8 MB, stripped PIE.</p>
+<h2 id="first-pass-on-the-sample"><a class="wu-anchor" href="#first-pass-on-the-sample" aria-hidden="true">#</a>First pass on the sample</h2>
+<p>Dynamically linked Rust binary, statically obvious nothing. Strings are all crate noise
+(hyper, reqwest, rustls, tokio...) until you grep for registry paths and see this:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">/home/user/.cargo/registry/src/index.crates.io-.../aegis_vm-0.2.52/src/state.rs</code></pre>
+      
+    </figure><p><code>aegis_vm</code> is a real obfuscation crate (&quot;RustAegis&quot;, VM virtualization framework, on crates.io).
+So the sensitive logic is compiled into custom bytecode that runs on an embedded interpreter.
+That explains the heavy obfuscation.</p>
+<p>Dumping the process memory (UAC already had heap snapshots in <code>sections/</code>) and unswapping them
+gave two useful strings the binary does not contain in plaintext:</p>
+<ul>
+<li>the full analysis tool blacklist (<code>ida;ghidra;radare2;strace;gdb;wireshark;frida;...</code>)</li>
+<li>the C2 URL <code>https://httpbin.org/get</code></li>
+</ul>
+<p>Both are decoded at runtime, so plain strings on the file finds nothing.</p>
+<h2 id="getting-the-thing-to-run"><a class="wu-anchor" href="#getting-the-thing-to-run" aria-hidden="true">#</a>Getting the thing to run</h2>
+<p>Everything after this was done in a throwaway docker container with no internet, binary mounted
+read only.</p>
+<p>Running it gives:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">[signal] art not found
+
+&gt; ACCESS:
+[!] access denied -&gt; fallback</code></pre>
+      
+    </figure><p>so there is a password prompt. Under strace (renamed, since it scans process names) it reads
+<code>/proc/self/status</code>, sees a tracer, and exits silently. Under plain LD_PRELOAD hooks it works
+fine, so detection is tracer based, not preload based.</p>
+<p>qemu-user with the gdb stub turned out to be the clean way to debug it. The guest reads qemu&#39;s
+own /proc/self/status, TracerPid stays 0, and gdb talks to the stub where the malware can never
+see it. Two gotchas worth writing down:</p>
+<ul>
+<li>the malware scans /proc for blacklisted <em>substrings</em> in cmdlines, and <code>qemu-x86_64 -strace</code>
+contains &quot;strace&quot;. Use the QEMU_STRACE env var instead, the cmdline stays clean</li>
+<li>it forks, and which side does the prompt vs the decoy output confused my breakpoints for a
+while. The &quot;[signal] art not found&quot; line comes from one side, the ACCESS flow from the other</li>
+</ul>
+<h2 id="the-aegis-vm-layer"><a class="wu-anchor" href="#the-aegis-vm-layer" aria-hidden="true">#</a>The aegis_vm layer</h2>
+<p>Since the crate is public I pulled aegis_vm 0.2.52 source from crates.io. Relevant pieces:</p>
+<ul>
+<li>the build seed (32 bytes) is reconstructed at runtime as <code>ENTROPY_POOL[idx] ^ SEED_DELTAS[i]</code>
+against a 1024 byte pool in .rodata. In the binary this compiles down to a chain of
+<code>movzx eax, byte [rax+r14]; xor al, imm8</code> blocks</li>
+<li>VM bytecode blobs sit right after the pool, AES-GCM encrypted with whitebox derived keys</li>
+<li>opcodes are shuffled per build, table generated from HMAC-SHA256(seed, &quot;opcode-shuffle-v1&quot;)
+and a Fisher-Yates with the crate&#39;s BuildRng</li>
+<li>there is also a separate config-string obfuscation: plain XOR against per-build tables</li>
+</ul>
+<p>Breaking at the four call sites that pass blobs to the interpreter (0x1b085d / 0x1b0f4d /
+0x1b15cd / 0x1b1c4d) and dumping [rsp+8] gave the runtime-reconstructed 32 byte seed:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">1aa9d331d0715aed3aa1f42a8c5c8966780bc62ca493bde9039dd13f5bea0854</code></pre>
+      
+    </figure><p>With that seed I recomputed the opcode shuffle offline in python (BuildRng + Fisher-Yates from
+build.rs, the ordering of BASE_OPCODES matters), and dumped the four decrypted VM programs out of
+the interpreter&#39;s memory (145, 140, 340 and 340 bytes).</p>
+<p>Then I wrote a small Unicorn harness that loads the PIE, applies relocations, stubs malloc/free
+in the GOT, and calls the interpreter entry directly. It reproduces the malware&#39;s outputs exactly
+(which I verified against live runs). The four programs turn out to be:</p>
+<ul>
+<li>P1: linear, out = param*9063 + 13</li>
+<li>P2: affine 64 bit hash, invertible</li>
+<li>P3: real hash with rotations</li>
+<li>P4: byte transformer table</li>
+</ul>
+<p>Nice, except none of them is the password check. Feeding input and watching the decrypt calls
+showed they never receive anything derived from stdin. Rabbit hole, mostly. The useful leftovers
+from this stage were the integrity hashes (custom FNV with basis 0xcfd1aab5a0dd1a35 and prime
+0x37ab00000001b3), which confirm which buffers are live, and the config decoder.</p>
+<h2 id="the-config-strings"><a class="wu-anchor" href="#the-config-strings" aria-hidden="true">#</a>The config strings</h2>
+<p>One helper at 0x17b6d0 decodes embedded blobs with a formula visible right in the loop body:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">out[i] = (13*i) ^ blob[len-1-i] ^ tbl[i &amp; 7] ^ 0x2d</code></pre>
+      
+    </figure><p>with tbl at 0x38908. Decoding every blob referenced by callers gives the malware&#39;s config:
+the C2 url, <code>0.0.0.0:0</code>, <code>/dev/null</code>, <code>src</code>, and <code>ACII.txt</code>. That last one explains
+<code>[signal] art not found</code>, it tries to load an ASCII art banner file. If you create ACII.txt it
+gets echoed back at you. Cute, still not the flag.</p>
+<h2 id="where-the-check-actually-is"><a class="wu-anchor" href="#where-the-check-actually-is" aria-hidden="true">#</a>Where the check actually is</h2>
+<p>The ACCESS flow is a Rust async state machine, which is why nothing obvious ever gets called.
+Digging through the poll function (dispatch table at 0x3113c) the states are:</p>
+<ol start="0">
+<li>print prompt, init</li>
+<li>read a file / build the expected value</li>
+<li>read stdin lines into an accumulator, UTF-8 check</li>
+<li>success path</li>
+<li>print &quot;[!] access denied -&gt; fallback&quot;</li>
+</ol>
+<p>and the decision is a single call at 0x19f24f:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">call 1a4380          ; (input_ptr, input_len, expected_ptr, expected_len)
+test al, al
+je denied</code></pre>
+      
+    </figure><p>So all I needed was the second argument pair at that call. Debugger breakpoints on it kept
+missing because of the fork mess and qemu slowness, so I stopped being polite and did this
+instead:</p>
+<ol>
+<li>an LD_PRELOAD shim that intercepts openat/read and rewrites <code>TracerPid:\t&lt;pid&gt;</code> to
+<code>TracerPid:\t0</code> in /proc/*/status reads. Unlike redirecting the file (which its statx checks
+catch) the fd stays real procfs, so the scrub is invisible</li>
+<li>in the same shim&#39;s constructor, find the binary base from /proc/self/maps, <button type="button" class="wu-gloss" data-def="A syscall that changes the read/write/execute permissions of a memory page, e.g. making code writable for self-modification.">mprotect</button> the text
+page, and overwrite the 5 byte <code>call rel32</code> at base+0x19f24f with a jump to my logger
+(through a small springboard parked in an <button type="button" class="wu-gloss" data-def="The x86 one-byte breakpoint instruction (0xCC); executing it raises SIGTRAP and hands control to a debugger or signal handler.">int3</button> cave inside .text, since a direct rel32 to a
+shared lib overflows)</li>
+</ol>
+<p>The logger prints both argument buffers and returns &quot;not equal&quot;. Result:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">IN : password123
+EXP: ergePAsdf^#$&amp;!SSUAH*S</code></pre>
+      
+    </figure><p>(arg order is input first, expected second, I had them backwards initially.)</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<p>Feeding the exact bytes <code>ergePAsdf^#$&amp;!SSUAH*S</code> at the prompt (careful with shell escaping, the
+<code>$&amp;</code> will eat your lunch) and the backdoor answers:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">SOLARCTF{NGC_n3v3r_sl33ps_0nl1n3}</code></pre>
+      
+    </figure><p>There is also a 60 second countdown on stderr after the prompt that eventually drops to the
+background listener, which explains the &quot;transitioning to background&quot; string.</p>
+<h2 id="thoughts"><a class="wu-anchor" href="#thoughts" aria-hidden="true">#</a>Thoughts</h2>
+<p>Title is honest in a twisted way. The scary part (the VM) is mostly there to waste your time,
+the actual check is one memcmp-ish call you can trap in twenty lines of C once you can see it.
+The chain that actually mattered was: know that /proc/pid/exe survives deletion, recognize
+aegis_vm as a public crate and read its source, defeat TracerPid anti debug in a way that
+survives its statx cross-check, and instrument the compare call directly instead of reversing
+the state machine around it.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#recon">Recon</a></li><li><a href="#first-pass-on-the-sample">First pass on the sample</a></li><li><a href="#getting-the-thing-to-run">Getting the thing to run</a></li><li><a href="#the-aegis-vm-layer">The aegis_vm layer</a></li><li><a href="#the-config-strings">The config strings</a></li><li><a href="#where-the-check-actually-is">Where the check actually is</a></li><li><a href="#flag">Flag</a></li><li><a href="#thoughts">Thoughts</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="lockpick.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Lockpick</span></a>
+    <a class="wu-pager-link wu-pager-next" href="kommunalochka.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Kommunalochka</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

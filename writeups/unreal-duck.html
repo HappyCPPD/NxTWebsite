@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Unreal Duck · SolarCTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="An Unreal Engine 5.7 duck game only sends the flag after a route with three trigger volumes, each wanting a secret 5-letter code. The codes brute force offline from hashes in the client, then a scripted run under Wine collects the flag image." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>unreal-duck</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Unreal Duck <span class="page-sub">UE5 client, hidden cheat codes</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">SOLARCTF{unr34l_3ng1n3_p4th_f1nd1ng_0n_w1nd0ws}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<blockquote>
+<p>Author: SD4RK · Task: <code>unreal_duck.zip</code> · Brief: <em>&quot;This game hides something, but what?&quot;</em></p>
+</blockquote>
+<p><strong>Flag:</strong> <code>SOLARCTF{unr34l_3ng1n3_p4th_f1nd1ng_0n_w1nd0ws}</code></p>
+<p>The flag arrives as a handwritten image with the note &quot;all lowercase&quot;.</p>
+<hr>
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<p>The zip holds a UE 5.7 Windows client for a multiplayer duck game. The client connects to a live
+dedicated server. The server sends the flag (an image) to whoever completes the route. The route has
+three trigger volumes, and the hidden part is that <strong>inside each volume you have to type a secret
+5‑letter code</strong>. The client hashes the letters and the server checks them. I brute-forced the three
+codes offline from constants in the binary: <strong>ILOVE / DUCKS / ALOTT</strong> (&quot;I love ducks a lott&quot;).
+Then I ran the client under Wine on Linux, drove the duck through the route with scripted
+keypresses, typed the codes and got the payload.</p>
+<hr>
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<p>The zip unpacks to a standard UE 5.7 shipping build:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">UnrealDuck/Binaries/Win64/UnrealDuckClient-Win64-Shipping.exe   (game module, ~137 MB)
+UnrealDuck/Content/Paks/UnrealDuck-WindowsClient.{pak,ucas,utoc} (IoStore, Oodle)</code></pre>
+      
+    </figure><p>A full asset dump finds no flag anywhere in the client: no literal, no encoded form, no texture,
+no text asset. The useful finding is in <code>DefaultGame.ini</code> inside the pak:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">ini</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-ini">[/Script/UnrealDuck.DuckGameInstance]
+DedicatedServerAddress=109.120.147.90:24115</code></pre>
+      
+    </figure><p>UDP 24115 on that host is live. It silently drops query probes, but it doesn&#39;t return ICMP
+unreachable the way closed ports do. The only content sink in the client is the RPC
+<code>ClientReceivePayload(MessageTitle, ImageBytes)</code>, which fills a &quot;Message received&quot; widget. Nothing in
+the client calls it locally, so the flag has to come from the server.</p>
+<p><code>DefaultEngine.ini</code> also has CoreRedirects that rename the route-record and GameMode properties to
+Greek gibberish (<code>DuckRouteRecord.N4 → ηψχ</code> and so on). That&#39;s obfuscation of the data layout, not a cipher.</p>
+<h2 id="2-the-route"><a class="wu-anchor" href="#2-the-route" aria-hidden="true">#</a>2. The route</h2>
+<p>The <code>AUnrealDuckGameMode</code> constructor (<code>0x144387770</code>) hardcodes the route as doubles:</p>
+<table>
+<thead>
+<tr>
+<th>field</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>volume extents</td>
+<td>(1000, 1000, 260)</td>
+</tr>
+<tr>
+<td>volume 0 / 1 / 2</td>
+<td>(−1900, −1900, 540) · (−1900, +1900, 540) · (+1900, +1900, 540)</td>
+</tr>
+<tr>
+<td>endpoint</td>
+<td>(+1900, −1900, 540)</td>
+</tr>
+</tbody></table>
+<p><code>FUN_144389c10</code> spawns one <code>ASessionVolume</code> per point and gives each a letter code equal to its spawn
+index (<code>mov byte ptr [rdi+0x2c0], bpl</code>): 0, 1, 2.</p>
+<p>The volumes start at z = 280. Standing on the ground (capsule centre z≈92) never touches them. You have
+to be up on the 200‑high blocks/ledges around the arena edge. A ramp near the SW corner leads onto a
+perimeter ledge that runs past all four corners.</p>
+<h2 id="3-the-hidden-mechanic-cheat-letters"><a class="wu-anchor" href="#3-the-hidden-mechanic-cheat-letters" aria-hidden="true">#</a>3. The hidden mechanic: cheat letters</h2>
+<p>Overlap is detected <strong>client-side</strong> on the local PlayerController:</p>
+<ul>
+<li><strong>OnEnterVolume</strong> (<code>FUN_144391670</code>) stores the active code at <code>PC+0x7c8</code>, appends it to the
+visited list at <code>PC+0x7b8</code> and resets the per-volume state.</li>
+<li>The <strong>InputKey handler</strong> (<code>FUN_14438f5f0</code>, PC vtable slot 441) runs on each letter key press
+while a volume is active and fewer than 5 letters are recorded. It stores <code>letter − &#39;A&#39;</code> into the
+byte array at <code>PC+0x808</code> and mixes it into three state words:</li>
+</ul>
+<figure class="wu-code" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">c</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-c"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">v   = ((<span class="hljs-number">1</span> - ch) * <span class="hljs-number">0x1b</span> + (<span class="hljs-number">0x2f6cb09a</span> ^ <span class="hljs-number">0xffffffe5</span>)) &amp; <span class="hljs-number">0x3f</span>;   <span class="hljs-comment">// ch = &#x27;A&#x27;..&#x27;Z&#x27;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">v   = ((v &gt;&gt; <span class="hljs-number">3</span> ^ v) * <span class="hljs-number">0xd</span> + <span class="hljs-number">0x11</span>) &amp; <span class="hljs-number">0x3f</span>;</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">f6  = ((f6 &amp; <span class="hljs-number">0xffffff</span>) &lt;&lt; <span class="hljs-number">6</span>) | v;                             <span class="hljs-comment">// PC+0x7b0</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">s804 = rotl((v + <span class="hljs-number">1</span>) * <span class="hljs-number">0x54e31f9b</span> ^ s804, <span class="hljs-number">7</span>) + <span class="hljs-number">0x2c8b91ef</span>;     <span class="hljs-comment">// PC+0x804</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">fc  = rotl((s804 ^ f6) + <span class="hljs-number">0x7b642d11</span>, <span class="hljs-number">9</span>) ^ f6 * <span class="hljs-number">0x1f5d3b79</span>;    <span class="hljs-comment">// PC+0x7e0</span></span></span></code></pre>
+      
+    </figure><ul>
+<li><strong>OnLeaveVolume</strong> (<code>FUN_144391890</code> → <code>FUN_14438b8a0</code>) folds the state with the matching
+<code>FDuckRouteRecord</code> (7 × u32) into a hash and sends <code>ServerPushCheatLetter(code, letters)</code>:</li>
+</ul>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">c</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-c"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">u9 = ((rotl(fc + r[<span class="hljs-number">2</span>], <span class="hljs-number">11</span>) ^ rotl(r[<span class="hljs-number">6</span>] + f6, <span class="hljs-number">5</span>)) + (r[<span class="hljs-number">4</span>] ^ s804)) ^ r[<span class="hljs-number">0</span>];</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">u4 = f6 + <span class="hljs-number">0x36d5e22b</span> + r[<span class="hljs-number">4</span>];</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">h  = (rotl(u9, <span class="hljs-number">7</span>) + (rotl(r[<span class="hljs-number">2</span>], <span class="hljs-number">3</span>) ^ r[<span class="hljs-number">6</span>])) ^ rotl(u4, <span class="hljs-number">13</span>);</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-comment">// correct iff h == r[5]</span></span></span></code></pre>
+      
+    </figure><p>The three records are built in <code>FUN_144380750</code> (immediates plus two 16‑byte constants at
+<code>0x14711a990</code> / <code>0x14711aaf0</code>):</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">rec0 = 6f37aa0b 0 112bb232 29b1711a 45d39389 b2dcbf59 6f4b4eda
+rec1 = 17d98198 1 42413596 73257244 57d52250 2523ab39 203585fc
+rec2 = 2f48611f 2 39c19d54 158b4d73 583a99d9 b01e4f4d 2b74299a</code></pre>
+      
+    </figure><p>That&#39;s only 26⁵ ≈ 11.9 M candidates per volume, so I brute-forced it (<code>brute.c</code>, 0.2 s):</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">rec0 len5: ILOVE
+rec1 len5: DUCKS
+rec2 len5: ALOTT</code></pre>
+      
+    </figure><p>There&#39;s exactly one hit per record. A random hit has odds of about 11.9M / 2³² ≈ 0.003, so these are clearly the intended codes.</p>
+<h2 id="4-running-the-client-on-linux"><a class="wu-anchor" href="#4-running-the-client-on-linux" aria-hidden="true">#</a>4. Running the client on Linux</h2>
+<p>The previous notes got several things wrong here, so these are the details that mattered:</p>
+<ul>
+<li><strong><code>-nullrhi</code> isn&#39;t stripped.</strong> The string is stored UTF‑16 and an ASCII grep misses it. The client boots
+under Wine 10 with it. With no window, though, there&#39;s no input, so the actual run used <code>-d3d11</code>
+(Wine&#39;s wined3d) inside a private <code>Xvfb :77</code>. The UI renders, the 3D view is black, and keystrokes
+can&#39;t leak to the real desktop.</li>
+<li><strong>The connect address is hardcoded.</strong> <code>FUN_14437fe50</code> returns the literal <code>109.120.147.90:24115</code> and
+ignores <code>-ServerAddress=</code>. I patched a copy of the exe (<code>UDRelay-Win64-Shipping.exe</code>) to point at
+<code>127.0.0.1:7777</code>, where a Python UDP relay (<code>relay.py</code>) logged everything. That gave me
+traffic, chat and the kick reasons.</li>
+<li><strong><code>-ConnectOnLaunch</code> loops.</strong> It re-fires on every BeginPlay, including after joining, so the
+client reconnects over and over. I clicked Play in the menu with xdotool instead.</li>
+<li><strong>Low resolution.</strong> Software GL is slow. At 1024×640 the client ran at ~1 - 2 FPS and the server
+rubber-banded the duck. At <code>-ResX=480 -ResY=300</code> with scalability cvars turned down, it moved at
+normal speed.</li>
+<li><strong>Idle kick.</strong> The server disconnects you &quot;after 30 seconds without movement&quot; (jumping doesn&#39;t count).</li>
+</ul>
+<h3 id="position-feedback"><a class="wu-anchor" href="#position-feedback" aria-hidden="true">#</a>Position feedback</h3>
+<p>Yama <code>ptrace_scope=1</code> only allows a process to read its ancestors&#39; children, so the controller
+(<code>ctl.py</code>) <strong>spawns the game as its own child</strong> and reads <code>/proc/&lt;pid&gt;/mem</code>:</p>
+<ul>
+<li>PlayerController = heap object whose vtable is <code>0x147118aa0</code></li>
+<li><code>PC+0x2f8</code> → Pawn, <code>Pawn+0x1c0</code> → RootComponent, <code>Root+0x1f0</code> → ComponentToWorld (FTransform with
+padded double vectors: quat | xyz,pad | scale,pad), giving the world position</li>
+<li>The route state can be read the same way (<code>PC+0x7c8</code> active code, <code>PC+0x7b8</code> visited list,
+<code>PC+0x808</code> recorded letters, <code>PC+0x7e8</code> per-code hash diffs)</li>
+</ul>
+<p>I tried teleporting by writing the location: the server snapped it back, so movement is
+server-authoritative and the duck has to actually walk. Movement is relative to the spawn yaw, which
+changes between spawns. I read it from the pawn&#39;s quaternion and mapped W/A/S/D to world axes.</p>
+<h2 id="5-the-run"><a class="wu-anchor" href="#5-the-run" aria-hidden="true">#</a>5. The run</h2>
+<p>Spawn at (0, 0, 302), yaw 0, so W = +x and D = +y.</p>
+<ol>
+<li>Walk to (−700, −1200) on the ground, then hold <code>S</code> (−x) with a few jumps. The duck climbs a ramp
+onto the west ledge at (−1864, −1516, 292). The visited list becomes <code>[0]</code>, so the duck is in volume 0.</li>
+<li>Type <code>ilove</code>. The recorded letters read <code>08 0b 0e 15 04</code> = I L O V E.</li>
+<li>Hold <strong>only</strong> <code>D</code> (+y) along the ledge to y = 1790. Leaving volume 0 sends the push, and entering
+volume 1 doesn&#39;t record anything because no new key press happens inside it. Visited = <code>[0,1]</code>.
+Type <code>ducks</code>.</li>
+<li>Hold only <code>W</code> (+x) along the north ledge to x = 1818. Visited = <code>[0,1,2]</code>. Type <code>alott</code>.</li>
+<li>Hold only <code>A</code> (−y) along the east ledge to the endpoint (1613, −1850). All client-side diffs are
+0 and the &quot;route complete&quot; flag at <code>PC+0x7e4</code> is 1.</li>
+</ol>
+<p>The server broadcasts <strong>&quot;quackrun completed the route and can head to the end.&quot;</strong>, and on reaching
+the end the client receives <code>ClientReceivePayload</code>: a &quot;Message received&quot; widget with a handwritten
+image:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">SOLARCTF{unr34l_3ng1n3_p4th_f1nd1ng_0n_w1nd0ws}      (&quot;all lowercase&quot;)</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-the-route">2. The route</a></li><li><a href="#3-the-hidden-mechanic-cheat-letters">3. The hidden mechanic: cheat letters</a></li><li><a href="#4-running-the-client-on-linux">4. Running the client on Linux</a><ol class="wu-toc-sub"><li><a href="#position-feedback">Position feedback</a></li></ol></li><li><a href="#5-the-run">5. The run</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="ventilator303.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Ventilator303</span></a>
+    <a class="wu-pager-link wu-pager-next" href="stecademia.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Stecademia</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

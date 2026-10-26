@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ventilator303 · SolarCTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A 1987 radio broadcast turns out to be a Galaksija home computer tape. Demodulating the WAV gives a TAP file, and reversing the Z80 code loaded at 0x8000 recovers the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>ventilator303</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Ventilator303 <span class="page-sub">Galaksija cassette audio to Z80</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">SOLARCTF{YuG0sl4v1a-Galaks1ja-DIY-Z1L0G80Z}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> Forensics / Reversing · <strong>Author:</strong> M0shp1t</p>
+<blockquote>
+<p>This Balkan station broadcast at night; it didn&#39;t play music, but it could be used to
+learn how to create even a flight simulator. The recording you are holding is dated
+April 19, 1987.</p>
+<p>Task: <code>ventilator303.wav</code></p>
+</blockquote>
+<p><strong>Flag:</strong> <code>SOLARCTF{YuG0sl4v1a-Galaks1ja-DIY-Z1L0G80Z}</code></p>
+<hr>
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<p>The only file is a 168-second mono WAV:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">RIFF (little-endian) data, WAVE audio, Microsoft PCM, 16 bit, mono 44100 Hz</code></pre>
+      
+    </figure><p>The flavour text is the whole hint. A &quot;Balkan station broadcasting at night, not
+music, dated 1987&quot; is <strong>Radio Belgrade&#39;s &quot;Ventilator 202/303&quot; show</strong>, which in 1980s
+Yugoslavia broadcast <em>computer programs as audio</em> so listeners could record them to
+cassette. The &quot;learn to make a flight simulator&quot; line points at the <strong>Galaksija</strong>, a
+DIY Z80 home computer from Belgrade.</p>
+<p>So the WAV is a tape-loading signal. Listening/looking at the waveform confirms it: a
+pilot tone, then a long data block, then a trailing tone.</p>
+<h2 id="2-identifying-the-modulation"><a class="wu-anchor" href="#2-identifying-the-modulation" aria-hidden="true">#</a>2. Identifying the modulation</h2>
+<p>Measuring full-cycle periods via zero-crossings shows two dominant tones in a clean 2:1
+ratio:</p>
+<table>
+<thead>
+<tr>
+<th>tone</th>
+<th>period</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>~2400 Hz</td>
+<td>~18 samples</td>
+<td>mark</td>
+</tr>
+<tr>
+<td>~1200 Hz</td>
+<td>~37 samples</td>
+<td>space</td>
+</tr>
+<tr>
+<td>~1000 Hz</td>
+<td>~44 samples</td>
+<td>pilot/leader</td>
+</tr>
+</tbody></table>
+<p>Run-length analysis of the mark/space bursts shows <strong>mark runs are even, space runs
+come in the ratio that makes every bit the same duration</strong>. That is the
+<strong>Kansas City Standard / CUTS</strong> encoding:</p>
+<ul>
+<li>bit <code>1</code> = <strong>2 cycles of 2400 Hz</strong></li>
+<li>bit <code>0</code> = <strong>1 cycle of 1200 Hz</strong></li>
+<li>both occupy one bit cell (~1/1200 s), i.e. ~1200 baud</li>
+</ul>
+<p>Bytes are framed serially: <strong>1 start bit (0) + 8 data bits (LSB first) + 1 stop bit (1)</strong>.</p>
+<h2 id="3-demodulating-robustly"><a class="wu-anchor" href="#3-demodulating-robustly" aria-hidden="true">#</a>3. Demodulating robustly</h2>
+<p>Naïve per-cycle thresholding &quot;almost&quot; worked but left a handful of bit-slips in long
+uniform regions - enough to corrupt the payload. Band-limiting in the recording shifts
+zero-crossings, producing a spread of ambiguous half-pulse widths.</p>
+<p>The decoder that nailed it byte-perfect:</p>
+<ol>
+<li><strong>FSK discriminator</strong> - quadrature-correlate the signal against 2400 Hz and 1200 Hz
+over a short sliding window, take <code>E2400 - E1200</code>. Positive = mark, negative = space.</li>
+<li><strong>Transition counting</strong> - between consecutive sign-changes of the discriminator the
+value is constant; the number of bits in that span is <code>round(gap / Tb)</code> with
+<code>Tb ≈ 36</code> samples. This is self-clocking and tolerant of tape-speed drift.</li>
+<li><strong>Deframe</strong> start/data(LSB)/stop into bytes.</li>
+</ol>
+<h3 id="verifying-correctness"><a class="wu-anchor" href="#verifying-correctness" aria-hidden="true">#</a>Verifying correctness</h3>
+<p>The decoded stream begins with a human-readable header:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">VENTILATOR-303 TAPE v1
+NAME: GALAKSIJA-DEMO
+FORMAT: ZXTAP
+LEN: 16659
+CSUM: 88D9</code></pre>
+      
+    </figure><p>The payload is a <strong>ZX Spectrum <code>.TAP</code> file</strong>. Two independent checks proved the decode
+was byte-perfect:</p>
+<ul>
+<li><strong>All four TAP blocks&#39; per-block XOR checksums pass.</strong></li>
+<li>The header&#39;s <code>CSUM: 88D9</code> is the <strong>CRC-16/CCITT</strong> (poly <code>0x1021</code>, init <code>0xFFFF</code>) of the
+16659-byte payload. ✅</li>
+</ul>
+<h2 id="4-the-tap-file"><a class="wu-anchor" href="#4-the-tap-file" aria-hidden="true">#</a>4. The TAP file</h2>
+<table>
+<thead>
+<tr>
+<th>block</th>
+<th>type</th>
+<th>details</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td>Program header</td>
+<td>name <code>GALAKSIJA </code>, autostart</td>
+</tr>
+<tr>
+<td>1</td>
+<td>BASIC program</td>
+<td>prints <code>VENTILATOR-303</code> / <code>LOADING FOR THOSE WHO WAIT</code>, loads the code</td>
+</tr>
+<tr>
+<td>2</td>
+<td>CODE header</td>
+<td>name <code>GALAKSIJA</code>, <strong>len 16448, load 0x8000 (32768)</strong></td>
+</tr>
+<tr>
+<td>3</td>
+<td>CODE data</td>
+<td>16448 bytes of Z80 machine code</td>
+</tr>
+</tbody></table>
+<p>No flag appears in plaintext anywhere - the BASIC loader is just cosmetic. The flag
+lives in the Z80 CODE block and is produced at runtime.</p>
+<h2 id="5-reversing-the-z80-code-loaded-at-0x8000"><a class="wu-anchor" href="#5-reversing-the-z80-code-loaded-at-0x8000" aria-hidden="true">#</a>5. Reversing the Z80 code (loaded at 0x8000)</h2>
+<p>Disassembly reveals a decode loop at <code>0x82A2</code>:</p>
+<figure class="wu-code" data-lines="19">
+      <figcaption>
+        
+        <span class="wu-code-lang">asm</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-asm"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">82A2  LD HL,<span class="hljs-number">0x83D4</span> <span class="hljs-comment">; seed  -&gt; state</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">82A5  LD DE,<span class="hljs-number">0x83C4</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">82AB  LDIR          <span class="hljs-comment">; state = bytes at 0x83D4 = 19 04 87 19  (LE -&gt; 0x19870419)</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">82AD  <span class="hljs-keyword">XOR</span> A</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">82AE  LD (<span class="hljs-number">0x83C2</span>),A <span class="hljs-comment">; i = 0</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">82B1  LD A,(<span class="hljs-number">0x83C2</span>)</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">82B4  CP <span class="hljs-number">0x2B</span>       <span class="hljs-comment">; 43 iterations</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">82B6  <span class="hljs-keyword">RET</span> Z</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">82B8  <span class="hljs-keyword">CALL</span> <span class="hljs-number">0x8202</span>   <span class="hljs-comment">; state = LCG(state)</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">82BB  LD HL,<span class="hljs-number">0x8403</span>  <span class="hljs-comment">; ciphertext base</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">82C4  <span class="hljs-keyword">ADD</span> HL,DE     <span class="hljs-comment">; + i</span></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">82C5  LD A,(HL)     <span class="hljs-comment">; cipher[i]</span></span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">82C6  LD HL,<span class="hljs-number">0x83C6</span></span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">82C9  <span class="hljs-keyword">XOR</span> (HL)      <span class="hljs-comment">; ^ state byte 2  ((state&gt;&gt;16)&amp;0xFF)</span></span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc">82CA  LD (<span class="hljs-number">0x83C3</span>),A <span class="hljs-comment">; = plaintext char</span></span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc">...                  <span class="hljs-comment">; print char at screen position table[0x83D8 + i]</span></span></span>
+<span class="wu-line" data-line="17"><span class="wu-ln">17</span><span class="wu-lc"><span class="hljs-number">8306</span>  <span class="hljs-keyword">INC</span> A</span></span>
+<span class="wu-line" data-line="18"><span class="wu-ln">18</span><span class="wu-lc"><span class="hljs-number">8307</span>  LD (<span class="hljs-number">0x83C2</span>),A <span class="hljs-comment">; i++</span></span></span>
+<span class="wu-line" data-line="19"><span class="wu-ln">19</span><span class="wu-lc">830A  JR <span class="hljs-number">0x82B1</span></span></span></code></pre>
+      
+    </figure><p>The routine at <code>0x8202</code> is a 32×32 shift-add multiply plus an add - a classic
+<strong>Linear Congruential Generator</strong>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">state = (state * 0x41C64E6D + 0x3039) mod 2^32
+      = (state * 1103515245 + 12345) mod 2^32     ; the ANSI C rand() constants</code></pre>
+      
+    </figure><p>with the keystream byte taken as <code>(state &gt;&gt; 16) &amp; 0xFF</code>.</p>
+<p>Data tables:</p>
+<ul>
+<li><code>0x83D4</code> : 4-byte seed <code>19 04 87 19</code> → <code>0x19870419</code> - literally <strong>19/04/87</strong>, the
+recording&#39;s date.</li>
+<li><code>0x83D8</code> : 43-byte <strong>position table</strong> - each decrypted char is drawn to a scrambled
+screen cell, so the on-screen result reads correctly.</li>
+<li><code>0x8403</code> : 43-byte <strong>ciphertext</strong>.</li>
+</ul>
+<h2 id="6-solve"><a class="wu-anchor" href="#6-solve" aria-hidden="true">#</a>6. Solve</h2>
+<figure class="wu-code" data-lines="14">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">code   = <span class="hljs-built_in">open</span>(<span class="hljs-string">&#x27;code_good.bin&#x27;</span>,<span class="hljs-string">&#x27;rb&#x27;</span>).read()   <span class="hljs-comment"># the extracted 16448-byte CODE block</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">cipher = code[<span class="hljs-number">0x403</span>:<span class="hljs-number">0x403</span>+<span class="hljs-number">43</span>]</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">postab = code[<span class="hljs-number">0x3d8</span>:<span class="hljs-number">0x3d8</span>+<span class="hljs-number">43</span>]</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">state = <span class="hljs-number">0x19870419</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">plain = <span class="hljs-built_in">bytearray</span>()</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">43</span>):</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    state = (state*<span class="hljs-number">1103515245</span> + <span class="hljs-number">12345</span>) &amp; <span class="hljs-number">0xFFFFFFFF</span>   <span class="hljs-comment"># LCG step before each char</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    plain.append(cipher[i] ^ ((state &gt;&gt; <span class="hljs-number">16</span>) &amp; <span class="hljs-number">0xFF</span>))</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">flag = [<span class="hljs-string">&#x27; &#x27;</span>]*(<span class="hljs-built_in">max</span>(postab)+<span class="hljs-number">1</span>)</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"><span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">43</span>):</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">    flag[postab[i]] = <span class="hljs-built_in">chr</span>(plain[i])      <span class="hljs-comment"># reorder by on-screen position</span></span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc"><span class="hljs-built_in">print</span>(<span class="hljs-string">&#x27;&#x27;</span>.join(flag))</span></span></code></pre>
+      
+    </figure><p>Output:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">SOLARCTF{YuG0sl4v1a-Galaks1ja-DIY-Z1L0G80Z}</code></pre>
+      
+    </figure><h2 id="7-takeaways"><a class="wu-anchor" href="#7-takeaways" aria-hidden="true">#</a>7. Takeaways</h2>
+<ul>
+<li>Old-radio &quot;data over audio&quot; nostalgia → <strong>Kansas City Standard FSK</strong>, not the ZX ROM
+pulse format (the author modulated a ZX <code>.TAP</code> with KCS tones).</li>
+<li>A discriminator + transition-counting demodulator beats per-cycle thresholding on
+drifting/band-limited tape audio.</li>
+<li>TAP per-block XOR + the header&#39;s CRC-16/CCITT gave strong oracles to confirm a
+byte-perfect decode before spending time on the Z80.</li>
+<li>The keystream seed <code>0x19870419</code> is the challenge date - a nice touch.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-identifying-the-modulation">2. Identifying the modulation</a></li><li><a href="#3-demodulating-robustly">3. Demodulating robustly</a><ol class="wu-toc-sub"><li><a href="#verifying-correctness">Verifying correctness</a></li></ol></li><li><a href="#4-the-tap-file">4. The TAP file</a></li><li><a href="#5-reversing-the-z80-code-loaded-at-0x8000">5. Reversing the Z80 code (loaded at 0x8000)</a></li><li><a href="#6-solve">6. Solve</a></li><li><a href="#7-takeaways">7. Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="shellbreach.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">ShellBreach</span></a>
+    <a class="wu-pager-link wu-pager-next" href="unreal-duck.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Unreal Duck</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

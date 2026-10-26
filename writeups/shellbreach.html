@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ShellBreach · SolarCTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A dynamic VHD holds an NTFS volume that is all decoy except one 44-byte alternate data stream. The XOR key is the odd-one-out ObjectID tail in a shortcut file's TrackerDataBlock." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>shellbreach</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>ShellBreach <span class="page-sub">NTFS alternate data stream, LNK-derived key</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">SOLARCTF{sh3llb4g_m4nual_pars1ng_is_th3_w4y}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>SOLARCTF{sh3llb4g_m4nual_pars1ng_is_th3_w4y}</code></p>
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<p><code>solar_forensic.zip</code> → <code>disk.vhd</code> (dynamic VHD) → NTFS volume <code>EVIDENCE</code>.
+Everything visible is decoy except <strong>one NTFS alternate data stream</strong>:
+<code>Documents/SolarGrid/Reports/report_q3.xlsx:metadata</code> (44 bytes, resident in
+MFT record 64). It is XOR-encrypted with the repeating 6-byte key
+<code>aa bb cc 11 22 33</code> - which is the <em>unique half of the drop_link.lnk
+TrackerDataBlock Droid/ObjectID</em> (the &quot;unique bytes&quot; that differ between the
+synthetic LNKs). XOR → flag.</p>
+<h2 id="walkthrough"><a class="wu-anchor" href="#walkthrough" aria-hidden="true">#</a>Walkthrough</h2>
+<ol>
+<li><p><strong>Unpack the VHD.</strong> <code>unzip solar_forensic.zip</code> → <code>disk.vhd</code>. It is a
+<em>dynamic</em> Microsoft VHD (<code>conectix</code> footer, dynamic header cookie
+<code>cxsparse</code> at offset 512, <code>dataOffset=0xFFFFFFFFFFFFFFFF</code> = dynamic,
+64 MiB virtual, 2 MiB block size). Convert with
+<code>qemu-img convert -f vpc -O raw disk.vhd disk.raw</code>.</p>
+</li>
+<li><p><strong>Parse the partition manually</strong> (this is why &quot;the IT tools were failing&quot; -
+nothing is corrupt, it just needs a raw read):</p>
+<ul>
+<li>MBR at 0, partition 1 starts at sector 128 (<code>offset=65536</code>), type 0x07,
+128 896 sectors (~62.9 MiB).</li>
+<li><code>dd if=disk.raw of=part.ntfs bs=512 skip=128 count=128896</code>.</li>
+<li>NTFS boot sector at <code>part.ntfs+0x0</code>: 512 B/sector, 8 sectors/cluster
+(4 KiB), MFT at LCN 5370, volume label <strong>EVIDENCE</strong>.</li>
+</ul>
+</li>
+<li><p><strong>Filesystem contents</strong> (<code>ntfsls</code>/<code>tsk_recover</code> on <code>part.ntfs</code>):</p>
+<figure class="wu-code wu-code-output" data-lines="11">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">/Documents/Desktop/notes.txt              &quot;Backup password: s0lar_backup!!&quot;
+/Documents/Desktop/shortcuts/{jira,vpn}.lnk
+/Documents/Personal/todo.txt              &quot;Export archive password: dr0pp3d_th3_k3y&quot;
+/Documents/Personal/vacation_2024.jpg     1x1 JPEG, decoy
+/Documents/SolarGrid/Designs/{panel_v2_draft,panel_v3_final}.pdf  decoy
+/Documents/SolarGrid/Designs/specs_2024.xlsx                      decoy
+/Documents/SolarGrid/Export/{backup_config,drop_link,old_server,shared_drive}.lnk
+/Documents/SolarGrid/Meetings/{notes_{jan,feb},standup_template}.docx  decoy
+/Documents/SolarGrid/Reports/report_q{1,2,3,4}*.{xlsx,docx}   q3 carries the ADS
+/ProgramData/Microsoft/Diagnosis/diag_perfmon.edb   SRUM DB (see below)
+/Users/d.korshunov/NTUSER.DAT                       fake hive = &quot;dr0pp3d_th3_k3y&quot; filler</code></pre>
+      
+    </figure></li>
+<li><p><strong>The decoys</strong> (they exist to burn time):</p>
+<ul>
+<li><code>NTUSER.DAT</code> is <em>not</em> a registry hive (no <code>regf</code> magic): 12 288 bytes of
+<code>dr0pp3d_th3_k3y</code> repeated with ~28 % random byte substitutions plus a
+noisy 120-byte head. It just screams the todo.txt password at you.</li>
+<li><code>diag_perfmon.edb</code> is a real ESE database - an <strong>SRUM</strong>
+(<code>SruDbIdMapTable</code>, <code>{DD6636C4-...}</code> network-usage table with
+<code>BytesSent</code>/<code>BytesRecvd</code>). Its app-path table ends with two interesting
+entries:
+<code>C:\Users\d.korshunov\AppData\Local\Temp\AU3_setup.exe</code> and
+<code>C:\Users\d.korshunov\AppData\Local\Temp\solarsync.exe</code> - the exfil tool
+that did the network I/O. Story, not flag.</li>
+<li>LNK files are syntactically valid and reveal the leak destinations:
+<code>\\192.168.50.10\drop\solar_docs</code> (drop_link), <code>\\10.0.0.5\backups\config</code>,
+<code>\\172.16.0.1\legacy\archive</code>, <code>\\fileserver\shared</code>.</li>
+<li><code>$Extend/$Deleted</code> (a non-standard directory the author added) has a
+64 KiB index allocation (LCN 38 - 53) that is fully zeroed, and MFT records
+16 - 23 / 73 - 255 are zeroed - the deleted folders/recycle-bin traces are
+genuinely wiped.</li>
+</ul>
+</li>
+<li><p><strong>ADS sweep</strong> (the actual hiding place). Enumerate every named attribute in
+the MFT: only one exists -</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">rec 64  report_q3.xlsx : $DATA &quot;metadata&quot;  resident, 44 bytes</code></pre>
+      
+    </figure><p>Dump it: <code>icat part.ntfs 64-128-4 &gt; ads.bin</code></p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">f9f480507070fefdb7624a00c6d7ae25456cc78fa264435ff5cbad635102c4dc9378516cded3ff4e5507d3c6</code></pre>
+      
+    </figure></li>
+<li><p><strong>Find the key.</strong> The LNK <code>TrackerDataBlock</code>s (signature 0xA0000003) carry
+the standard MachineID + Droid/DroidBirth GUIDs. The 6-byte tail of each
+file&#39;s Droid ObjectID is a fabricated &quot;unique&quot; value:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">jira.lnk          000000000002
+vpn.lnk           000000000001
+backup_config.lnk deadbeef0001
+drop_link.lnk     aabbcc112233   &lt;-- key
+old_server.lnk    525400123456
+shared_drive.lnk  001a2b3c4d5e</code></pre>
+      
+    </figure><p>(they look like MAC addresses / magic constants - a giveaway that they are
+deliberate).</p>
+</li>
+<li><p><strong>XOR</strong> the 44 ADS bytes with <code>aa bb cc 11 22 33</code> repeated:</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">blob = <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&quot;f9f4...d3c6&quot;</span>)</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">key  = <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&quot;aabbcc112233&quot;</span>)</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-built_in">print</span>(<span class="hljs-built_in">bytes</span>(b ^ key[i % <span class="hljs-number">6</span>] <span class="hljs-keyword">for</span> i, b <span class="hljs-keyword">in</span> <span class="hljs-built_in">enumerate</span>(blob)).decode())</span></span></code></pre>
+      
+    </figure><figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">SOLARCTF{sh3llb4g_m4nual_pars1ng_is_th3_w4y}</code></pre>
+      
+    </figure></li>
+</ol>
+<h2 id="notes-gotchas"><a class="wu-anchor" href="#notes-gotchas" aria-hidden="true">#</a>Notes / gotchas</h2>
+<ul>
+<li><code>qemu-img</code> handles the dynamic VHD fine; no need to reassemble blocks by hand.
+The 5 allocated 2 MiB blocks (0, 2, 9, 10, 31) map exactly onto QEMU&#39;s raw
+output - nothing is hidden in unallocated/phantom VHD blocks, and the 1 MiB
+tail after the NTFS partition is zero.</li>
+<li>NTFS volume spans clusters 0 - 16110; $Bitmap (LCN 5368) shows every non-zero
+cluster is owned by a live file, i.e. <strong>no free-space carving candidates</strong>;
+the deleted files were small (resident) and their records were zeroed.</li>
+<li><code>ntfs-3g</code>/<code>ntfsls</code> on the <em>whole</em> <code>disk.raw</code> fails (&quot;NTFS signature missing&quot;)
+because the FS starts at offset 65536 - always <code>dd</code> the partition first or use
+the sleuthkit (<code>fls</code>, <code>icat</code>) which read raw offsets.</li>
+<li>Only one name offset convention matters for the ADS: sleuthkit addresses it as
+<code>64-128-4</code> (inode-attrtype-attrindex).</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#walkthrough">Walkthrough</a></li><li><a href="#notes-gotchas">Notes / gotchas</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="the-missing-archive.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">The Missing Archive</span></a>
+    <a class="wu-pager-link wu-pager-next" href="ventilator303.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Ventilator303</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

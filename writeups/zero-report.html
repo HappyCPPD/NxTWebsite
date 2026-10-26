@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Zero Report · SolarCTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The auditor accepts any (a, b) on the line (1 - h)a + hb = 0 mod 2^127 - 1, where h hashes the submitted source. The program can compute H(SOURCE) itself, so a = h, b = h - 1 always passes." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>zero-report</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Zero Report <span class="page-sub">Self-referential hash invariant</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">SOLARCTF{y0u_h4sh3d_th3_wr0ng_th1ng}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> Cryptography
+<strong>Flag:</strong> <code>SOLARCTF{y0u_h4sh3d_th3_wr0ng_th1ng}</code></p>
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<p>The auditor&#39;s &quot;invariant&quot; is the <strong>linear congruence</strong></p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">(1 - h)·a + h·b ≡ 0  (mod P)      P = 2^127 - 1,   h = H(source) = sha256(source) mod P</code></pre>
+      
+    </figure><p><code>h</code> is not random at verification time - it is a <em>known, computable</em> function of the
+submitted bytes, and the sandboxed DSL lets <code>generate()</code> reference <code>H(SOURCE)</code> directly.
+So the whole thing collapses: any <code>(a, b)</code> on that line works. Take</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">a = h
+b = h - 1</code></pre>
+      
+    </figure><p>Then <code>(1-h)·h + h·(h-1) = h - h² + h² - h = 0</code>. Report <code>(h, h-1)</code> is <strong>nonzero</strong> and
+<strong>accepted</strong> → flag. The author &quot;hashed the wrong thing&quot;: the acceptance test is
+satisfiable trivially because the value it depends on is attacker-controlled.</p>
+<h2 id="the-challenge"><a class="wu-anchor" href="#the-challenge" aria-hidden="true">#</a>The challenge</h2>
+<p><code>service.py</code> reads one base64 program, parses <code>generate()</code> with a <em>restricted AST
+evaluator</em> (no execution of arbitrary code), and computes a 2-integer &quot;report&quot;.</p>
+<p>Acceptance (<code>audit</code>):</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">accepted = (<span class="hljs-number">0</span> &lt;= a &lt; P <span class="hljs-keyword">and</span> <span class="hljs-number">0</span> &lt;= b &lt; P</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">            <span class="hljs-keyword">and</span> (a != <span class="hljs-number">0</span> <span class="hljs-keyword">or</span> b != <span class="hljs-number">0</span>)</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">            <span class="hljs-keyword">and</span> ((<span class="hljs-number">1</span> - source_hash) * a + source_hash * b) % P == <span class="hljs-number">0</span>)</span></span></code></pre>
+      
+    </figure><p><code>source_hash = sha256(source) % P</code>, and <code>source</code> is the <em>canonical packed program</em>
+(<code>pack.py</code>) - one fixed string once the body is fixed.</p>
+<p>The DSL (<code>report_from_source</code>) allows only:</p>
+<ul>
+<li>integer literals with <code>bit_length() &lt;= 256</code>,</li>
+<li>the name <code>P</code> (= 2^127-1),</li>
+<li>previously-assigned local names,</li>
+<li>the single call <code>H(SOURCE)</code> → <code>source_hash</code>,</li>
+<li><code>+ - * %</code> (and unary ±), intermediates <code>&lt;= 512</code> bits.</li>
+</ul>
+<p>Constraint: ≤ 32 statements, ≤ 256 AST nodes, depth ≤ 32, body ≤ 2048 bytes,
+source must equal <code>pack.pack(extract_body(source))</code> byte-for-byte (canonical).</p>
+<h2 id="the-bug-two-coupled-mistakes"><a class="wu-anchor" href="#the-bug-two-coupled-mistakes" aria-hidden="true">#</a>The bug (two coupled mistakes)</h2>
+<ol>
+<li><strong>Self-referential input.</strong> <code>H(SOURCE)</code> is a first-class DSL value. The hash the
+acceptance test uses is <code>H</code> of the very program being submitted, so it is not an
+unknown to solve for - it is an input the solver <em>reads</em>.</li>
+<li><strong>A linear equation is not a predicate.</strong> <code>(1-h)·a + h·b ≡ 0 (mod P)</code> defines a
+1-dimensional affine line of solutions, not the single point <code>(0,0)</code>. For <code>h ≠ 0</code>
+these are <code>b ≡ (h-1)·h⁻¹·a</code>, a huge family. Requiring <code>(a,b) ≠ (0,0)</code> therefore
+<em>guarantees</em> accept of a nonzero report, the exact opposite of the intent.</li>
+</ol>
+<p>The author&#39;s tests presumably only checked <code>(0,0)</code>-returning programs, so the
+&quot;invariant&quot; passed while being vacuous.</p>
+<h2 id="solution-body-solvebodytxt"><a class="wu-anchor" href="#solution-body-solvebodytxt" aria-hidden="true">#</a>Solution body (<code>solve/body.txt</code>)</h2>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">a = H(SOURCE)</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">b = H(SOURCE) - <span class="hljs-number">1</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">return</span> [a, b]</span></span></code></pre>
+      
+    </figure><p>Packed (must go through <code>pack.py</code> to stay canonical):</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 pack.py solve/body.txt solve/prog.py</span></span></code></pre>
+      
+    </figure><h2 id="verify"><a class="wu-anchor" href="#verify" aria-hidden="true">#</a>Verify</h2>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> ~/Downloads/ctfs/Solarctf/Zero-Report</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 solve.py            <span class="hljs-comment"># build + local audit -&gt; ACCEPT with nonzero report</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">python3 solve.py --remote   <span class="hljs-comment"># submit to solarctf.ru:30102</span></span></span></code></pre>
+      
+    </figure><p>Observed:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">Report: [16249036334193251681511280897471541906, 16249036334193251681511280897471541905]
+ACCEPT
+remote: SOLARCTF{y0u_h4sh3d_th3_wr0ng_th1ng}</code></pre>
+      
+    </figure><h2 id="why-it-works-algebra"><a class="wu-anchor" href="#why-it-works-algebra" aria-hidden="true">#</a>Why it works (algebra)</h2>
+<p>With <code>a = h</code>, <code>b = h - 1</code>:
+<code>(1-h)·h + h·(h-1) = h - h² + h² - h = 0</code>, and modulo <code>P</code> that is <code>0</code>.
+<code>(a,b) ≠ (0,0)</code> whenever <code>h ≠ 0</code> (probability of the degenerate <code>h = 0</code> is <code>~P⁻¹</code>).
+Both <code>0 &lt;= h, h-1 &lt; P</code>. Nothing else is required.</p>
+<h2 id="alternative-fixes-if-one-were-hardening-this"><a class="wu-anchor" href="#alternative-fixes-if-one-were-hardening-this" aria-hidden="true">#</a>Alternative fixes (if one were hardening this)</h2>
+<ul>
+<li>Make acceptance a <em>predicate on the report being zero</em>: require <code>a ≡ 0 and b ≡ 0</code>,
+not a linear combination.</li>
+<li>Never expose a self-referential hash (or any value derived from the submitted
+bytes) as an input the program can read; hash a server-fixed secret/challenge
+instead, and sign it.</li>
+<li>Bind the check to a value the program cannot compute (e.g. server nonce inside the
+hash but unknown to the program, with the honest program forced to <code>(0,0)</code>).</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#the-challenge">The challenge</a></li><li><a href="#the-bug-two-coupled-mistakes">The bug (two coupled mistakes)</a></li><li><a href="#solution-body-solvebodytxt">Solution body (solve/body.txt)</a></li><li><a href="#verify">Verify</a></li><li><a href="#why-it-works-algebra">Why it works (algebra)</a></li><li><a href="#alternative-fixes-if-one-were-hardening-this">Alternative fixes (if one were hardening this)</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="kommunalochka.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Kommunalochka</span></a>
+    <a class="wu-pager-link wu-pager-next wu-pager-index" href="../writeups.html"><span class="wu-pager-dir">Index</span><span class="wu-pager-name">All writeups</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

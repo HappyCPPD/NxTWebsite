@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Missing Archive · SolarCTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Four RSA-2048 instances each leak the top 518 bits of one prime. Coppersmith with a 4-bit brute force factors all four, and the last 8 bytes of each plaintext join into the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>the-missing-archive</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>The Missing Archive <span class="page-sub">RSA with leaked high bits, Coppersmith</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">SOLARCTF{31a1e6f428f7b196ac1fe4}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> Crypto (RSA) · <strong>Author:</strong> sAOeNT</p>
+<blockquote>
+<p>At 03:17, the archive node &quot;Short Sleeves&quot; disappeared from the radars. The emergency
+team reached the station too late: the connection was lost, the storage facility
+switched to isolation mode, and the operator left no explanation.</p>
+<p>Task: <code>generate.py</code>, <code>output.txt</code></p>
+</blockquote>
+<h2 id="1-the-scheme-from-generatepy"><a class="wu-anchor" href="#1-the-scheme-from-generatepy" aria-hidden="true">#</a>1. The scheme (from <code>generate.py</code>)</h2>
+<ul>
+<li>The flag is 32 bytes, split evenly across <code>N_INSTANCES = 4</code>, so <strong>8 bytes per instance</strong>.
+Each chunk is placed as the <strong>last 8 bytes</strong> of a 32-byte message (24 random padding
+bytes prepended).</li>
+<li>Four independent <strong>RSA-2048</strong> instances (<code>p, q</code> are 1024-bit primes, <code>e = 65537</code>). The
+moduli share no common factor, so there is no GCD shortcut.</li>
+<li><strong>The leak:</strong> for each instance one prime is leaked <em>partially</em>, the <strong>top 518 bits</strong>
+(<code>h = prime &gt;&gt; (1024 - 518)</code>). The low <strong>506 bits are unknown</strong>.</li>
+<li>So each instance is the classic <strong>&quot;factoring with known high bits&quot;</strong> problem: recover
+<code>p = (h &lt;&lt; 506) + x</code> with <code>0 ≤ x &lt; 2^506</code> via <strong>Coppersmith / <button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button></strong>.</li>
+</ul>
+<p><code>output.txt</code> holds <code>N_INSTANCES=4</code>, <code>E=65537</code>, <code>len(flag)=32</code>, then four <code>(n, c, h)</code>
+triples.</p>
+<h2 id="2-factoring-with-coppersmith"><a class="wu-anchor" href="#2-factoring-with-coppersmith" aria-hidden="true">#</a>2. Factoring with Coppersmith</h2>
+<p>518 known bits out of 1024 is only just past the halfway bound, so a plain single-shot
+Coppersmith (<code>copp.py</code>) needs a big lattice and still struggles. Guessing a few extra
+high bits makes the unknown part smaller and the lattice happier:</p>
+<ul>
+<li><code>copp.py</code> runs high-bit Coppersmith on one instance with lattice parameters <code>m = t = 26</code>
+(a 61-dimensional lattice) and prints <code>FACT idx p q</code> on success.</li>
+<li><code>copp_bf.py</code> additionally guesses the next 4 bits of <code>p</code> (16 guesses <code>g</code>) and solves
+for the rest.</li>
+<li><code>driver.py</code> fans <code>copp_bf</code> out over 4 instances × 16 guesses on 10 workers and cancels
+the pending guesses for an instance as soon as one of them factors it.</li>
+</ul>
+<p>Each LLL run took roughly 250-760 s. The first driver pass factored instances 1, 2 and 3,
+while instance 0 timed out on every guess. A second pass on instance 0 with a narrowed
+guess space (<code>g = 4</code>, low guesses first) factored it as well, and three neighbouring
+guesses all returned the same <code>p, q</code>.</p>
+<figure class="wu-code" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># single instance, high-bit Coppersmith (m=t=26)</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">sage -python copp.py 0 26 26          <span class="hljs-comment"># prints &quot;FACT 0 p q&quot; on success</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-comment"># with top-4-bit guess g, brute force the 16 guesses for one instance</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">sage -python copp_bf.py 0:4:6 26 26</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-comment"># all four instances, fanned out (writes factors.txt)</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">python3 driver.py</span></span></code></pre>
+      
+    </figure><h2 id="3-decrypting-and-reassembling"><a class="wu-anchor" href="#3-decrypting-and-reassembling" aria-hidden="true">#</a>3. Decrypting and reassembling</h2>
+<p>With all four <code>p, q</code> pairs (each checked with <code>p·q == n</code>), it&#39;s plain RSA:
+<code>d = e⁻¹ mod (p-1)(q-1)</code>, <code>m = c^d mod n</code>, keep the last 8 bytes.</p>
+<p>One snag: <code>driver.py</code> writes lines as <code>FACT idx p q</code>, but the first version of
+<code>decrypt.py</code> expected <code>idx p q</code> and silently skipped every line, then died with
+<code>KeyError: 0</code>. Parsing the <code>FACT</code> prefix fixes it:</p>
+<figure class="wu-code" data-lines="13">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">from</span> Crypto.Util.number <span class="hljs-keyword">import</span> long_to_bytes, inverse</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">E=<span class="hljs-number">65537</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">v=[<span class="hljs-built_in">int</span>(x) <span class="hljs-keyword">for</span> x <span class="hljs-keyword">in</span> <span class="hljs-built_in">open</span>(<span class="hljs-string">&quot;output.txt&quot;</span>).read().split()]</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">recs=[(v[<span class="hljs-number">3</span>+<span class="hljs-number">3</span>*i],v[<span class="hljs-number">4</span>+<span class="hljs-number">3</span>*i],v[<span class="hljs-number">5</span>+<span class="hljs-number">3</span>*i]) <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">4</span>)]</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">f={}</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"><span class="hljs-keyword">for</span> line <span class="hljs-keyword">in</span> <span class="hljs-built_in">open</span>(<span class="hljs-string">&quot;factors.txt&quot;</span>):</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    s=line.split()</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    <span class="hljs-keyword">if</span> <span class="hljs-built_in">len</span>(s)==<span class="hljs-number">4</span> <span class="hljs-keyword">and</span> s[<span class="hljs-number">0</span>]==<span class="hljs-string">&quot;FACT&quot;</span>: f[<span class="hljs-built_in">int</span>(s[<span class="hljs-number">1</span>])]=(<span class="hljs-built_in">int</span>(s[<span class="hljs-number">2</span>]),<span class="hljs-built_in">int</span>(s[<span class="hljs-number">3</span>]))</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">flag=<span class="hljs-string">b&quot;&quot;</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-keyword">for</span> i,(n,c,h) <span class="hljs-keyword">in</span> <span class="hljs-built_in">enumerate</span>(recs):</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">    p,q=f[i]; <span class="hljs-keyword">assert</span> p*q==n</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">    flag+=long_to_bytes(<span class="hljs-built_in">pow</span>(c,inverse(E,(p-<span class="hljs-number">1</span>)*(q-<span class="hljs-number">1</span>)),n))[-<span class="hljs-number">8</span>:]</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc"><span class="hljs-built_in">print</span>(flag.decode())</span></span></code></pre>
+      
+    </figure><table>
+<thead>
+<tr>
+<th>inst</th>
+<th>decrypted tail (8 B)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td><code>SOLARCTF</code></td>
+</tr>
+<tr>
+<td>1</td>
+<td><code>{31a1e6f</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>428f7b19</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>6ac1fe4}</code></td>
+</tr>
+</tbody></table>
+<p>Concatenated in instance order:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">SOLARCTF{31a1e6f428f7b196ac1fe4}</code></pre>
+      
+    </figure><h2 id="4-takeaways"><a class="wu-anchor" href="#4-takeaways" aria-hidden="true">#</a>4. Takeaways</h2>
+<ul>
+<li>Leaking just over half the bits of a prime is enough to factor RSA with Coppersmith,
+but near the bound it pays to brute force a few more bits rather than grow the lattice.</li>
+<li>Run the instances in parallel and cancel the losers. Most guesses are misses.</li>
+<li>When the math works and the script doesn&#39;t, check the file formats between your own
+tools first.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-the-scheme-from-generatepy">1. The scheme (from generate.py)</a></li><li><a href="#2-factoring-with-coppersmith">2. Factoring with Coppersmith</a></li><li><a href="#3-decrypting-and-reassembling">3. Decrypting and reassembling</a></li><li><a href="#4-takeaways">4. Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="kumir-behind-the-wall.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">KuMir Behind the Wall</span></a>
+    <a class="wu-pager-link wu-pager-next" href="shellbreach.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">ShellBreach</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

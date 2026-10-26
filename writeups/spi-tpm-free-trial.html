@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SPI TPM Free Trial · HITCON CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="An aarch64 VM fronts a &quot;TPM firmware&quot; .so that runs natively on x86-64, so the cipher can be studied offline. A 9-bit key-check leak per query becomes a Hidden Number Problem, and the flag blob's own key-check is the 27th leak that makes the lattice solvable." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>spi-tpm-free-trial</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>SPI TPM Free Trial <span class="page-sub">Homemade TPM cipher, HNP lattice attack</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hitcon{531f_dE5i6N_cRy9T0Gr4Ph1C_41G0r1ThM_15_9r0B4b1Y_4_64D_1D3a_QQ}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hitcon{531f_dE5i6N_cRy9T0Gr4Ph1C_41G0r1ThM_15_9r0B4b1Y_4_64D_1D3a_QQ}</code></p>
+<blockquote>
+<p><em>self design cryptographic algorithm is probably a bad idea</em> - the flag says it all.</p>
+</blockquote>
+<p>This is a reverse-engineering challenge that turns into a lattice (Hidden Number Problem) attack.
+The write-up is in two parts: (1) what the service actually is, and (2) the attack, including the
+one subtlety that makes the difference between &quot;impossible&quot; and &quot;~5 minutes on a laptop.&quot;</p>
+<hr>
+<h2 id="1-the-target"><a class="wu-anchor" href="#1-the-target" aria-hidden="true">#</a>1. The target</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">ncat spi-tpm-rev.chal.hitconctf.com 1337        # PoW-gated</code></pre>
+      
+    </figure><p>The handout boots an <strong>aarch64 Linux VM</strong> (a patched <code>qemu-system-aarch64</code> that implements three
+custom <code>spi-tpm*</code> devices) whose PID 1 is a stripped static-PIE service speaking a line protocol
+over serial. The service&#39;s crypto is delegated to a &quot;<button type="button" class="wu-gloss" data-def="Trusted Platform Module: a chip (or emulated component) that stores keys and attests to system state.">TPM</button> firmware&quot; shared object
+<code>libspi_tpm_firmware.so</code> - and crucially that <code>.so</code> is <strong>native x86-64 with symbols</strong>, so it can be
+<code>dlopen</code>&#39;d directly on the host and driven with arbitrary inputs offline. All attack development is
+done against this firmware; the remote is only touched to capture one session.</p>
+<h3 id="protocol"><a class="wu-anchor" href="#protocol" aria-hidden="true">#</a>Protocol</h3>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">budget                     -&gt; &quot;budget &lt;remaining&gt; queries &lt;remaining&gt;&quot;
+get_flag                   -&gt; &quot;flag &lt;slot&gt; &lt;hexblob&gt;&quot;      (precomputed at boot)
+genkey                     -&gt; &quot;key &lt;slot&gt;&quot;                  (fresh random key in a new slot)
+encrypt KEY COST HEX       -&gt; &quot;ciphertext &lt;hexblob&gt;&quot;
+decrypt HEX                -&gt; &quot;plaintext &lt;hex&gt;&quot;
+quit</code></pre>
+      
+    </figure><p>Initial banner: <code>budget 1024 queries 27</code>. Every command (even errors) costs a query, and there is
+a hard <strong>27-query cap per connection</strong>. Budget cost:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">encrypt: COST * (ceil(len/4) + 32)
+decrypt: nonce * (ceil(len/4) + 256)     # nonce read from the blob header</code></pre>
+      
+    </figure><p>The flag is encrypted at boot under <strong>slot-1</strong> with a large, fixed <code>COST = 548787</code> and a random IV.
+We hold a chosen-plaintext <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> under that <strong>same slot-1 key</strong> (<code>encrypt 1 &lt;cost&gt; &lt;hex&gt;</code>), which
+is what the whole attack rests on.</p>
+<h3 id="blob-format-verified-against-firmware-live-service"><a class="wu-anchor" href="#blob-format-verified-against-firmware-live-service" aria-hidden="true">#</a>Blob format (verified against firmware + live service)</h3>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">off 0   magic &quot;STP1&quot;
+off 4   02 00 28 00            version / const
+off 8   IV      (u32 LE)       fresh getrandom per encrypt
+off 12  nonce = COST (u32 LE)
+off 16  bytelen (u32 LE)
+off 20  key-check (u32 LE)     &lt;-- the leak (see §3)
+off 24  MAC (16 bytes)
+off 40  ciphertext             4 bytes per 32-bit plaintext word, LE, INDEPENDENT per word</code></pre>
+      
+    </figure><p>(The very first pitfall: an earlier model read the ciphertext at offset 24 - that&#39;s the MAC. The
+ciphertext starts at <strong>offset 40</strong>, and each 32-bit word is encrypted independently.)</p>
+<h3 id="the-cipher"><a class="wu-anchor" href="#the-cipher" aria-hidden="true">#</a>The cipher</h3>
+<p>For each <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> 32-bit plaintext word <code>w</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">E0   = perm(w,  IV, j, COST, sel=0, dir=0)
+fe   = Feistel^COST(E0, kA, kB)
+ct_j = perm(fe, IV, j, COST, sel=1, dir=1-&gt;0)</code></pre>
+      
+    </figure><ul>
+<li><code>perm</code> is a <strong>TEA-variant and completely key-independent</strong> - its schedule comes only from
+<code>(IV, block-index j, COST, selector)</code>. Because it&#39;s keyless, the <em>local</em> firmware can encrypt and
+decrypt <em>remote</em> blobs; we only ever need the key for the Feistel layer.</li>
+<li><code>Feistel^COST</code> is a balanced 16/16 Feistel over the 32-bit block, run <code>COST</code> times. One round:
+<code>(L,R) -&gt; (R ^ F0(L), L)</code>, with round selector <code>r &amp; 3</code> (period 4).</li>
+<li>The <strong>only secret</strong> is the 128-bit key <code>(kA, kB)</code> (key bytes 0..15, full entropy from a real
+<code>getrandom</code> - no PRNG state to attack).</li>
+</ul>
+<p>The round function (all constants are 64-bit; <code>sm</code> is the splitmix64 finalizer):</p>
+<figure class="wu-code wu-code-output" data-lines="11">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">round_f(L, kA, kB, rsel):
+    Z  = rol(kB,17) ^ kA ^ (L*C1) ^ (rsel*C2) ^ C3
+    P  = sm(Z + GOLD)
+    Y  = (rol(kA,29) ^ kB) ^ P
+    out16 = fold16( sm(Y + GOLD) )
+
+sm(x)  = x^=x&gt;&gt;30; x*=MA; x^=x&gt;&gt;27; x*=MB; x^=x&gt;&gt;31
+fold16(v) = (v ^ v&gt;&gt;16 ^ v&gt;&gt;32 ^ v&gt;&gt;48) &amp; 0xffff
+
+C1=d6e8feb86659fd93  C2=a5a3564e27f8862f  C3=62696c696e2d7221
+GOLD=9e3779b97f4a7c15  MA=bf58476d1ce4e5b9  MB=94d049bb133111eb</code></pre>
+      
+    </figure><h3 id="why-you-can39t-just-decrypt-the-flag"><a class="wu-anchor" href="#why-you-can39t-just-decrypt-the-flag" aria-hidden="true">#</a>Why you can&#39;t just decrypt the flag</h3>
+<p>The flag blob&#39;s <code>nonce = COST = 548787</code> is baked into the header and authenticated by the MAC.
+A direct <code>decrypt</code> would cost <code>548787 * (ceil(70/4)+256) ≈ 1.5e8 &gt;&gt; 1024</code>, and the nonce can&#39;t be
+lowered without forging the MAC. So the intended path is <strong>recover <code>(kA,kB)</code> and decrypt offline.</strong></p>
+<p>Dead ends (all measured, not assumed): the 4-round map has cycle length &gt; 20M (no period
+shortcut); <code>Feistel^a ∘ Feistel^b ≠ Feistel^(a+b)</code> (the round counter resets per call); the key is a
+full 128 bits (no 32-bit reduction); SAT/SMT (<button type="button" class="wu-gloss" data-def="An SMT solver: give it symbolic variables and constraints and it finds a satisfying assignment or proves none exists.">z3</button>, bitwuzla, CryptoMiniSat) all hang on the two
+64-bit multiplies in <code>sm</code>, so inverting the round function algebraically from F0 samples is out.</p>
+<hr>
+<h2 id="2-two-oracles"><a class="wu-anchor" href="#2-two-oracles" aria-hidden="true">#</a>2. Two oracles</h2>
+<p>An <code>encrypt 1 1 &lt;N words&gt;</code> (i.e. <strong>COST = 1</strong>, one Feistel round) gives us two very different
+leakage channels, both under the flag&#39;s key:</p>
+<h3 id="a-f0-samples-a-perfect-verifier-useless-as-a-solver"><a class="wu-anchor" href="#a-f0-samples-a-perfect-verifier-useless-as-a-solver" aria-hidden="true">#</a>(a) F0 samples - a perfect <em>verifier</em>, useless as a <em>solver</em></h3>
+<p>For COST=1 the Feistel is a single round, and since <code>perm</code> is keyless we can peel it off:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">F0(L) = ( perm(ct_j, IV, j, 1, sel=1, dir=1) &gt;&gt; 16 ) ^ R      where (L,R) = (E0&gt;&gt;16, E0&amp;0xffff)</code></pre>
+      
+    </figure><p>So each ciphertext word yields one <code>(L, F0(L))</code> pair - 16 output bits of the round function at a
+known 16-bit input, <strong>key-independent to extract</strong>. A single cheap encrypt gives hundreds of these.
+They can&#39;t be <em>inverted</em> to the key (that&#39;s the SAT wall), but they make a near-perfect <strong>filter</strong>:
+a wrong key matches ~182 independent 16-bit samples with probability 2^-2912. Zero false positives.</p>
+<h3 id="b-the-key-check-a-9-bit-leak-of-a-bilinear-form-in-the-key"><a class="wu-anchor" href="#b-the-key-check-a-9-bit-leak-of-a-bilinear-form-in-the-key" aria-hidden="true">#</a>(b) The key-check - a 9-bit leak of a bilinear form in the key</h3>
+<p>Byte 20 of every blob is</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">key-check = known_part(IV) ^ ( field(kA,kB,IV) &gt;&gt; 118 )
+field(kA,kB,IV) = ( cA*kA + cB*kB + cC*(kA*kB) )  mod p,   p = 2^127 - 1</code></pre>
+      
+    </figure><p><code>known_part(IV)</code> is a public splitmix of <code>GOLD ^ IV ^ CT</code> (computable offline), and the public
+coefficients <code>cA, cB, cC</code> are IV-derived. So <strong>every blob leaks the top 9 bits of a known bilinear
+form in the 128-bit key.</strong> This is a Hidden Number Problem with a quadratic (<code>kA*kB</code>) cross term.</p>
+<hr>
+<h2 id="3-the-attack-hnp-over-the-key-check"><a class="wu-anchor" href="#3-the-attack-hnp-over-the-key-check" aria-hidden="true">#</a>3. The attack: HNP over the key-check</h2>
+<p>With <code>n</code> leaks we get <code>n</code> equations</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">cA_i*kA + cB_i*kB + cC_i*(kA*kB) = leak_i * 2^118 + e_i   (mod p),   0 &lt;= e_i &lt; 2^118</code></pre>
+      
+    </figure><p>Treat <code>(kA, kB, z=kA*kB)</code> as three hidden numbers (<code>kA,kB</code> are 64-bit; <code>z</code> is a ~127-bit nuisance).
+Eliminate <code>z</code> by pairing each equation with equation 0, build the standard HNP embedding lattice,
+<button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button>/BKZ-reduce, and the key sits at a short lattice vector. Measured planted-vector norm, relative
+to the Gaussian heuristic of the lattice:</p>
+<table>
+<thead>
+<tr>
+<th align="right">leaks n</th>
+<th align="right">ratio ‖planted‖/GH</th>
+<th>status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">26</td>
+<td align="right">2.48</td>
+<td>wall - ~1e11 ball, infeasible</td>
+</tr>
+<tr>
+<td align="right"><strong>27</strong></td>
+<td align="right"><strong>1.975</strong></td>
+<td><strong>tractable - ~1.6e9 ball</strong></td>
+</tr>
+<tr>
+<td align="right">28</td>
+<td align="right">1.58</td>
+<td>easy (fpylll finds it in ~40 s)</td>
+</tr>
+<tr>
+<td align="right">29</td>
+<td align="right">1.28</td>
+<td>trivial</td>
+</tr>
+</tbody></table>
+<p>The planted vector is <strong>not</strong> the shortest vector and <strong>not</strong> a basis row - BKZ won&#39;t surface it
+directly. You must enumerate the ball up to ~2·GH and filter. fpylll&#39;s evaluator stores every
+solution it finds (RAM blow-up at this count), so a <strong>streaming</strong> enumerator with an on-the-fly
+filter is required. The F0 samples from §2(a) are exactly that filter.</p>
+<h3 id="the-one-subtlety-that-unlocks-it-the-27th-leak"><a class="wu-anchor" href="#the-one-subtlety-that-unlocks-it-the-27th-leak" aria-hidden="true">#</a>The one subtlety that unlocks it: the 27th leak</h3>
+<p>A connection allows 26 <code>encrypt</code>s plus one <code>get_flag</code> = 27 blobs. The natural reflex is &quot;<code>get_flag</code>
+costs a query and returns the flag, not a leak → only 26 usable leaks,&quot; and at <strong>n = 26 the attack
+is a brick wall</strong> (ratio 2.48).</p>
+<p>But <strong>the flag blob has its own key-check at offset 20</strong>, computed with the same slot-1 key and a
+fresh IV. It is a perfectly good 27th sample. Counting it moves the problem from n=26 (impossible)
+to <strong>n=27 (ratio 1.975)</strong> - the difference between the two columns above. The capture script in this
+repo had been discarding it:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">if</span> B[<span class="hljs-string">&#x27;blen&#x27;</span>]&gt;<span class="hljs-number">4</span> <span class="hljs-keyword">and</span> B[<span class="hljs-string">&#x27;cost&#x27;</span>]&gt;<span class="hljs-number">1000</span>: flagblob=blob; <span class="hljs-keyword">continue</span>   <span class="hljs-comment"># &lt;- the 27th leak, thrown away</span></span></span></code></pre>
+      
+    </figure><p>Add it back (<code>leak = key_check ^ known_part(IV)</code>) and you have 27 leaks from a single connection,
+no re-capture needed.</p>
+<h3 id="the-enumerator"><a class="wu-anchor" href="#the-enumerator" aria-hidden="true">#</a>The enumerator</h3>
+<p>A naive Fincke - Pohst that scans <code>[lo,hi]</code> at every level spins forever at the top level
+(width ∝ √(R²/r_last)) on an LLL-only basis whose GSO profile spans ~1e15. Fixes:</p>
+<ol>
+<li><strong>Schnorr - Euchner center-out ordering with early <code>break</code></strong> - at each level start at the rounded
+center and walk outward, stopping a direction the moment the 1-D term pushes the partial norm
+past the radius.</li>
+<li><strong>BKZ-40 preprocessing</strong> flattens the GSO profile (top level collapses to just 9 branches,
+<code>x_last ∈ [-4,4]</code>).</li>
+<li><strong>F0 filter at the leaf</strong>: reconstruct <code>(kA,kB)</code> from the vector&#39;s first two coordinates, check a
+couple of F0 samples as a cheap pre-filter, then all 182; exit on first match.</li>
+<li><strong>Shard</strong> the 9 top-level branches across cores.</li>
+</ol>
+<p>Throughput ~3M nodes/s/core; the n=27 ball clears in a few minutes on 16 cores.</p>
+<hr>
+<h2 id="4-putting-it-together"><a class="wu-anchor" href="#4-putting-it-together" aria-hidden="true">#</a>4. Putting it together</h2>
+<figure class="wu-code" data-lines="14">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-11" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-11"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># 1. one remote connection: 26x  encrypt 1 1 &lt;7 words&gt;   +  get_flag</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment">#    -&gt; 26 leaks, 182 F0 samples, and the flag blob      (remote_pipe_3.json)</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-comment"># 2. add the flag blob&#x27;s own key-check as the 27th leak</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">python3 mk_remote27.py                         <span class="hljs-comment"># -&gt; remote27.json (27 leaks, 182 F0, flag)</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-comment"># 3. build + BKZ-40 reduce the HNP lattice, radius 1.95*GH</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">python3 export_lattice.py remote27.json 27 latR27.txt 1.95 40</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-comment"># 4. sharded streaming enumeration with the F0 filter (~5 min, 16 cores)</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">./shard_run.sh latR27.txt ./enum2 shardR27</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"><span class="hljs-comment">#  -&gt; FOUND kA=a255c9ac2ef7037f kB=e77aeddfd81acbd7   (0/182 F0 mismatches)</span></span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc"><span class="hljs-comment"># 5. decrypt the flag blob offline: keyless perm inverse (native firmware) + Feistel^-548787</span></span></span></code></pre>
+      
+    </figure><p>Validation before trusting any of it: on locally-generated data with a <strong>known</strong> key, n=27 was
+solved in ~41 s and the recovered key matched exactly; n=28 was found too, confirming the
+enumerator&#39;s correctness.</p>
+<p>Final decryption (note: the firmware&#39;s native <code>perm</code> inverse must be used - a hand-rolled Python
+inverse of the TEA-variant was subtly wrong):</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-12" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-12"><code class="language-text">flag blob: IV=ca54c2d6  COST=548787  bytelen=70
+for each ct word j:
+    fe = perm(ct_j, IV, j, COST, sel=1, dir=1)      # native, keyless
+    E0 = feistel_inv(fe, kA, kB, COST)              # 548787 rounds, python
+    w  = perm(E0,  IV, j, COST, sel=0, dir=1)        # native, keyless</code></pre>
+      
+    </figure><figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-13" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-13"><code class="language-text">hitcon{531f_dE5i6N_cRy9T0Gr4Ph1C_41G0r1ThM_15_9r0B4b1Y_4_64D_1D3a_QQ}</code></pre>
+      
+    </figure><hr>
+<h2 id="5-takeaways"><a class="wu-anchor" href="#5-takeaways" aria-hidden="true">#</a>5. Takeaways</h2>
+<ul>
+<li><strong>Count your oracles.</strong> The whole challenge is balanced so that 26 leaks are a wall and 27 just
+barely work. The 27th leak is hiding in plain sight inside the flag blob you were going to fetch
+anyway. Throwing away the key-check on the <code>get_flag</code> response is the difference between
+&quot;unsolvable&quot; and &quot;five minutes.&quot;</li>
+<li><strong>A borderline lattice wants a streaming enumerator, not a bigger <code>nr_solutions</code>.</strong> The planted
+vector is near the edge of the ball; keeping the <em>k</em> shortest solutions never contains it. Stream
+the enumeration and filter with something that can&#39;t false-positive (here, 2912 bits of F0).</li>
+<li><strong>Keyless scaffolding is a gift.</strong> Because <code>perm</code> and the F0 extraction are key-independent, every
+bit of attack development - and the final decryption of the <em>remote</em> flag blob - runs on the local
+<code>dlopen</code>&#39;d firmware with no budget spent.</li>
+<li>And, per the flag: rolling your own ARX cipher and leaking 9 bits of a bilinear key-dependent
+checksum on every ciphertext is, in fact, probably a bad idea.</li>
+</ul>
+<h2 id="artifacts-in-this-directory"><a class="wu-anchor" href="#artifacts-in-this-directory" aria-hidden="true">#</a>Artifacts in this directory</h2>
+<table>
+<thead>
+<tr>
+<th>file</th>
+<th>what</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>model.py</code></td>
+<td>round function / Feistel reference</td>
+</tr>
+<tr>
+<td><code>hnp_enum.py</code></td>
+<td>HNP lattice construction (<code>field</code>, <code>build</code>, coeffs via <code>tool</code>)</td>
+</tr>
+<tr>
+<td><code>export_lattice.py</code></td>
+<td>build + LLL + <strong>BKZ</strong> reduce, dump basis/GSO/F0 for the C enumerator</td>
+</tr>
+<tr>
+<td><code>enum2.c</code> / <code>enum2</code></td>
+<td>streaming Schnorr - Euchner enumerator with F0 leaf filter</td>
+</tr>
+<tr>
+<td><code>shard_run.sh</code></td>
+<td>9-way top-level parallel runner</td>
+</tr>
+<tr>
+<td><code>mk_remote27.py</code></td>
+<td>adds the flag-blob key-check as the 27th leak</td>
+</tr>
+<tr>
+<td><code>remote_pipe_3.json</code></td>
+<td>the captured session (26 leaks + 182 F0 + flag blob)</td>
+</tr>
+<tr>
+<td><code>remote27.json</code></td>
+<td>the same, with the 27th leak added</td>
+</tr>
+<tr>
+<td><code>notes/claude-scratchpad/tool</code></td>
+<td>native-firmware model of the key-check (<code>selftest</code>, <code>coeffs</code>, <code>sim</code>)</td>
+</tr>
+</tbody></table>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-the-target">1. The target</a><ol class="wu-toc-sub"><li><a href="#protocol">Protocol</a></li><li><a href="#blob-format-verified-against-firmware-live-service">Blob format (verified against firmware + live service)</a></li><li><a href="#the-cipher">The cipher</a></li><li><a href="#why-you-can39t-just-decrypt-the-flag">Why you can&#39;t just decrypt the flag</a></li></ol></li><li><a href="#2-two-oracles">2. Two oracles</a><ol class="wu-toc-sub"><li><a href="#a-f0-samples-a-perfect-verifier-useless-as-a-solver">(a) F0 samples - a perfect verifier, useless as a solver</a></li><li><a href="#b-the-key-check-a-9-bit-leak-of-a-bilinear-form-in-the-key">(b) The key-check - a 9-bit leak of a bilinear form in the key</a></li></ol></li><li><a href="#3-the-attack-hnp-over-the-key-check">3. The attack: HNP over the key-check</a><ol class="wu-toc-sub"><li><a href="#the-one-subtlety-that-unlocks-it-the-27th-leak">The one subtlety that unlocks it: the 27th leak</a></li><li><a href="#the-enumerator">The enumerator</a></li></ol></li><li><a href="#4-putting-it-together">4. Putting it together</a></li><li><a href="#5-takeaways">5. Takeaways</a></li><li><a href="#artifacts-in-this-directory">Artifacts in this directory</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="welcome.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Welcome</span></a>
+    <a class="wu-pager-link wu-pager-next" href="book-of-eclipse.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Book of Eclipse</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>

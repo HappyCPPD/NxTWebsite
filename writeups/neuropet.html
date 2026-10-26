@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Neuropet · SolarCTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="An Android backup unpacks to a Tamagotchi APK whose skin.dat is really an LCG-XORed DEX. Calling the native core directly, without JNI or the watchdog, gives up four &quot;neuron&quot; payloads that concatenate into the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=0e2bdd96" />
+<link rel="stylesheet" href="../css/pages.css?v=8dc67e7f" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>neuropet</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Neuropet <span class="page-sub">Android backup, hidden DEX, native core</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span>
+      <span>100 pts</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">SOLARCTF{FR1d0Mp_Sc4n_p4G3s_in_GamEEE}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag: <code>SOLARCTF{FR1d0Mp_Sc4n_p4G3s_in_GamEEE}</code></strong></p>
+<p>Artifact: <code>neuropet.ab</code> (359,458 B). Description: &quot;A Neuro Tamagotchi in every home, password 0000&quot;
+(neuro-tamagotchi in every home, password 0000). Author M0shp1t.</p>
+<hr>
+<h2 id="1-neuropetab-is-an-android-backup"><a class="wu-anchor" href="#1-neuropetab-is-an-android-backup" aria-hidden="true">#</a>1. <code>neuropet.ab</code> is an Android Backup</h2>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">$ file neuropet.ab
+Android Backup, version 1, Compressed, Not-Encrypted
+$ xxd neuropet.ab | head -2
+00000000: 414e 4452 4f49 4420 4241 434b 5550 0a31  ANDROID BACKUP.1
+00000010: 0a31 0a6e 6f6e 650a 78da ...</code></pre>
+      
+    </figure><p>Header = 4 text lines (<code>ANDROID BACKUP</code>, <code>1</code>, <code>1</code>, <code>none</code>); the zlib stream starts at offset
+24 (<code>78 da</code>). Decompress → 378,880 B → a tar archive:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">$ python3 -c &quot;import zlib;open('backup.decompressed','wb').write(zlib.decompress(open('neuropet.ab','rb').read()[24:]))&quot;
+$ tar -tvf backup.decompressed
+apps/com.solarlabs.neuropet/_manifest      1672
+apps/com.solarlabs.neuropet/f/rList          71
+apps/com.solarlabs.neuropet/a/base.apk   364193</code></pre>
+      
+    </figure><h2 id="2-apk-contents"><a class="wu-anchor" href="#2-apk-contents" aria-hidden="true">#</a>2. APK contents</h2>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">classes.dex                        24,764 B   (R8 full mode, min-api 26)
+assets/neuro/brain.bin              1,865 B   magic NRBC
+assets/neuro/weights.bin          262,154 B   magic NRWT
+assets/neuro/skin.dat               5,342 B   no magic, high entropy
+lib/arm64-v8a/libneurocore.so      11,320 B
+lib/x86_64/libneurocore.so         11,960 B   &lt;-- the APK ships an x86_64 slice!
+resources.arsc                              (Russian UI labels only)</code></pre>
+      
+    </figure><p>Java package <code>com.solarlabs.neuropet</code>: <code>MainActivity</code>, <code>AboutActivity</code>, <code>PetView</code>, <code>App</code>,
+<code>core/Q</code> (JNI), <code>proto/{Io,Wire}</code>.</p>
+<h2 id="3-skindat-is-a-hidden-dex-lcg-xor"><a class="wu-anchor" href="#3-skindat-is-a-hidden-dex-lcg-xor" aria-hidden="true">#</a>3. <code>skin.dat</code> is a hidden DEX (LCG-xor)</h2>
+<p><code>App.onCreate</code> (jadx <code>--show-bad-code</code>) builds an asset name from
+<code>{69,78,94,89,68,4,88,64,66,69,5,79,74,95} ^ 43</code> = <code>neuro/skin.dat</code>, then decrypts it:</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">java</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-java">long j2 = (g2[0] &amp; 255) | ((g2[1] &amp; 255) &lt;&lt; 8);       // 16-bit LE seed
+for (i = 0; i &lt; len; i++) {
+    long j3 = ((j2 * 1103515245) + 12345) &amp; 0xffffffff;  // LCG
+    bArr[i] = (byte)(((j3 &gt;&gt; 16) &amp; 255) ^ g2[i + 2]);
+    j2 = j3;
+}
+bArr[0]=100; bArr[1]=101; bArr[2]=120; bArr[3]=10;    // &quot;dex\n&quot;
+InMemoryDexClassLoader(ByteBuffer.wrap(bArr), getClassLoader());</code></pre>
+      
+    </figure><p>Decrypting gives a 5,340-byte DEX (<code>lab.dex</code>, sha256
+<code>f70eeb6f155f2cd9d026017e7d14166c9437636a6865197a764a987af1a2cdff</code>) holding three hidden
+classes: <strong><code>Trig</code>, <code>LabActivity</code>, <code>LabHold</code></strong>.</p>
+<h2 id="4-the-hidden-lab-and-the-flag-path"><a class="wu-anchor" href="#4-the-hidden-lab-and-the-flag-path" aria-hidden="true">#</a>4. The hidden &quot;lab&quot; and the flag path</h2>
+<p><code>AboutActivity.onCreate</code> attaches a click listener to <code>brand_word</code>. The handler builds a class
+name with XOR-61 (<code>{94,82,80,19,...}</code> → <code>com.solarlabs.neuropet.lab.Trig</code>) and calls
+<code>Trig.hit()</code>; on success it starts a second XOR-61-decoded class
+(<code>...lab.LabActivity</code>) from the in-memory loader; otherwise it toasts <code>lab_unavailable</code>.</p>
+<p><code>Trig.hit()</code> = <strong>5 taps within 1500 ms</strong> (<code>TAPS=5</code>, <code>WINDOW_MS=1500</code>).</p>
+<p><code>LabActivity</code>&#39;s <code>LabView.onDraw</code> steps a phase counter; once, at phase 2:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">java</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-java">io.run(LabActivity.de(53, new int[]{81,80,67,71,90,90,88}));   // de() = XOR 53 -&gt; &quot;devroom&quot;
+LabHold.seg = io.query(0);                                      // -&gt; Q.nQuery(0)</code></pre>
+      
+    </figure><p>So the flag path is: run the native script <strong><code>devroom</code></strong>, then read query index 0.
+(The screen only ever draws &quot;4/4&quot; - the flag is never displayed, so you must instrument or
+emulate; that&#39;s why the challenge needs RE rather than just running the app.)</p>
+<h2 id="5-driving-the-native-core-directly-no-jni-no-watchdog"><a class="wu-anchor" href="#5-driving-the-native-core-directly-no-jni-no-watchdog" aria-hidden="true">#</a>5. Driving the native core directly (no JNI, no watchdog)</h2>
+<p><code>libneurocore.so</code> exports four JNI functions that are thin bridges. Disassembling the x86_64
+slice shows the real entry points, and they are plain C:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">nInit  -&gt; init (0xff0)  : void* init(uint8_t* data, long len)          // data = brain.bin
+nRun   -&gt; run  (0x1300) : int   run(void* obj, const char* script, int, long budget)
+nQuery -&gt; query(0x1e10) : long  query(void* obj, int idx, uint8_t* out, long cap)</code></pre>
+      
+    </figure><p><code>nInit</code> additionally spawns a detached anti-analysis thread (scans <code>/proc/self/maps</code> for
+<code>frida</code>, <code>gum-js</code>, <code>gadget</code>, <code>substrate</code>, <code>/data/local/tmp/re.frida.server</code> and <code>_exit(7)</code>s on a
+hit). Calling <strong><code>init</code>/<code>run</code>/<code>query</code> directly bypasses both the JNI plumbing and that thread.</strong></p>
+<p>Running the Android x86_64 <code>.so</code> under glibc needs two fixes:</p>
+<ol>
+<li>It demands a bionic symbol version <code>LIBC</code>. Patch a <strong>copy</strong>: rewrite the <code>DT_VERNEED</code>,
+<code>DT_VERNEEDNUM</code>, <code>DT_VERSYM</code> tags in <code>.dynamic</code> to <code>DT_DEBUG</code> (21) - the loader then ignores
+versioning. (<code>patch_so.py</code>)</li>
+<li>It needs bionic&#39;s <code>__errno</code>. Supply it via <code>LD_PRELOAD</code> (<code>bionic_shim.so</code>:
+<code>int *__errno(void){return __errno_location();}</code>). A dummy <code>liblog.so</code> and <code>libc.so</code> symlink
+complete the stub dir.</li>
+</ol>
+<p>Then (see <code>harness4.c</code>):</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">c</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-c"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-type">void</span>* obj = init(data_brain_bin, <span class="hljs-number">1865</span>);</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">run(obj, <span class="hljs-string">&quot;devroom&quot;</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0x2faf080</span>);        <span class="hljs-comment">// budget matters: rc=5 without it, rc=0 with it</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">for</span> (idx = <span class="hljs-number">1.</span><span class="hljs-number">.4</span>) query(obj, idx, out, <span class="hljs-number">0x80</span>);</span></span></code></pre>
+      
+    </figure><h2 id="6-the-four-neurons-and-their-encodings"><a class="wu-anchor" href="#6-the-four-neurons-and-their-encodings" aria-hidden="true">#</a>6. The four &quot;neurons&quot; and their encodings</h2>
+<p>Four query indices return one fragment each, each prefixed with a marker and each encoded
+differently - the marker is what identifies the inverse transform:</p>
+<table>
+<thead>
+<tr>
+<th>idx</th>
+<th>raw output</th>
+<th>inverse transform</th>
+<th>marker + payload</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><code>NEUROC1!SOLARCTF{F</code></td>
+<td>identity</td>
+<td><code>SOLARCTF{F</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>LGWPMA0#P3f2Or]Qa6</code></td>
+<td>XOR 0x02</td>
+<td><code>NEUROC2!R1d0Mp_Sc4</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>i_s3G4p_n!3CORUEN</code></td>
+<td>reverse</td>
+<td><code>NEUROC3!n_p4G3s_i</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>4e 00 45 00 55 00 …</code></td>
+<td>de-interleave (every 2nd byte)</td>
+<td><code>NEUROC4!n_GamEEE}</code></td>
+</tr>
+</tbody></table>
+<p>Concatenating the payloads in marker order:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">SOLARCTF{F + R1d0Mp_Sc4 + n_p4G3s_i + n_GamEEE}</code></pre>
+      
+    </figure><p>Note the fragments interlock across their boundaries: <code>_Sc4</code> + <code>n_p4G3s</code> = <code>_Sc4n_p4G3s</code>
+(<code>…scan_pages…</code>), and <code>s_i</code> + <code>n_GamE</code> = <code>s_in_GamE</code>. This confirms the order.</p>
+<p><strong>Flag: <code>SOLARCTF{FR1d0Mp_Sc4n_p4G3s_in_GamEEE}</code></strong></p>
+<h2 id="7-reproduce"><a class="wu-anchor" href="#7-reproduce" aria-hidden="true">#</a>7. Reproduce</h2>
+<figure class="wu-code" data-lines="10">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> ~/Downloads/ctfs/Solarctf/Neuropet</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 tools/unpack.py            <span class="hljs-comment"># android backup -&gt; tar -&gt; apk  (or the one-liners in §1)</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">python3 tools/decrypt_skin.py      <span class="hljs-comment"># -&gt; lab.dex</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">~/tools/jadx/bin/jadx -d lab_java --show-bad-code lab.dex</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">python3 tools/patch_so.py          <span class="hljs-comment"># neutralise bionic LIBC symbol versioning</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">gcc -shared -fPIC -o tools/stubs/bionic_shim.so tools/bionic_shim.c</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">gcc -O1 -o tools/harness4 tools/harness4.c -ldl</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">LD_LIBRARY_PATH=tools/stubs LD_PRELOAD=tools/stubs/bionic_shim.so \</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">  tools/harness4 devroom</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-comment"># -&gt; ASSEMBLED (payloads concatenated): SOLARCTF{FR1d0Mp_Sc4n_p4G3s_in_GamEEE}</span></span></span></code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-neuropetab-is-an-android-backup">1. neuropet.ab is an Android Backup</a></li><li><a href="#2-apk-contents">2. APK contents</a></li><li><a href="#3-skindat-is-a-hidden-dex-lcg-xor">3. skin.dat is a hidden DEX (LCG-xor)</a></li><li><a href="#4-the-hidden-lab-and-the-flag-path">4. The hidden &quot;lab&quot; and the flag path</a></li><li><a href="#5-driving-the-native-core-directly-no-jni-no-watchdog">5. Driving the native core directly (no JNI, no watchdog)</a></li><li><a href="#6-the-four-neurons-and-their-encodings">6. The four &quot;neurons&quot; and their encodings</a></li><li><a href="#7-reproduce">7. Reproduce</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev wu-pager-index" href="../writeups.html"><span class="wu-pager-dir">Index</span><span class="wu-pager-name">All writeups</span></a>
+    <a class="wu-pager-link wu-pager-next" href="kumir-behind-the-wall.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">KuMir Behind the Wall</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=4dd8bec6"></script>
+</body>
+</html>
