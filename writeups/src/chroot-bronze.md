@@ -26,7 +26,7 @@ real host filesystem outside the jail.
 Start the instance and connect:
 
 ```bash
-/Users/dan/ctf/kaspersky/kasperskyinstance start 13 --wait
+/Users/blank/ctf/kaspersky/kasperskyinstance start 13 --wait
 # tcp://<id>.tcp.kit.sasc.tf:443
 ```
 
@@ -147,7 +147,7 @@ kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}
 Submitted with:
 
 ```bash
-/Users/dan/ctf/kaspersky/kasperskyflag 13 'kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}'
+/Users/blank/ctf/kaspersky/kasperskyflag 13 'kaspersky{fb30b3a6-ff28-4698-b023-bfb73c4bbf63}'
 # {"status": "Correct"}
 ```
 

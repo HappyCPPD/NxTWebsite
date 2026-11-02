@@ -211,7 +211,7 @@ kaspersky{s1gn4l5_pr0v1d3d_tPm_k1nd4_sus}
 Submission:
 
 ```bash
-/Users/dan/ctf/kaspersky/kasperskyflag 20 'kaspersky{s1gn4l5_pr0v1d3d_tPm_k1nd4_sus}'
+/Users/blank/ctf/kaspersky/kasperskyflag 20 'kaspersky{s1gn4l5_pr0v1d3d_tPm_k1nd4_sus}'
 # {"status": "Correct"}
 ```
 

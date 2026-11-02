@@ -76,7 +76,7 @@ tool.
 
 ## Reproduction
 ```bash
-cd /home/ashton/Downloads/ctfs/Byteme2026/Soul_World
+cd /home/blank/Downloads/ctfs/Byteme2026/Soul_World
 zsteg -E "b1,rgb,lsb,xy" soul_world.png | strings   # quick
 python3 solve.py                                    # from-scratch, self-contained
 ```
