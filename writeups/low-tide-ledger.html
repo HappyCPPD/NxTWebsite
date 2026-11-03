@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Low Tide Ledger · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Riddles about reclaimed land, an Atlantic view and a fixed UTC+1 clock lead to Eko Atlantic in Lagos. The agency comes from the original business name on an old 360 degree tour of the Eko Pearl Towers pin." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>low-tide-ledger</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Low Tide Ledger <span class="page-sub">Pinning an apartment from a recovered call</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-osint">osint</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{Eko-Atlantic_Lagos_Nigeria_Nairahomes-Realty_3C}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<p>We were handed a recovered two-speaker phone call and a single photo of a living room. Imani taunts Dayo with riddles about where she lives, and the flag has to be built from what the clues give up:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">hiCTF{Development_City_Country_Agency_Room}</code></pre>
+      
+    </figure><p>The transcript, lightly trimmed:</p>
+<blockquote>
+<p><strong>Imani:</strong> You always ask how I sleep this close to the water. I don&#39;t. I count. The summer Athens lit its flame, the ground under this carpet was still open sea, and it stayed that way for years. I checked from orbit. Orbit doesn&#39;t flatter.</p>
+<p><strong>Dayo:</strong> So it&#39;s Dubai. It&#39;s always Dubai.</p>
+<p><strong>Imani:</strong> Dubai wouldn&#39;t let me face the Atlantic. My clock matches Paris in winter and ignores the summer. That is true of more places than you&#39;d like. Rule out the cheap ones before you brag.</p>
+<p><strong>Dayo:</strong> Who made the ground?</p>
+<p><strong>Imani:</strong> Dredgers showed up half a year before Beijing&#39;s cauldron. The planners promised seven years of dredging. The wall guarding me is stacked from five-ton concrete blocks, cast beside the water. The old public beach is somewhere under my feet.</p>
+<p><strong>Dayo:</strong> And who gave you the keys?</p>
+<p><strong>Imani:</strong> Not a hotel. A small office that sells homes, tucked inside a cluster of towers named for five gems that never touched an oyster. Find the office. Then find my room the way you&#39;d find a bad memory: by the furniture. The plate by the door is the only honest thing about it.</p>
+</blockquote>
+<p><img src="../images/writeups/low-tide-ledger-attachment.jpg" alt="The attached photo: a furnished living room with a wooden dining table, tan leather chairs, a grey sofa with magenta cushions and floor-to-ceiling windows" width="1246" height="832" loading="lazy"></p>
+<h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
+<h3 id="step-1-the-reclaimed-city"><a class="wu-anchor" href="#step-1-the-reclaimed-city" aria-hidden="true">#</a>Step 1 - The reclaimed city</h3>
+<p>Every clue is a date or a construction detail, and they all point at one land-reclamation project:</p>
+<ul>
+<li><strong>Still open sea &quot;the summer Athens lit its flame&quot;</strong>: the Athens Olympics were 2004, so the ground did not exist yet.</li>
+<li><strong>Dredgers &quot;half a year before Beijing&#39;s cauldron&quot;, seven-year plan</strong>: Beijing opened in August 2008, so dredging started around February 2008 on a seven-year programme.</li>
+<li><strong>A wall of five-ton concrete blocks cast on site</strong>: the sea revetment&#39;s accropode armour units, each made on site at 5 tons.</li>
+<li><strong>&quot;The old public beach is under my feet&quot;</strong>: the project was built over Bar Beach.</li>
+</ul>
+<p>That is <strong>Eko Atlantic</strong>, the reclaimed city in front of Bar Beach in Lagos, Nigeria. The time-zone jab confirms it: a clock that &quot;matches Paris in winter and ignores the summer&quot; is UTC+1 all year with no daylight saving, which is Nigeria, and is exactly what rules out Dayo&#39;s Dubai (UTC+4, and not on the Atlantic).</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">Eko Atlantic, Lagos, Nigeria</code></pre>
+      
+    </figure><h3 id="step-2-the-towers"><a class="wu-anchor" href="#step-2-the-towers" aria-hidden="true">#</a>Step 2 - The towers</h3>
+<p>&quot;A cluster of towers named for five gems that never touched an oyster&quot; is the <strong>Eko Pearl Towers</strong>, five residential towers named Black, White, Champagne, Indigo and Aqua Pearl. The dredging dates and the five pearls line up, so the apartment is somewhere in that complex.</p>
+<h3 id="step-3-the-agency"><a class="wu-anchor" href="#step-3-the-agency" aria-hidden="true">#</a>Step 3 - The agency</h3>
+<p>Imani says the keys came from &quot;not a hotel, a small office that sells homes&quot; inside the towers. On Google Maps the pin at the Eko Pearl Towers address (CC56+P3P, Pearl Boulevard) now reads <em>Buchi Obasi Hq</em> and is miscategorised as a jewelry store, which is a rename. The 360 degree tour attached to that pin (uploaded Jan 2022) still carries the <strong>original</strong> business name on the overlay: <strong>Nairahomes Realty</strong>.</p>
+<p>The challenge wants the original name, which is the one preserved in the tour, not the renamed pin.</p>
+<h3 id="step-4-the-room-by-the-furniture"><a class="wu-anchor" href="#step-4-the-room-by-the-furniture" aria-hidden="true">#</a>Step 4 - The room, by the furniture</h3>
+<p>&quot;Find my room the way you&#39;d find a bad memory: by the furniture.&quot; The tour and the agency&#39;s listing photos include the exact living room from the attachment: same long wooden dining table, tan leather chairs, grey sofa with a red cushion, patterned rug and full-height glazing. Following the tour to the unit&#39;s front door, the plate reads floor 3, door C.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">Agency: Nairahomes Realty   Room: 3C</code></pre>
+      
+    </figure><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">hiCTF{Eko-Atlantic_Lagos_Nigeria_Nairahomes-Realty_3C}</code></pre>
+      
+    </figure><h2 id="takeaways"><a class="wu-anchor" href="#takeaways" aria-hidden="true">#</a>Takeaways</h2>
+<ul>
+<li>Treat each riddle line as one constraint. Olympic years, a rival megaproject&#39;s opening, armour-block weights and a no-DST time zone each eliminate candidates until only one city is left.</li>
+<li>A renamed Google Maps pin still leaks its past. Old 360 degree tours, uploaded photos and reviews often keep the original business name after the listing is re-branded.</li>
+<li>When a photo is the key, match the furniture, not the vibe. The same unit&#39;s listing gallery and virtual tour carried the shot straight to the door plate.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#solution">Solution</a><ol class="wu-toc-sub"><li><a href="#step-1-the-reclaimed-city">Step 1 - The reclaimed city</a></li><li><a href="#step-2-the-towers">Step 2 - The towers</a></li><li><a href="#step-3-the-agency">Step 3 - The agency</a></li><li><a href="#step-4-the-room-by-the-furniture">Step 4 - The room, by the furniture</a></li></ol></li><li><a href="#flag">Flag</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="the-miner-that-mined-the-victim.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">The Miner That Mined The Victim</span></a>
+    <a class="wu-pager-link wu-pager-next" href="shadow-identity.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Shadow Identity</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

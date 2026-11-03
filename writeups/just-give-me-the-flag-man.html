@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Just Give Me The Flag Man · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The note is 52 two-character tokens whose letters u to z stand in for hex digits in mirrored order. Reversing the string, Atbashing the letters and hex-decoding starts a chain of base decodes that ends at the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>just-give-me-the-flag-man</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Just Give Me The Flag Man <span class="page-sub">Encoding chain with an Atbash hex alphabet</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{sh1ft1ng_7hr0ugh_7h3_b4s3s}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Event:</strong> HICybercon · <strong>Category:</strong> crypto / misc (encoding chain)
+<strong>Flag:</strong> <code>hiCTF{sh1ft1ng_7hr0ugh_7h3_b4s3s}</code></p>
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<blockquote>
+<p>Saad: You got the note? / Harun: The one with the strange code? I almost burned it. /
+Saad: Don&#39;t. Someone has been watching the building since noon. / Harun: What does it say?</p>
+</blockquote>
+<p><code>chall.zip</code> (SHA-256 <code>47250d4a…952c0</code>) contains a single file, <code>chall.txt</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">53 74 u3 17 35 x3 x2 76 24 33 93 u3 16 v4 36 v4 93 32 64 22 z3 x2 42 w4 54 05 v2 v5 63
+v6 26 23 26 33 86 u3 33 x3 74 x2 06 54 62 x5 22 74 44 04 45 v5 93 x2</code></pre>
+      
+    </figure><p>The zip holds nothing else (no extra field, comment, or trailing data).</p>
+<h2 id="spotting-the-encoding"><a class="wu-anchor" href="#spotting-the-encoding" aria-hidden="true">#</a>Spotting the encoding</h2>
+<p>There are 52 tokens of two characters each.</p>
+<table>
+<thead>
+<tr>
+<th>position</th>
+<th>values seen</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1st char</td>
+<td><code>0-9</code>, <code>u v w x z</code></td>
+</tr>
+<tr>
+<td>2nd char</td>
+<td><code>2 3 4 5 6 7</code> only</td>
+</tr>
+</tbody></table>
+<p>Two things stand out:</p>
+<ul>
+<li><strong>The second character only takes 6 values, 2 - 7.</strong> That is exactly the high nibble of printable
+ASCII (0x20 - 0x7F). So each token is a byte written <strong>low nibble first</strong>: the token <code>53</code> is
+the byte <code>0x35</code>.</li>
+<li><strong>The letters <code>u</code> - <code>z</code> are the last six letters of the alphabet</strong>, standing in for the hex
+digits <code>a</code> - <code>f</code>. The obvious guess <code>u=a … z=f</code> gives printable text, but nothing decodes
+cleanly. The order that works is <strong>Atbash</strong> (mirrored): <code>u→f, v→e, w→d, x→c, y→b, z→a</code>.
+I found this by brute-forcing every letter→nibble mapping, Ascii85-decoding each, and ranking
+the results by how printable they were. The Atbash mapping was the only one that came out
+fully printable.</li>
+</ul>
+<p>Reading each token low-nibble-first is the same as reversing the whole token string, so
+layer 1 is simply: <strong>join the tokens → reverse → Atbash the letters → hex-decode.</strong></p>
+<h2 id="layers"><a class="wu-anchor" href="#layers" aria-hidden="true">#</a>Layers</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Operation</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>join tokens, reverse, Atbash <code>u-z</code>→<code>f-a</code>, hex-decode</td>
+<td><code>,9^T@DG&quot;\&amp;E`,G&lt;3?h3b2bn6^.PEM$,:&quot;F#9NcNa?93Bg,&lt;Sq?G5</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Ascii85 decode</td>
+<td><code>#!dvnJk6rRHc9&quot;NB7NnI*/1##$!DLYv$^:z3#&lt;Tjw</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>ROT47, then base91 decode</td>
+<td><code>feKTH{uf1ht1zg_7fv0sgf_7f3_l4u3u}</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Beaufort, key <code>M</code> (letters only)</td>
+<td><code>hiCTF{sh1ft1ng_7hr0ugh_7h3_b4s3s}</code></td>
+</tr>
+</tbody></table>
+<p><strong>Layer 1 → 2:</strong> every character is in the Ascii85 range <code>!</code>–<code>u</code>, and the distribution of high
+nibbles (lots of 0x2_/0x3_, almost no 0x7_) matches Ascii85 output.</p>
+<p><strong>Layer 2 → 3:</strong> neither base64, base85, nor base91 decoded the string directly. I ran an automated
+search over {identity, reverse, ROT13, ROT47} × {a85, b85, b91, b64, b32, b58, b62, hex}, which
+found that <strong>ROT47 + base91</strong> gives text in the shape of a flag.</p>
+<p><strong>Layer 3 → 4:</strong> <code>feKTH</code> has to become <code>hiCTF</code>. That isn&#39;t a Caesar shift (the offsets are +2, +4,
+−8, 0, −2), but the <strong>sum</strong> of each ciphertext/plaintext letter pair is always 12 mod 26
+(<code>f+h = e+i = K+C = T+T = H+F = 12</code>). That is a Beaufort cipher with key <code>M</code> (index 12):
+<code>P = (12 − C) mod 26</code>. Digits, <code>_</code>, and braces pass through unchanged.</p>
+<p>The decoded flag — &quot;shifting through the bases&quot; — describes the challenge.</p>
+<h2 id="solve-script"><a class="wu-anchor" href="#solve-script" aria-hidden="true">#</a>Solve script</h2>
+<p><code>solve.py</code> (in this folder) runs every layer:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">$ python3 solve.py extracted/chall.txt
+[1] reversed atbash-hex : ,9^T@DG&quot;\&amp;E`,G&lt;3?h3b2bn6^.PEM$,:&quot;F#9NcNa?93Bg,&lt;Sq?G5
+[2] ascii85             : #!dvnJk6rRHc9&quot;NB7NnI*/1##$!DLYv$^:z3#&lt;Tjw
+[3] rot47 + base91      : feKTH{uf1ht1zg_7fv0sgf_7f3_l4u3u}
+[4] beaufort key M      : hiCTF{sh1ft1ng_7hr0ugh_7h3_b4s3s}</code></pre>
+      
+    </figure><h2 id="dead-ends-for-the-record"><a class="wu-anchor" href="#dead-ends-for-the-record" aria-hidden="true">#</a>Dead ends (for the record)</h2>
+<ul>
+<li>Reading each token as a hex byte (<code>53 74</code> = <code>&quot;St&quot;</code>) is a coincidence. With the high nibble
+restricted to 2 - 7 in the <em>second</em> position, that reading can&#39;t be text.</li>
+<li>Coordinate/Polybius-grid readings (6 columns from the second character) went nowhere. The
+&quot;grid&quot; was really the hex nibble range.</li>
+<li>A known-plaintext XOR or subtraction against <code>hiCTF{</code> at every offset gave no repeating key,
+because the flag is several encoding layers deep.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#spotting-the-encoding">Spotting the encoding</a></li><li><a href="#layers">Layers</a></li><li><a href="#solve-script">Solve script</a></li><li><a href="#dead-ends-for-the-record">Dead ends (for the record)</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="log-jam.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Log Jam</span></a>
+    <a class="wu-pager-link wu-pager-next" href="cipher-cascade.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Cipher Cascade</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

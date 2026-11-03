@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RESURRECTION (Operation Eclipse Void) · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A scorched 1 GiB NTFS image hides five payload segments behind five different recovery techniques. Each segment carries an ordinal label that is only an ordering tag, so stripping the labels and joining the payloads gives the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>resurrection</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>RESURRECTION (Operation Eclipse Void) <span class="page-sub">Five NTFS recovery phases</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{p3_0v3rl4y_71m3d473574mp_k3y_n7f5_runl157_cl5_g30m37ry_7r4ns4c710n_n4n0_f1l371m3_3v7x_b1n4ry_xml_70k3n5_b17m4p_orph4n_v01d_r35urr3c710n}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> forensics · 1 GiB NTFS image (scorched geometry)
+<strong>Flag:</strong></p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">hiCTF{p3_0v3rl4y_71m3d473574mp_k3y_n7f5_runl157_cl5_g30m37ry_7r4ns4c710n_n4n0_f1l371m3_3v7x_b1n4ry_xml_70k3n5_b17m4p_orph4n_v01d_r35urr3c710n}</code></pre>
+      
+    </figure><p>Length 142, one <code>{</code> / one <code>}</code> - a clean, self-consistent flag.</p>
+<hr>
+<h2 id="the-one-insight-that-solves-it"><a class="wu-anchor" href="#the-one-insight-that-solves-it" aria-hidden="true">#</a>The one insight that solves it</h2>
+<p>Every recovered segment has the shape <strong><code>&lt;ordinal-tag&gt;--&lt;leet-technique&gt;_</code></strong>, e.g.
+<code>53c0nd--n7f5_runl157_cl5_g30m37ry_</code>. The challenge note says <em>&quot;Each recovered phase
+reveals an ordinal identifier tag. Concatenate all five payload segments in order.&quot;</em></p>
+<p>The <strong>ordinal tag is an ordering label, NOT flag bytes.</strong> It is stripped before
+concatenation - exactly the convention the author uses in the sibling challenge
+<strong>TESSERA</strong> (its labels <code>1ist-----</code>, <code>--s32nd--</code>, <code>iiiiiiiiiii-3hird---</code> are
+discarded, and its part-1 literal begins with the flag&#39;s own <code>hiCTF{</code>).</p>
+<p>That explains the parts that look like anomalies:</p>
+<ul>
+<li>part-1&#39;s decoded overlay contains a literal <code>hiCTF{</code> → it is simply the <strong>flag
+opener</strong>, sitting right after the <code>f!r5t--</code> label (author&#39;s house style).</li>
+<li>part-5&#39;s payload ends in <code>}</code> → it is the <strong>flag closer</strong>.</li>
+<li>part-3 decodes as <code>th1jd…</code> (<code>j</code> where the ordinal wants <code>r</code>) - <strong>irrelevant</strong>, the
+whole <code>th1jd--</code> token is the label and is thrown away.</li>
+</ul>
+<p>So: <code>flag = hiCTF{ p1 p2 p3 p4 p5 }</code>, where <code>pi</code> = segment <code>i</code> with its <code>&lt;ord&gt;--</code>
+label removed.</p>
+<p>The three challenge &quot;silent spaces&quot; map onto the five channels: <strong>Shattered-Geometry</strong>
+= PE-overlay (1) + NTFS runlist (2); <strong>Chrono-Echoes</strong> = TxR filetime (3) + evtx (4);
+<strong>Unmapped-Voids</strong> = $Bitmap orphans (5).</p>
+<h2 id="the-five-channels-one-per-phase"><a class="wu-anchor" href="#the-five-channels-one-per-phase" aria-hidden="true">#</a>The five channels (one per phase)</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>ordinal label (strip)</th>
+<th>channel (inode)</th>
+<th>encoding</th>
+<th>payload kept</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><code>f!r5t</code></td>
+<td><code>Windows/System32/kbdusx.dll</code> (179) - PE32+ stub, 42-byte overlay</td>
+<td><code>overlay[i] XOR TimeDateStamp_LE[i%4]</code> (<code>0x65ec8580</code> → <code>80 85 ec 65</code>)</td>
+<td><code>hiCTF{p3_0v3rl4y_71m3d473574mp_k3y_</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>53c0nd</code></td>
+<td><code>Confidential_Q3</code> dir (111) - bogus 11 MB <code>$DATA</code></td>
+<td>each run-list <strong>run-length byte</strong> = one ASCII char</td>
+<td><code>n7f5_runl157_cl5_g30m37ry_</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>th1jd</code></td>
+<td><code>Windows/System32/config/TxR/tx_journal.log</code> (181)</td>
+<td>34 <code>tx_NN.db</code> entries; planted FILETIME at name+52; <code>char[0]=(ft[0]%1e7)-0x2700</code>, <code>char[i]=(ft[i]-ft[i-1])-0x2700</code></td>
+<td><code>7r4ns4c710n_n4n0_f1l371m3_</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>f01_1rth</code></td>
+<td><code>Windows/System32/winevt/Logs/Security_Audit.evtx</code> (193)</td>
+<td>ASCII in byte[1] of each <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> dword (<code>00 XX 00 00</code>), stride 4</td>
+<td><code>3v7x_b1n4ry_xml_70k3n5_</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>51f7h</code></td>
+<td><code>$Bitmap</code> (6)</td>
+<td>length of each contiguous <strong>free</strong> cluster run, <strong>+1</strong>, as ASCII</td>
+<td><code>b17m4p_orph4n_v01d_r35urr3c710n}</code></td>
+</tr>
+</tbody></table>
+<h2 id="image-quick-facts"><a class="wu-anchor" href="#image-quick-facts" aria-hidden="true">#</a>Image quick facts</h2>
+<p>MBR + primary GPT + primary NTFS boot sector zeroed (&quot;scorched&quot;); the <strong>backup</strong> VBR
+(<code>0x3FDFFE00</code>) and backup GPT (<code>0x3FFFFE00</code>) survive. NTFS starts at <code>0x1000000</code>.
+Work on <code>work/fixed.raw</code> (primary VBR restored from the backup) with <code>fls/icat -o 32768</code>.
+Only three non-zero regions: metadata/file area ~16 - 26 MB, <code>$LogFile</code> @<code>0x15A88000</code>,
+<code>$MFT</code> @<code>0x15F55000</code>, plus backup VBR/GPT. Many &quot;files&quot; (hives, kernel32/ntdll/svchost.dll,
+prefetch, audit_*.xlsx) are high-entropy <strong>decoys</strong> with fake magic.</p>
+<h2 id="repro"><a class="wu-anchor" href="#repro" aria-hidden="true">#</a>Repro</h2>
+<figure class="wu-code" data-lines="22">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> work</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># part1 — ino 179 (kbdusx.dll) PE overlay XOR TimeDateStamp</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">python3 - &lt;&lt;<span class="hljs-string">&#x27;E&#x27;</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">import struct,subprocess</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">d=subprocess.run([<span class="hljs-string">&#x27;icat&#x27;</span>,<span class="hljs-string">&#x27;-o&#x27;</span>,<span class="hljs-string">&#x27;32768&#x27;</span>,<span class="hljs-string">&#x27;fixed.raw&#x27;</span>,<span class="hljs-string">&#x27;179&#x27;</span>],capture_output=True).stdout</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">e=struct.unpack(<span class="hljs-string">&#x27;&lt;I&#x27;</span>,d[0x3c:0x40])[0]; key=struct.pack(<span class="hljs-string">&#x27;&lt;I&#x27;</span>,struct.unpack(<span class="hljs-string">&#x27;&lt;I&#x27;</span>,d[e+12:e+16])[0])</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">ov=d[0x400:0x42a]</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"><span class="hljs-built_in">print</span>(bytes(ov[i]^key[i%4] <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> range(42)).decode())</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">E</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">python3 runlen_all.py | grep 111      <span class="hljs-comment"># part2  -&gt; 53c0nd--... (run lengths)</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc"><span class="hljs-comment"># part3 — ino 181 (TxR journal) FILETIME deltas -0x2700</span></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">python3 - &lt;&lt;<span class="hljs-string">&#x27;E&#x27;</span></span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">import subprocess,re,struct</span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">d=subprocess.run([<span class="hljs-string">&#x27;icat&#x27;</span>,<span class="hljs-string">&#x27;-o&#x27;</span>,<span class="hljs-string">&#x27;32768&#x27;</span>,<span class="hljs-string">&#x27;fixed.raw&#x27;</span>,<span class="hljs-string">&#x27;181&#x27;</span>],capture_output=True).stdout</span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc">pos=[m.start() <span class="hljs-keyword">for</span> m <span class="hljs-keyword">in</span> re.finditer(b<span class="hljs-string">&#x27;t\x00x\x00_\x00&#x27;</span>,d)]</span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc">fts=[struct.unpack(<span class="hljs-string">&#x27;&lt;Q&#x27;</span>,d[p+52:p+60])[0] <span class="hljs-keyword">for</span> p <span class="hljs-keyword">in</span> pos][:33]</span></span>
+<span class="wu-line" data-line="17"><span class="wu-ln">17</span><span class="wu-lc">o=[(fts[0]%10_000_000-0x2700)&amp;0xff]+[((fts[i]-fts[i-<span class="hljs-number">1</span>])-<span class="hljs-number">0</span>x2700)&amp;<span class="hljs-number">0</span>xff for i in range(<span class="hljs-number">1</span>,len(fts))]</span></span>
+<span class="wu-line" data-line="18"><span class="wu-ln">18</span><span class="wu-lc"><span class="hljs-built_in">print</span>(bytes(o).decode(<span class="hljs-string">&#x27;latin1&#x27;</span>))</span></span>
+<span class="wu-line" data-line="19"><span class="wu-ln">19</span><span class="wu-lc">E</span></span>
+<span class="wu-line" data-line="20"><span class="wu-ln">20</span><span class="wu-lc"><span class="hljs-comment"># part4 — ino 193 (Security_Audit.evtx): byte[1] of each LE dword, stride 4</span></span></span>
+<span class="wu-line" data-line="21"><span class="wu-ln">21</span><span class="wu-lc">icat -o 32768 fixed.raw 193 | python3 -c <span class="hljs-string">&quot;import sys;d=sys.stdin.buffer.read();s=bytes(d[i] for i in range(1,len(d),4));i=s.find(b&#x27;f01_1rth&#x27;);print(s[i:i+34].split(b&#x27;\0&#x27;)[0].decode())&quot;</span></span></span>
+<span class="wu-line" data-line="22"><span class="wu-ln">22</span><span class="wu-lc">python3 bitrun.py                     <span class="hljs-comment"># part5 -&gt; 51f7h--... (free runs +1)</span></span></span></code></pre>
+      
+    </figure><h2 id="assembly"><a class="wu-anchor" href="#assembly" aria-hidden="true">#</a>Assembly</h2>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">ordinals : f!r5t  53c0nd  th1jd  f01_1rth  51f7h      (ordering tags -&gt; discard)
+payloads : hiCTF{p3_0v3rl4y_71m3d473574mp_k3y_   (channel 1, opener)
+           n7f5_runl157_cl5_g30m37ry_
+           7r4ns4c710n_n4n0_f1l371m3_
+           3v7x_b1n4ry_xml_70k3n5_
+           b17m4p_orph4n_v01d_r35urr3c710n}       (channel 5, closer)
+flag     : hiCTF{ &lt;payload1..5 concatenated&gt; }</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#the-one-insight-that-solves-it">The one insight that solves it</a></li><li><a href="#the-five-channels-one-per-phase">The five channels (one per phase)</a></li><li><a href="#image-quick-facts">Image quick facts</a></li><li><a href="#repro">Repro</a></li><li><a href="#assembly">Assembly</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="dead-air.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Dead Air</span></a>
+    <a class="wu-pager-link wu-pager-next" href="tessera.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">TESSERA</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

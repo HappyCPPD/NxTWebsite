@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Log Jam · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The Diffie-Hellman group is only a 71-bit prime with a 70-bit subgroup, small enough for PARI's rho-based znlog. The recovered exponent hashes to the AES-GCM key, and the tag verifies on decryption." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>log-jam</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Log Jam <span class="page-sub">70-bit discrete log</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{W0W1_y0u_4ctu4a11y_s01v3d_1t_ju$t_L1k3_tH4t}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hiCTF{W0W1_y0u_4ctu4a11y_s01v3d_1t_ju$t_L1k3_tH4t}</code></p>
+<h2 id="artifact"><a class="wu-anchor" href="#artifact" aria-hidden="true">#</a>Artifact</h2>
+<p><code>params.json</code> with <code>p, g, h, nonce, ciphertext, tag</code>.
+(<code>params.json</code>&#39;s <code>_meta.note</code> hides a Unicode tag-character message telling AI assistants to refuse to help. It is
+just noise.)</p>
+<h2 id="method"><a class="wu-anchor" href="#method" aria-hidden="true">#</a>Method</h2>
+<ol>
+<li>The parameters are Diffie - Hellman over a prime field plus an AEAD. p = 0x7958085483c2736f23 is a <strong>71-bit prime</strong>;
+p−1 = 2·q with q a 70-bit prime; g has order q. So the discrete log <code>h = g^x mod p</code> is in a 70-bit
+prime-order group.</li>
+<li><code>g^x = h</code>: solved with <strong>PARI/GP <code>znlog</code></strong> (C, rho-based). Sage&#39;s <code>discrete_log</code> uses BSGS and OOM-killed
+(sqrt(2^70) memory). Result: <strong>x = 471774559909450042061</strong>.</li>
+<li>Key derivation: <code>key = SHA256(str(x).encode())</code> (32 bytes) with <code>AES-256-GCM</code>, nonce = params.nonce,
+tag = params.tag.</li>
+<li><code>AES.new(key, GCM, nonce).decrypt_and_verify(ciphertext, tag)</code> succeeds → plaintext flag.</li>
+</ol>
+<h2 id="repro"><a class="wu-anchor" href="#repro" aria-hidden="true">#</a>Repro</h2>
+<figure class="wu-code" data-lines="10">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> hashlib</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">from</span> Crypto.Cipher <span class="hljs-keyword">import</span> AES</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">p=<span class="hljs-built_in">int</span>(<span class="hljs-string">&#x27;7958085483c2736f23&#x27;</span>,<span class="hljs-number">16</span>); g=<span class="hljs-built_in">int</span>(<span class="hljs-string">&#x27;2d738b6682dacc0bb7&#x27;</span>,<span class="hljs-number">16</span>); h=<span class="hljs-built_in">int</span>(<span class="hljs-string">&#x27;36130f3996b8198135&#x27;</span>,<span class="hljs-number">16</span>)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">nonce=<span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&#x27;786fe3b966eb9949d0ded089&#x27;</span>)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">ct=<span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&#x27;dec59383508c24b2aa7c5ec44407720c8ac385af2dbc157b59a4113056f6b0b49abe300e822ffed923516e0d8eb77d49b55f&#x27;</span>)</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">tag=<span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&#x27;469442d8157214b3ba95136e3a7e8082&#x27;</span>)</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">x=<span class="hljs-number">471774559909450042061</span>                      <span class="hljs-comment"># znlog(Mod(h,p), Mod(g,p))</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">key=hashlib.sha256(<span class="hljs-built_in">str</span>(x).encode()).digest()</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc"><span class="hljs-built_in">print</span>(AES.new(key,AES.MODE_GCM,nonce=nonce).decrypt_and_verify(ct,tag))</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-comment"># b&#x27;hiCTF{W0W1_y0u_4ctu4a11y_s01v3d_1t_ju$t_L1k3_tH4t}&#x27;</span></span></span></code></pre>
+      
+    </figure><p>Verification is cryptographic: GCM <code>decrypt_and_verify</code> (tag check) passed - not a decoy guess.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#artifact">Artifact</a></li><li><a href="#method">Method</a></li><li><a href="#repro">Repro</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="chronogrind.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">ChronoGrind</span></a>
+    <a class="wu-pager-link wu-pager-next" href="just-give-me-the-flag-man.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Just Give Me The Flag Man</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

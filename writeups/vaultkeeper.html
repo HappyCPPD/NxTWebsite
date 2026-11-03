@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VaultKeeper · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The APK is packed with fake flags, a honeypot getFlag export and UI gates that don't matter. The real flag is computed inside the native nv_final routine, and reproducing its seal and unseal chain offline gives the 51-byte string." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>vaultkeeper</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>VaultKeeper <span class="page-sub">Android native seal chain past the decoys</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{!!I_10v3_4ndr0!d_m4n_m4k!ng_th3m_f331_g0Od!!}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hiCTF{!!I_10v3_4ndr0!d_m4n_m4k!ng_th3m_f331_g0Od!!}</code></p>
+<h2 id="artifact"><a class="wu-anchor" href="#artifact" aria-hidden="true">#</a>Artifact</h2>
+<p><code>extracted/VaultKeeper.apk</code> (SHA-256 <code>7c0ccbd2…d7aa10</code>), package <code>com.hictf.vaultkeeper</code>,
+versionName <code>2026.1</code>. Contains <code>classes.dex</code>, <code>resources.arsc</code>, <code>assets/vault.bin</code>
+(8192 B, high-entropy random - pure seed material, not a payload), and two JNI libs:
+<code>lib/x86_64/libvaultnative.so</code> and <code>lib/arm64-v8a/libvaultnative.so</code> (stripped, NDK r27).</p>
+<h2 id="triage-the-decoys"><a class="wu-anchor" href="#triage-the-decoys" aria-hidden="true">#</a>Triage - the decoys</h2>
+<p>The challenge is <em>dense</em> with planted decoys. Confirmed dead ends:</p>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>Value</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>resources.arsc</code></td>
+<td><code>hiCTF{y0u_f0und_th3_0bv10us_0n3}</code>, <code>hiCTF{th1s_0n3_1s_w4y_t00_l0ng…}</code>, <code>hiCTF{n0t r3al w1th sp4ces}</code>, <code>hiCTF{m1ss1ng_br4ce</code>, <code>h1CTF{n34rly_th3r3}</code></td>
+<td>decoys (strings, obviously fake)</td>
+</tr>
+<tr>
+<td><code>Diagnostics.emitTrace()</code> (dex)</td>
+<td><code>hiCTF{l0gc4t_1s_n0t_4_fl4g_s0urc3}</code></td>
+<td>decoy (self-labelled)</td>
+</tr>
+<tr>
+<td><code>getFlag()</code> in libvaultnative (exported, <strong>never called</strong>)</td>
+<td><code>hiCTF{str1ngs_4nd_x0r_w0nt_s4v3_y0u}</code></td>
+<td>decoy (honeypot; &quot;strings and xor won&#39;t save you&quot;)</td>
+</tr>
+<tr>
+<td><code>FlagRepository</code> A..F XOR + <code>spread()</code> (no-op)</td>
+<td>&quot;master key&quot;</td>
+<td>decoy</td>
+</tr>
+<tr>
+<td><code>GestureArmer</code> (3 taps + long-press), <code>EnvAudit</code> (ptrace/frida/root/sig checks)</td>
+<td>gates</td>
+<td>decoy flavour - the flag is <em>not</em> gated behind UI/env</td>
+</tr>
+</tbody></table>
+<p>The real flag is computed inside <code>nv_final()</code> - a 51-byte string that is then <strong>memzeroed</strong>,
+so it never leaks through <code>strings</code>.</p>
+<h2 id="native-flow-from-nativebridge"><a class="wu-anchor" href="#native-flow-from-nativebridge" aria-hidden="true">#</a>Native flow (from <code>NativeBridge</code>)</h2>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">nvSeed(vault, token)          -&gt; cells[128]      (hash-expanded from vault.bin + token)
+CellMixer.k1(cells)           -&gt; mixed cells
+nvUnseal(cells, token)        -&gt; prog[2048]      (byte stream derived from cells)
+CellMixer.k2(prog, cells)     -&gt; prog'
+nvExec(prog', cells, token)   -&gt; VM output (64 B into globals 0x8cb0..0x8cef)
+nvFinal(token)                -&gt; builds 51/29-byte flag, validates, then memzero</code></pre>
+      
+    </figure><p><code>nv_final</code> builds a 51-byte buffer as
+<code>const1(0x1770) ^ const2(0x17b0) ^ vm_output(0x8cb0) ^ hash_ctx_state</code>, then checks
+<code>H(&quot;VK-TAG-2026&quot; || buf)</code> (custom hash @ <code>0x6050/0x6080/0x6320</code>) against the 16 bytes at <code>0x17f0</code>.</p>
+<ul>
+<li><strong>Match</strong> → the 51-byte string is the real flag.</li>
+<li><strong>Mismatch</strong> (anti-debug routines @ <code>0x4f80</code> dispatched at the start of every <code>nv_*</code>
+perturbed state - debugger/<code>TracerPid</code> detected) → a taunt flag
+<code>hiCTF{4nt1_d3bug_f4ncy_p4nts}</code>.</li>
+</ul>
+<h2 id="reproducing-it-on-the-host-no-emulator"><a class="wu-anchor" href="#reproducing-it-on-the-host-no-emulator" aria-hidden="true">#</a>Reproducing it on the host (no emulator)</h2>
+<p>The lib ships an <strong>x86_64 slice</strong>, so it runs on glibc. Steps (all in <code>/tmp/vk</code>):</p>
+<ol>
+<li><strong>Neutralise bionic versioning</strong> - rewrite the <code>PT_DYNAMIC</code> tags <code>DT_VERNEED</code>
+(<code>0x6ffffffe</code>), <code>DT_VERNEEDNUM</code> (<code>0x6fffffff</code>) and <code>DT_VERSYM</code> (<code>0x6ffffff0</code>) to
+<code>DT_DEBUG</code> (21). Supply a stub <code>liblog.so</code>, symlinks <code>libc.so</code>/<code>libm.so</code>/<code>libdl.so</code>,
+and an <code>LD_PRELOAD</code> shim for bionic&#39;s <code>__strrchr_chk</code> (glibc lacks it).
+<code>__open_2</code>/<code>__cxa_*</code>/<code>__register_atfork</code> exist in glibc already.</li>
+<li><strong>Disable the anti-debug dispatcher</strong> <code>0x4f80</code> (<code>31 c0 c3</code> = <code>xor eax,eax; ret</code>) so a
+clean-environment run is simulated (and so gdb can be used).</li>
+<li><strong>Drive the pipeline</strong> with a small harness calling the internal functions
+(base = <code>getFlag - 0x5e00</code>):
+<code>nv_seed(vault, 8192, token, cells)</code>, re-implement <code>CellMixer.k1</code>/<code>k2</code> in C,
+<code>nv_unseal(cells, token, prog, 2048)</code>, <code>nv_exec(prog, 2048, cells, token)</code>, <code>nv_final(token)</code>.</li>
+<li><strong>Capture the flag before it is wiped</strong> - patch <code>0x66c0</code> (<code>memzero</code>) to jump to a
+<code>vk_mz(rdi,rsi)</code> handler (harness built <code>-no-pie</code> so its address is fixed) and log the
+64-byte buffers; the <code>len==64</code> one holds the 51-byte flag.
+(gdb breakpoint at <code>base+0x66c0</code> gives the same result.)</li>
+</ol>
+<p>Result (identical across different random <code>armToken</code>s → the flag is token-independent):</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">[MZ64] hiCTF{!!I_10v3_4ndr0!d_m4n_m4k!ng_th3m_f331_g0Od!!}</code></pre>
+      
+    </figure><ol start="5">
+<li><strong>Positive control</strong> - call the lib&#39;s own hash (<code>0x6050</code>/<code>0x6080</code>/<code>0x6320</code>) as
+<code>H(&quot;VK-TAG-2026&quot; || flag)</code> and compare to the embedded digest at <code>0x17f0</code>:</li>
+</ol>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">got : 62672db15a0b6a4793b351292f29a0b3
+want: 62672db15a0b6a4793b351292f29a0b3   MATCH=1</code></pre>
+      
+    </figure><p>The lib&#39;s own verification accepts exactly this string - cryptographically confirming it is
+the intended flag (the anti-debug taunt&#39;s hash does not match).</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">hiCTF{!!I_10v3_4ndr0!d_m4n_m4k!ng_th3m_f331_g0Od!!}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#artifact">Artifact</a></li><li><a href="#triage-the-decoys">Triage - the decoys</a></li><li><a href="#native-flow-from-nativebridge">Native flow (from NativeBridge)</a></li><li><a href="#reproducing-it-on-the-host-no-emulator">Reproducing it on the host (no emulator)</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="cipher.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Cipher</span></a>
+    <a class="wu-pager-link wu-pager-next" href="wardens-maze.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Warden's Maze</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

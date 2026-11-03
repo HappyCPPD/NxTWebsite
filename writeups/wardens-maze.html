@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Warden's Maze · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The vault in the middle of the maze is meant to be reached through a render-code indexing bug. Strings show the prize token is derived from a seed rather than random, which explains how the token is built, while the live instance mints the real one on a genuine win." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>wardens-maze</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Warden's Maze <span class="page-sub">Seed-derived prize token in a Rust maze</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{maze-warden-vault-seed-2026_65d2638530}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> rev / pwn-lite · <strong>Artifacts:</strong> <code>extracted/maze</code> (x86-64 Linux <strong>static-PIE</strong>, stripped, Rust), <code>extracted/README.txt</code></p>
+<blockquote>
+<p>Note: the accepted token is <strong>per-instance</strong> (minted only on a genuine win, see
+&quot;Live service&quot; below). The default-seed value <code>hiCTF{warden_vault_cleared_845f9b65}</code>
+recovered from the packaged binary is local-only and is <strong>not</strong> the submittable flag.</p>
+</blockquote>
+<h2 id="the-intended-path-engine-bug"><a class="wu-anchor" href="#the-intended-path-engine-bug" aria-hidden="true">#</a>The intended path (engine bug)</h2>
+<p>Per the challenge text: the vault in the maze centre is sealed on all sides; the way in is a
+<em>genuine mistake in the engine</em>, specifically a hand-rolled index in the <strong>visibility/render</strong>
+code that can be made to land outside the intended cell (a wall becomes floor). The game server
+is a line-oriented TCP service (<code>GAME_PORT</code>, default 7700, <code>w/a/s/d</code> + Enter):</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">./maze            # or: GAME_PORT=7700 ./maze
+nc 127.0.0.1 7700</code></pre>
+      
+    </figure><h2 id="the-shortcut-i-used-the-token-is-seed-derived-not-random"><a class="wu-anchor" href="#the-shortcut-i-used-the-token-is-seed-derived-not-random" aria-hidden="true">#</a>The shortcut I used (the token is seed-derived, not random)</h2>
+<p><code>strings</code> on the binary reveals the whole prize mechanism:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">[maze] prize token loaded (value hidden)
+hiCTF{warden_vault_cleared_%s}     &lt;- template at .rodata 0x5c5ef
+maze-default-seed   FLAG_SEED   RCTF_FLAG   flag.txt   GAME_PORT</code></pre>
+      
+    </figure><p>The startup routine (around file offset .text 0x75d6-0x77f6) resolves the prize token from, in order:
+<code>RCTF_FLAG</code> env, <code>FLAG_SEED</code> env (default <strong><code>maze-default-seed</code></strong>), else <code>flag.txt</code>; it then runs an
+HMAC-style construction (the disassembly shows the classic <code>xor 0x36</code> / <code>xor 0x5c</code> ipad/opad over a
+64-byte key, then a SHA-512-family hash at 0x10818) and formats the result into the template with
+<code>hiCTF{warden_vault_cleared_&lt;8 hex chars&gt;}</code>.</p>
+<p>So the token is a deterministic function of the seed - no need to beat the warden, and no need to
+reach the live service. Read it straight out of a locally started server&#39;s memory
+(reading <code>/proc/&lt;pid&gt;/mem</code> of a child process is permitted without root):</p>
+<figure class="wu-code" data-lines="16">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 - &lt;&lt;<span class="hljs-string">&#x27;EOF&#x27;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">import subprocess, time, re</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">p = subprocess.Popen([<span class="hljs-string">&#x27;./maze&#x27;</span>], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">time.sleep(1.2)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">regions = [l.split()[0] <span class="hljs-keyword">for</span> l <span class="hljs-keyword">in</span> open(f<span class="hljs-string">&#x27;/proc/{p.pid}/maps&#x27;</span>) <span class="hljs-keyword">if</span> <span class="hljs-string">&#x27;rw&#x27;</span> <span class="hljs-keyword">in</span> l.split()[1]]</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"><span class="hljs-keyword">for</span> r <span class="hljs-keyword">in</span> regions:</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    a, b = r.split(<span class="hljs-string">&#x27;-&#x27;</span>); start, end = int(a,16), int(b,16)</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    <span class="hljs-keyword">if</span> end - start &gt; 64*1024*1024: <span class="hljs-built_in">continue</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    try:</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">        data = open(f<span class="hljs-string">&#x27;/proc/{p.pid}/mem&#x27;</span>,<span class="hljs-string">&#x27;rb&#x27;</span>,buffering=0).<span class="hljs-built_in">read</span>()  <span class="hljs-comment"># seek first in real code</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">    except Exception:</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">        <span class="hljs-built_in">continue</span></span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">    m = re.search(rb<span class="hljs-string">&#x27;hiCTF\{[ -~]{1,80}\}&#x27;</span>, data)</span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">    <span class="hljs-keyword">if</span> m: <span class="hljs-built_in">print</span>(m.group().decode()); <span class="hljs-built_in">break</span></span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc">p.kill()</span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc">EOF</span></span></code></pre>
+      
+    </figure><p>Result is stable across runs: <code>hiCTF{warden_vault_cleared_845f9b65}</code>.
+Sanity check that it really is seed-derived: re-running with <code>FLAG_SEED=mytest</code> gives
+<code>hiCTF{warden_vault_cleared_f08ec824}</code>.</p>
+<h2 id="live-service-the-real-exploit-this-is-where-the-submittable-token-comes-from"><a class="wu-anchor" href="#live-service-the-real-exploit-this-is-where-the-submittable-token-comes-from" aria-hidden="true">#</a>Live service (the real exploit - this is where the submittable token comes from)</h2>
+<p>The hosted instance terminates TLS in front of the line-oriented service and routes by SNI,
+so plain <code>nc</code> sees nothing. It is a <strong>single connection per instance</strong>, and the token is
+minted only when you genuinely step onto the <code>$</code>.</p>
+<p>The bug is in the <strong>visibility/render</strong> path, not movement: as the explored region is
+computed, a hand-rolled index into the map can land a cell off and copy a neighbouring
+tile&#39;s code, flipping a wall to a floor. Wandering and revealing cells eventually turns the
+vault&#39;s top wall <strong>(9,12)</strong> from <code>%</code> into a floor - the vault then has an opening at the top.</p>
+<p><code>adaptive_client.py</code> (this directory) does it end to end. It explores nearest-unvisited
+cell by cell, and <strong>re-checks every move</strong> whether <code>(11,11)</code> is reachable with ordinary
+walk rules, so a warden reset can&#39;t desync it. On the trigger it BFS&#39;s
+<code>(8,12)→(9,12)→(10,12)→(11,12)→(11,11)</code> and reads the token.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">python3 adaptive_client.py --tls maze-breach-2baef7987401.chall.hiddeninvestigations.net 1337</code></pre>
+      
+    </figure><p>Observed (reproducible; the trigger is deterministic at move 215):</p>
+<figure class="wu-code wu-code-output" data-lines="9">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">[*] spawn (1, 12)
+[*] move 100 pos (7, 16)
+[*] move 200 pos (16, 13)
+[+] prize reachable after 215 moves (pos (14, 4), 20 steps)
+[+] at prize (11, 11)  eof=True
+...
+  The vault is open. You take the prize.
+  hiCTF{maze-warden-vault-seed-2026_65d2638530}
+FLAG=hiCTF{maze-warden-vault-seed-2026_65d2638530}</code></pre>
+      
+    </figure><p>Sanity cross-check: the same client run against the packaged binary
+(<code>GAME_PORT=7711 ./extracted/maze</code>, then <code>adaptive_client.py 127.0.0.1 7711</code>) prints the
+default-seed token <code>hiCTF{warden_vault_cleared_845f9b65}</code> at the identical move 215 - same
+mechanism, different seed ⇒ the live win is genuine, not a static string. (The live token
+also uses a different template/seed string - <code>maze-warden-vault-seed-2026_…</code> - than the
+packaged binary&#39;s <code>warden_vault_cleared_…</code>, confirming the hosted instance carries its own seed.)</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">hiCTF{maze-warden-vault-seed-2026_65d2638530}</code></pre>
+      
+    </figure><p>(Local default-seed token, for reference only: <code>hiCTF{warden_vault_cleared_845f9b65}</code>)</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#the-intended-path-engine-bug">The intended path (engine bug)</a></li><li><a href="#the-shortcut-i-used-the-token-is-seed-derived-not-random">The shortcut I used (the token is seed-derived, not random)</a></li><li><a href="#live-service-the-real-exploit-this-is-where-the-submittable-token-comes-from">Live service (the real exploit - this is where the submittable token comes from)</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="vaultkeeper.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">VaultKeeper</span></a>
+    <a class="wu-pager-link wu-pager-next" href="rocinate.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Rocinate</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

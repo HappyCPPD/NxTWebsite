@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hollow Reserve · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The credit facility prices collateral off a thin AMM pool's spot price. A flash loan skews the pool, the inflated price lets us borrow far past fair value, and the vault drops below 10 percent of its reserve." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>hollow-reserve</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Hollow Reserve <span class="page-sub">Flash loan against a spot-price oracle</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{th1n_p00l_was_the_r3al_0racle}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Flag: hiCTF{th1n_p00l_was_the_r3al_0racle}</p>
+<h2 id="goal"><a class="wu-anchor" href="#goal" aria-hidden="true">#</a>Goal</h2>
+<p>Drain the on-chain reserve vault below 10% of its initial balance (<code>Setup.isSolved()</code>).</p>
+<h2 id="deployed-addresses-instance-httpshollow-reserve-15d83fd51591challhiddeninvestigationsnet-chain-id-31337"><a class="wu-anchor" href="#deployed-addresses-instance-httpshollow-reserve-15d83fd51591challhiddeninvestigationsnet-chain-id-31337" aria-hidden="true">#</a>Deployed addresses (instance <a href="https://hollow-reserve-15d83fd51591.chall.hiddeninvestigations.net">https://hollow-reserve-15d83fd51591.chall.hiddeninvestigations.net</a>, chain id 31337)</h2>
+<p>Pulled from the Setup contract&#39;s constant getters (<code>Setup</code> = 0x14507117fd47c1A48bB072f7cf6fDdC431cb5376):</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Address</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>player</td>
+<td>0xd27ffd1EC266A361D233F51EBE25CDb6AFba4AEc</td>
+</tr>
+<tr>
+<td>Vault (holds reserve token)</td>
+<td>0x8365b48ffd5db1a9c730563174dcc22fb6659c5f</td>
+</tr>
+<tr>
+<td>Facility (credit facility)</td>
+<td>0xeb2795731f498125dafa067a7a5d22fb29b21ff1</td>
+</tr>
+<tr>
+<td>Collateral token (COL)</td>
+<td>0x628b9918eaaf0a8191972d807bb42adda95f0910</td>
+</tr>
+<tr>
+<td>Reserve token (RES)</td>
+<td>0x9cb7d7e2ed19424a2102cfd5cc7a19e65f58540c</td>
+</tr>
+<tr>
+<td>priceFeed</td>
+<td>0x2a5eecde42ba8cff081326b8f24745f01441e12b</td>
+</tr>
+<tr>
+<td>Flash lender (ERC-3156)</td>
+<td>0x7f74c6891b63b6dcf47edb0da1c723e1056a790c</td>
+</tr>
+<tr>
+<td>Market</td>
+<td>0xc350c66f4c1398f512d6beffaa8a910a1e2d197e</td>
+</tr>
+<tr>
+<td>Pool (COL/RES AMM)</td>
+<td>0xd29f59e98303df6a23a02fcae284b8cbc8d9aa79</td>
+</tr>
+</tbody></table>
+<p>Addresses are re-randomised per instance; re-read the Setup getters before replaying.</p>
+<h2 id="contract-interfaces-recovered-from-bytecode-no-source-published-ipfs-metadata-404s"><a class="wu-anchor" href="#contract-interfaces-recovered-from-bytecode-no-source-published-ipfs-metadata-404s" aria-hidden="true">#</a>Contract interfaces recovered from bytecode (no source published; IPFS metadata 404s)</h2>
+<ul>
+<li><code>Vault.reserveBalance()</code> = RES.balanceOf(vault) = 1e25. <code>Vault.lend(address,uint256)</code> (facility only) → RES.transfer.</li>
+<li><code>Facility.borrow(uint256 collateralAmount, uint256 borrowAmount)</code>:<ol>
+<li><code>COL.transferFrom(msg.sender, facility, collateralAmount)</code> (reverts &quot;facility: no collateral&quot; if 0)</li>
+<li><code>price = priceFeed.getPrice()</code>  (= <code>Pool.spotPrice()</code>)</li>
+<li><code>require(borrowAmount &lt;= price * collateralAmount / 1e18 * 7500/10000)</code> (&quot;facility: over LTV&quot;)</li>
+<li><code>collateralOf[msg.sender] += collateralAmount; debtOf[msg.sender] += borrowAmount</code></li>
+<li><code>Vault.lend(msg.sender, borrowAmount)</code>
+LTV = 7500 bps = 75%. <strong>The LTV check only uses the collateral passed in THAT call and ignores existing debt</strong> - but
+that alone is not enough to drain (a fair AMM + 75% LTV just decays each leverage cycle).</li>
+</ol>
+</li>
+<li><code>Facility.repay(uint256)</code> - proportional collateral release, needs real RES.</li>
+<li><code>Pool</code> = Uniswap-V2-style constant-product AMM COL/RES, reserves 1e21 COL / 1e23 RES, 0.3% fee.
+<code>spotPrice() = reserveRes * 1e18 / reserveCol = 1e20</code> (i.e. 100 RES per COL).
+Custom swap wrappers: <code>40f788d2(uint256 amountResIn, uint256 minColOut)</code> buys COL (RES in → COL out);
+<code>dce0772c(uint256 amountColIn, uint256 minResOut)</code> sells COL.</li>
+<li><code>priceFeed.getPrice()</code> simply forwards to <code>Pool.spotPrice()</code> (source recorded via the pool&#39;s own storage slot 0).
+No deviation guard, no TWAP - a raw, flash-manipulable spot price.</li>
+<li><code>Flash lender</code> is ERC-3156: <code>flashLoan(receiver, token, amount, bytes)</code>,
+<code>maxFlashLoan(RES) = 5e24</code>, <code>flashFee = 0</code> (free). It holds 5e24 RES.</li>
+<li><code>Market</code> (1e25 RES / 1e23 COL, maxDeviationBps = 500) is the <em>safe</em> <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> that is NOT wired to the facility -
+it is the decoy.</li>
+</ul>
+<h2 id="root-cause"><a class="wu-anchor" href="#root-cause" aria-hidden="true">#</a>Root cause</h2>
+<p>The facility values collateral with the pool&#39;s instantaneous spot price. A thin pool plus a free
+5e24-RES flash loan lets an attacker skew the price arbitrarily inside one transaction, deposit
+collateral bought at the skewed price, and borrow far more than it is worth.</p>
+<h2 id="exploit-srcexploitsol-one-transaction"><a class="wu-anchor" href="#exploit-srcexploitsol-one-transaction" aria-hidden="true">#</a>Exploit (<code>src/Exploit.sol</code>, one transaction)</h2>
+<ol>
+<li><code>FlashLender.flashLoan(this, RES, 5e24, &quot;&quot;)</code> - free.</li>
+<li>Inside <code>onFlashLoan</code>: dump the whole 5e24 RES into the pool with <code>Pool.40f788d2(resBal, 0)</code>,
+receiving ~9.8e20 COL. Pool reserves become ~5.1e24 RES / ~2.0e19 COL → <code>spotPrice ≈ 2.5e23</code> (&gt;1000x).</li>
+<li>Deposit that COL and borrow: <code>Facility.borrow(colBal, vault.reserveBalance() - 5e22)</code>; the LTV test
+(0.75 · 2.5e23 · 9.8e20 / 1e18 ≈ 2e26) passes easily, so the vault empties down to 5e22.</li>
+<li>Return the ERC-3156 magic value; the lender pulls <code>amount + fee</code> back with <code>transferFrom</code>
+(approve it in advance - do NOT self-transfer the repayment, that double-pays and reverts &quot;ERC20: balance&quot;).</li>
+<li>Sweep remaining RES/COL to the player.</li>
+</ol>
+<p>Result: vault 1e25 → 5e22, <code>Setup.isSolved() == true</code>, flag served by <code>GET /flag</code>.</p>
+<p>Deployed exploit: 0x2cfc3303eaCB6fb02aAb40BD6A423b5EA7c429ad (tx 0x7827f3a7f7d2aad40f7cb96ee18e1dc5fe2ad094f934c5d5fa26bcf0b2e032ec).</p>
+<h2 id="notes-pitfalls"><a class="wu-anchor" href="#notes-pitfalls" aria-hidden="true">#</a>Notes / pitfalls</h2>
+<ul>
+<li><code>cast send &lt;to&gt; 0x&lt;4byte-selector&gt; &lt;args&gt;</code> treats the hex as the FULL calldata and silently drops the extra
+args - build the full calldata string instead.</li>
+<li>Two near-identical AMMs exist (Pool and Market); confirm which one the feed actually reads
+(<code>priceFeed.source()</code>) instead of assuming.</li>
+<li>Local <code>anvil --fork-url &lt;instance&gt;</code> (with <code>-a 0</code>; the instancer 502s on the default dev accounts) gives a
+free, resettable sandbox - but the fork dies when the live instance expires.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#goal">Goal</a></li><li><a href="#deployed-addresses-instance-httpshollow-reserve-15d83fd51591challhiddeninvestigationsnet-chain-id-31337">Deployed addresses (instance https://hollow-reserve-15d83fd51591.chall.hiddeninvestigations.net, chain id 31337)</a></li><li><a href="#contract-interfaces-recovered-from-bytecode-no-source-published-ipfs-metadata-404s">Contract interfaces recovered from bytecode (no source published; IPFS metadata 404s)</a></li><li><a href="#root-cause">Root cause</a></li><li><a href="#exploit-srcexploitsol-one-transaction">Exploit (src/Exploit.sol, one transaction)</a></li><li><a href="#notes-pitfalls">Notes / pitfalls</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="quiet-upgrade.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Quiet Upgrade</span></a>
+    <a class="wu-pager-link wu-pager-next" href="pruned-ledger.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Pruned Ledger</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

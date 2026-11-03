@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Last Execution · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A cold image of an EXE-9 core ships with an operator manual that lies in three places. Recovering each page rotation empirically, correcting the manual and emulating the chained HALTs reproduces the run, and the console's register dump hides one flipped bit." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>last-execution</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Last Execution <span class="page-sub">Emulating a fictional core with a trapped manual</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{3x3c_9_r3m3mb3rs_4ll_but_th3_l4st_h4lt_l13s}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> rev / custom VM + crypto · <strong>Artifact:</strong> <code>extracted/last_execution.img</code> (8,650,752 B, magic <code>EXE9CORE</code>)</p>
+<h2 id="what-it-is"><a class="wu-anchor" href="#what-it-is" aria-hidden="true">#</a>What it is</h2>
+<p>A custom container that holds a <em>cold image</em> of a fictional &quot;EXE-9&quot; core, plus a plaintext
+operator manual (<code>PRIMER</code>, segment 10) that fully specifies the machine. All multi-byte fields
+are <strong>big-endian</strong>: header (magic/version/N=24/EXEC_SEED/TABLE_SEED/ENTRY=1/MANUAL=10) then a
+24-entry × 0x40 segment table at 0x100 (id, type, offset, size, flags, aux, crc32, name) -
+every segment CRC verifies.</p>
+<p>Deliberate traps in the manual (the image is a minefield of decoys): the page-rotation seed
+rotation is <strong>17</strong>, not the printed 19; the dispatch bias is <code>pc &gt;&gt; 3</code>, not <code>pc &gt;&gt; 4</code>; the TBL row
+recurrence adds <code>i*13</code>, not <code>i*11</code>. The decoy flag <code>hiCTF{f4k3_fl4g}</code> is scattered all over the
+image, and the console dump&#39;s register file is the <em>true</em> final state with a single bit flipped
+(R2 bit 12) - that is the &quot;l13&quot; in the flag.</p>
+<h2 id="solution-outline"><a class="wu-anchor" href="#solution-outline" aria-hidden="true">#</a>Solution outline</h2>
+<ol>
+<li>Parse header + segments (big-endian), verify CRCs.</li>
+<li>Recover page rotations empirically: for each 256-byte page, the only rotation that makes every
+8-byte word&#39;s <code>rd/ra/rb</code> fields ≤ 15 pins the value uniquely (36 pages recovered, zero miss);
+the closed form <code>m0 = ROL64(EXEC_SEED ^ (SEG_ID*K), 17)</code>, <code>m = ROL64(((m ^ w ^ X)*K), 31)</code> with
+<code>K = 0x9E3779B97F4A7C15</code>, <code>X = 0xA5A5A5A5A5A5A5A5</code>, <code>w</code> = first u64 of the previous page, fits
+all of them.</li>
+<li>Emulate: rotating dispatch <code>idx = (op_byte + (pc&gt;&gt;3) + AUX) mod 256</code>, chained <code>HALT</code>
+(<code>next_id = imm32 ^ low32(R1)</code>), writable segments allowing <code>STW/STB</code>, <code>LDRR</code> reading TBL rows
+with the <code>rr[i] = (rr[i-1]*17 + stored_row[i-1][0] + 13*i) mod 64</code> chain.
+Gate: running <code>EXEC_SELFTEST</code> standalone reproduces the primer&#39;s SHA-256
+commitment <code>0b6d8d47…bbbcf2</code> over <code>be64(R1..R4)</code> <strong>exactly</strong>.</li>
+<li>Full chain <code>EXEC_MAIN -&gt; EXEC_FOLD_A -&gt; EXEC_FOLD_B -&gt; EXEC_LIMIT -&gt; EXEC_FINAL -&gt; EXEC_LIMIT -&gt; EXEC_FINAL -&gt; END</code> - note the console log&#39;s &quot;…-&gt;EXEC_FINAL&quot; omits LIMIT, and FOLD_B links to
+id 5 (LIMIT), not 4. <code>EXEC_LIMIT</code> is a <em>trap/countdown</em> (R9 = 0x123456789abc iterations) whose
+loop is periodic; it must be fast-forwarded, not skipped, because it feeds the 2nd EXEC_FINAL
+run. EXEC_FINAL runs twice; the self-modified counter at 0x2048 (written by MAIN via its
+STW into the writable EXEC_FINAL segment) selects the branch, and the 2nd run (R5 == 2)
+terminates with <code>next_id = 0xFFFFFFFF</code>. The chain ends with R15 = <code>0x5354414C</code>
+(&quot;STAL&quot;) and <code>next_id = 0xFFFFFFFF</code>; final R1..R4 are the true state.</li>
+<li>key = SHA-256(&quot;LASTEXEC&quot; || be64(R1)||be64(R2)||be64(R3)||be64(R4) || &quot;LASTEXEC&quot;);
+S-box from <code>DLOOK</code> logical rows 0..3 (Fisher - Yates); undo the 16-byte column rotation on
+<code>WILL_SEAL</code>, SEAL-256-decrypt (16 rounds, per-block permutation <code>P</code>/inverse), strip PKCS#7.</li>
+</ol>
+<p>Cross-check that the crypto path is right: the <em>console</em> state decrypts <code>TEST_SEAL_2</code> to the decoy
+<code>hiCTF{f4k3_fl4g}</code>, while the emulated final state decrypts <code>WILL_SEAL</code> to the real flag.</p>
+<p>Runner: <code>solve_final.py</code> (also <code>solve3.py</code>). Output:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">R15 = 0x000000005354414C
+fold0(xor) = 0xF823B4260904B088     fold1(add) = 0x782AB6EF390CF07A
+key = ac35ec6ed245d7238d9784ae097766613649315beb12b8ba9836dda56ccd54a3
+WILL_SEAL plaintext : b'hiCTF{3x3c_9_r3m3mb3rs_4ll_but_th3_l4st_h4lt_l13s}'
+TEST_SEAL_2 (console state) : b'hiCTF{f4k3_fl4g}'</code></pre>
+      
+    </figure><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">hiCTF{3x3c_9_r3m3mb3rs_4ll_but_th3_l4st_h4lt_l13s}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#what-it-is">What it is</a></li><li><a href="#solution-outline">Solution outline</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="the-inner-engine.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">The Inner Engine</span></a>
+    <a class="wu-pager-link wu-pager-next" href="night-batch.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Night Batch</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

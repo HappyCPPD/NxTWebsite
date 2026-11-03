@@ -1,6 +1,518 @@
 {
   "events": [
     {
+      "id": "hicybercon-ctf-2026",
+      "event": "HICyberCon CTF 2026",
+      "team": "NxT, NxD",
+      "result": {
+        "placement": "57th",
+        "field": "of 1,119",
+        "points": "3,780",
+        "solves": 62,
+        "date": "1 November 2026"
+      },
+      "challenges": [
+        {
+          "slug": "ouroboros-hicybercon",
+          "name": "Ouroboros",
+          "category": "web",
+          "subtitle": "Prototype pollution to a new Function gadget",
+          "flag": "hiCTF{pr0to_pollution_to_cust0m_new_Function_gadget_rce_d4d9ba5c06}",
+          "blurb": "A deep-merge drops keys named __proto__ but not a nested constructor.prototype, so Object.prototype.formula can be polluted. The preview handler reads formula off a fresh object and runs it through new Function, giving code execution that echoes the flag file back."
+        },
+        {
+          "slug": "overgrowth",
+          "name": "Overgrowth",
+          "category": "web",
+          "subtitle": "GraphQL alias batching against an OTP",
+          "flag": "hiCTF{graphql_al1as_batch1ng_brute_f0rces_the_0tp_598998a3d9}",
+          "blurb": "Introspection is off, but error messages leak the whole schema. The rate limit counts HTTP requests, not operations, so one request packed with aliased resetPassword calls brute-forces the reset OTP and takes over the admin account."
+        },
+        {
+          "slug": "orphaned-context",
+          "name": "Orphaned Context",
+          "category": "web",
+          "subtitle": "Sealed incident record left readable",
+          "flag": "hiCTF{local_dev_fixture_not_a_real_flag_afce35cd07}",
+          "blurb": "The relay keeps a sealed incident record that should only open in its original context. An orphaned-context bug lets a fresh session read /incidents/IR-7731/seal, and every independently provisioned instance returns the same 51 bytes."
+        },
+        {
+          "slug": "titan-relay",
+          "name": "Titan Relay",
+          "category": "pwn",
+          "subtitle": "Rust VM capsule to a privileged handler",
+          "flag": "hiCTF{ru5t_vm_g4te_and_h4ndler_ch41n_152bad75bf}",
+          "blurb": "A Rust console app runs uploaded capsules as bytecode, after XOR-decrypting them with a position key. A guarded leak plus a signed-index out-of-bounds write reaches a privileged handler that reads /flag.txt through Wine's Z: drive."
+        },
+        {
+          "slug": "project-mangoo",
+          "name": "Project Mangoo",
+          "category": "pwn",
+          "subtitle": "Keyless handshake, OOB read, stack pivot",
+          "flag": "hiCTF{n0_g4dg3ts_n0_sh3llc0d3_jusT_p1v0t_d33p3r_1bcb244b04}",
+          "blurb": "The handshake token is a fixed transform of the challenge with no key involved. Query Channel only bounds the index from above, so negative indices leak memory, and the leaked pointers set up a pivot that reaches the flag without gadgets or shellcode."
+        },
+        {
+          "slug": "letmeout",
+          "name": "LetMeOut",
+          "category": "pwn",
+          "subtitle": "Jinja2 sandbox escape via NFKC",
+          "flag": "hiCTF{__^_^__n0rm4l1z3_b3f0r3_y0u_tru5t__>_<___77331508e2}",
+          "blurb": "The jail allows one template of at most 170 ASCII characters with three distinct letters. The sandbox checks the raw attribute name but fetches the NFKC-normalised one, so a filter-made Tag string smuggles blocked attributes past the guard."
+        },
+        {
+          "slug": "apex-engine",
+          "name": "Apex Engine",
+          "category": "pwn",
+          "subtitle": "Two TOCTOU races in threaded workers",
+          "flag": "hiCTF{t0ct0u_mult1thr34d_r4c3_c0nd1t10n_w1n_8d3f_3c6bd2cbb4}",
+          "blurb": "Escrow transfers check the balance, sleep 25 ms, then deduct, so two full-balance orders underflow it into a huge number and buy VIP. Inside the vault, the file filter runs before a second 25 ms sleep, so swapping the shared path to flag.txt mid-stream prints the flag."
+        },
+        {
+          "slug": "cold-circuit",
+          "name": "Cold Circuit",
+          "category": "rev",
+          "subtitle": "Invertible 20-round SPN",
+          "flag": "hiCTF{6e305f6a7461675f6e65656465642121}",
+          "blurb": "The checker hex-decodes 16 bytes and runs them through 20 rounds of key add, S-box and permutation. Two anti-tamper gates can never fire, and every round inverts cleanly, so walking the target backwards gives n0_jtag_needed!!."
+        },
+        {
+          "slug": "entitlement",
+          "name": "Entitlement",
+          "category": "rev",
+          "subtitle": "Self-loading ELF with a bytecode VM",
+          "flag": "hiCTF{>o<_C0ngrats_Her3_1s_Y0ur_HI4_Subscript1on_^_^}",
+          "blurb": "A section-less self-loader decrypts its real image into a memfd and hides the serial check in a private VM whose bytecode key is a hash of the handler code, so a debugger corrupts it. Solving the serial and the activation code makes the binary print the flag after a long modular-squaring delay."
+        },
+        {
+          "slug": "snapfile",
+          "name": "Snapfile",
+          "category": "rev",
+          "subtitle": "Rebuilding a file format from a Crystal binary",
+          "flag": "hiCTF{r3c0nstruct3d_th3_sn4pf1l3_by73_by_by73}",
+          "blurb": "No sample .snap ships with snaptool, so the 104-byte header has to be rebuilt from the validator alone: big-endian section offsets, fixed tags and a custom 64-bit checksum. A file that passes makes the tool print its embedded label, which is the flag."
+        },
+        {
+          "slug": "the-inner-engine",
+          "name": "The Inner Engine",
+          "category": "rev",
+          "subtitle": "Nim binary with a bytecode VM",
+          "flag": "hiCTF{vm_byt3c0d3_1nn3r_3ng1n3_unw0und!}",
+          "blurb": "A stripped Nim binary XOR-hides its strings and checks a 24-byte activation key inside a custom bytecode VM. Tracing the dispatch chain and unwinding the VM program recovers the key L1c#N0d3_7mQ9f3a2b8c6d1e, which prints the flag."
+        },
+        {
+          "slug": "last-execution",
+          "name": "Last Execution",
+          "category": "rev",
+          "subtitle": "Emulating a fictional core with a trapped manual",
+          "flag": "hiCTF{3x3c_9_r3m3mb3rs_4ll_but_th3_l4st_h4lt_l13s}",
+          "blurb": "A cold image of an EXE-9 core ships with an operator manual that lies in three places. Recovering each page rotation empirically, correcting the manual and emulating the chained HALTs reproduces the run, and the console's register dump hides one flipped bit."
+        },
+        {
+          "slug": "night-batch",
+          "name": "Night Batch",
+          "category": "rev",
+          "subtitle": "GnuCOBOL account key",
+          "flag": "hiCTF{c0b0l_p4ck3d_d3c1mal_n1ghtly_b4tch!}",
+          "blurb": "A stripped GnuCOBOL binary checks an 18-digit account key through a ladder of 23 digit conditions. The 835-digit constant is just ln(2) as filler, and solving the conditions gives the one key that prints the flag."
+        },
+        {
+          "slug": "obfuscated-flow",
+          "name": "Obfuscated Flow",
+          "category": "rev",
+          "subtitle": "Flattened state machine, word by word",
+          "flag": "hiCTF{m4th_c0ntr0l_fl0w_3ll1pt1c_dlog_4f7b2c9e}",
+          "blurb": "The passkey check is a control-flow-flattened state machine where each state is derived from 4-byte words of the input. Solving the state transitions one word at a time rebuilds the 47-character passkey, which is also the flag."
+        },
+        {
+          "slug": "cold-beacon",
+          "name": "Cold Beacon",
+          "category": "rev",
+          "subtitle": "Nim key validator solved with z3",
+          "flag": "hiCTF{c0ld_b34c0n_cfg_uns34l3d_fr0m_th3_s4mpl3}",
+          "blurb": "A Nim implant checks a 24-byte key against 23 table-driven XOR, sum and product constraints plus three extra relations. Every constraint is byte-local, so z3 solves it straight to C0ldB34c0n::unl0ck::7a3f, which unseals the config."
+        },
+        {
+          "slug": "epsilon-drift",
+          "name": "Epsilon Drift",
+          "category": "rev",
+          "subtitle": "IEEE-754 bit fields and a signed zero",
+          "flag": "hiCTF{1eee754_s1gn3d_z3r0_1u1p_dr1ft_eps!}",
+          "blurb": "A gfortran binary takes four doubles as hex and checks their mantissa slices and exponents against paired linear equations, which pin them to 1.1, 2.2 and 3.3000000000000003. The last double has to be a negative zero, which passes the compare but flips the output."
+        },
+        {
+          "slug": "cipher",
+          "name": "Cipher",
+          "category": "rev",
+          "subtitle": "Android vault with a seeded passphrase",
+          "flag": "hiCTF{cryptography_should_be_implemnetd_properly}",
+          "blurb": "The APK's vault unlocks with a PBKDF2 passphrase that is not stored anywhere. An unused legacy package generates it from a 256-word lexicon and a seed in a small window, so walking that window and checking the HMAC anchor finds the passphrase and decrypts the records."
+        },
+        {
+          "slug": "vaultkeeper",
+          "name": "VaultKeeper",
+          "category": "rev",
+          "subtitle": "Android native seal chain past the decoys",
+          "flag": "hiCTF{!!I_10v3_4ndr0!d_m4n_m4k!ng_th3m_f331_g0Od!!}",
+          "blurb": "The APK is packed with fake flags, a honeypot getFlag export and UI gates that don't matter. The real flag is computed inside the native nv_final routine, and reproducing its seal and unseal chain offline gives the 51-byte string."
+        },
+        {
+          "slug": "wardens-maze",
+          "name": "Warden's Maze",
+          "category": "rev",
+          "subtitle": "Seed-derived prize token in a Rust maze",
+          "flag": "hiCTF{maze-warden-vault-seed-2026_65d2638530}",
+          "blurb": "The vault in the middle of the maze is meant to be reached through a render-code indexing bug. Strings show the prize token is derived from a seed rather than random, which explains how the token is built, while the live instance mints the real one on a genuine win."
+        },
+        {
+          "slug": "rocinate",
+          "name": "Rocinate",
+          "category": "crypto",
+          "subtitle": "LCG orbit and exponent relations",
+          "flag": "hiCTF{lmaoooo_w0t???y0u_d1d_17_??435p37++}",
+          "blurb": "Each public value is an LCG term times the flag raised to a known exponent. Recovering the LCG seed turns them into pure powers of the flag mod N, and since the exponents have gcd 1, an extended-Euclid combination of them gives the flag itself."
+        },
+        {
+          "slug": "cairn",
+          "name": "Cairn",
+          "category": "crypto",
+          "subtitle": "A 2^20-step isogeny walk, done fast",
+          "flag": "hiCTF{w41k_th3_sup3rs1n9u14r_l46yr1ntH}",
+          "blurb": "The key comes from a deterministic isogeny walk of 2^20 sequential steps over GF(p^2), with no shortcuts. Generic root finding would take days, so each step uses one exponentiation to p and a few gcds, bringing the whole walk down to under three hours on one core."
+        },
+        {
+          "slug": "chronogrind",
+          "name": "ChronoGrind",
+          "category": "crypto",
+          "subtitle": "Nine billion sequential squarings",
+          "flag": "hiCTF{n1c3_w0rk_n0w_t4k3_s0m3_r3$t}",
+          "blurb": "The XOR-masked state file spells out the scheme: square a seed 9e9 times modulo a 2048-bit composite, hash it and use that as a ChaCha20-Poly1305 key. There is no shortcut, so a checkpointed gmpy2 grind runs for about two and a half hours and the tag confirms the key."
+        },
+        {
+          "slug": "log-jam",
+          "name": "Log Jam",
+          "category": "crypto",
+          "subtitle": "70-bit discrete log",
+          "flag": "hiCTF{W0W1_y0u_4ctu4a11y_s01v3d_1t_ju$t_L1k3_tH4t}",
+          "blurb": "The Diffie-Hellman group is only a 71-bit prime with a 70-bit subgroup, small enough for PARI's rho-based znlog. The recovered exponent hashes to the AES-GCM key, and the tag verifies on decryption."
+        },
+        {
+          "slug": "just-give-me-the-flag-man",
+          "name": "Just Give Me The Flag Man",
+          "category": "crypto",
+          "subtitle": "Encoding chain with an Atbash hex alphabet",
+          "flag": "hiCTF{sh1ft1ng_7hr0ugh_7h3_b4s3s}",
+          "blurb": "The note is 52 two-character tokens whose letters u to z stand in for hex digits in mirrored order. Reversing the string, Atbashing the letters and hex-decoding starts a chain of base decodes that ends at the flag."
+        },
+        {
+          "slug": "cipher-cascade",
+          "name": "Cipher Cascade",
+          "category": "crypto",
+          "subtitle": "Reverse, Base64, hex, ROT13",
+          "flag": "hiCTF{l4y3r_by_l4y3r_unw1nd}",
+          "blurb": "The hint gives the outer layers in order. Reversing the string, Base64-decoding and hex-decoding leaves ROT13 text, and one more rotation gives the flag."
+        },
+        {
+          "slug": "broken-signals",
+          "name": "Broken Signals",
+          "category": "forensics",
+          "subtitle": "Zeroed PNG signature",
+          "flag": "hiCTF{h34d3r_r3p41r_m4st3r}",
+          "blurb": "The file is a PNG whose first four signature bytes have been zeroed, while the chunks and CRCs are intact. Restoring \\x89PNG makes it open, and the image shows the flag."
+        },
+        {
+          "slug": "ghost-in-the-wire",
+          "name": "Ghost in the Wire",
+          "category": "forensics",
+          "subtitle": "One byte per ICMP echo",
+          "flag": "hiCTF{1cmp_3xf1l_d3t3ct3d}",
+          "blurb": "Echo requests from 10.13.37.1 each carry a single byte of exfiltrated data. Filtering on that source and joining the payloads gives the flag."
+        },
+        {
+          "slug": "memory-liar",
+          "name": "Memory Liar",
+          "category": "forensics",
+          "subtitle": "DKOM-hidden process in a memory image",
+          "flag": "hiCTF{dk0m_unl1nk_3pr0c3ss_l1st_cr0ss_ch3ck_7c3a9f}",
+          "blurb": "The clean audit log and process list in the dump are bait. Grepping every .exe name in the raw image turns up winxnet.exe, which a DKOM rootkit had unlinked from the active process list, and its structure holds the flag."
+        },
+        {
+          "slug": "ghost-in-ram",
+          "name": "Ghost in RAM",
+          "category": "forensics",
+          "subtitle": "XOR-hidden flag in a 2 GB QEMU core",
+          "flag": "hiCTF{gh0st_pr0c3ss_rng_pwn3d}",
+          "blurb": "The image is a full QEMU guest core dump. The consecutive-byte XOR signature of hiCTF{ is the same for every key, so one pass finds every single-byte XOR candidate, and past two bait flags the real one sits under key 0x5a."
+        },
+        {
+          "slug": "forgotten-secrets",
+          "name": "Forgotten Secrets",
+          "category": "forensics",
+          "subtitle": "Single-byte XOR under decoy strings",
+          "flag": "hiCTF{m3m0ry_dump_d1g_d33p}",
+          "blurb": "The 256 KiB dump is full of decoy strings and fake credentials. Brute-forcing all 256 single-byte XOR keys finds the flag under key 0x42."
+        },
+        {
+          "slug": "echoes-of-a-forgotten-canvas",
+          "name": "Echoes of a Forgotten Canvas",
+          "category": "forensics",
+          "subtitle": "Four nested stego layers",
+          "flag": "hiCTF{mu1t!14y3r3d_st3g0o_ju5t_l0v333}",
+          "blurb": "The PNG decodes to 500 more rows than its header claims, with half the flag in the alpha channel. A ZIP after IEND, a steghide payload keyed by the poem and an over-tall JPEG scan give up the rest."
+        },
+        {
+          "slug": "roof-of-africa",
+          "name": "Roof of Africa",
+          "category": "forensics",
+          "subtitle": "steghide keyed by Kilimanjaro",
+          "flag": "hiCTF{h4kun4_m4t4t4_m34ns_n0_w0rr13s}",
+          "blurb": "The hint points to the mountain's most famous number. Kilimanjaro's height, 5895, is the steghide passphrase."
+        },
+        {
+          "slug": "zanzibar-whisper",
+          "name": "Zanzibar Whisper",
+          "category": "forensics",
+          "subtitle": "steghide with an empty passphrase",
+          "flag": "hiCTF{sp1c3_1sl4nd_s3cr3ts}",
+          "blurb": "The JPEG carries a steghide payload with no passphrase at all, so extracting with an empty password gives the flag."
+        },
+        {
+          "slug": "whispers-in-the-margin",
+          "name": "Whispers in the Margin",
+          "category": "forensics",
+          "subtitle": "Whitespace bit rows in a DOCX",
+          "flag": "hiCTF{573g4n0gr4phy_!5_fun}",
+          "blurb": "The DOCX ends in paragraphs of nothing but spaces and tabs. Reading each as a 12-bit row, with space as 0 and tab as 1, gives a key that opens the second layer in the JPEG."
+        },
+        {
+          "slug": "paper-trail",
+          "name": "Paper Trail",
+          "category": "forensics",
+          "subtitle": "AES hidden in invisible TJ kerning",
+          "flag": "hiCTF{n3w_ar34_fOr_hid!ng_d4t4_n4m3d_TJ}",
+          "blurb": "Comparing the PDF with its archived original shows four new invisible-text streams whose only content is integer kerning values. The long runs are AES-128-CBC ciphertext, and the key and IV are the two halves of the trailer /ID that the author changed."
+        },
+        {
+          "slug": "hall-of-mirrors",
+          "name": "Hall of Mirrors",
+          "category": "forensics",
+          "subtitle": "Audio stego, a tiny VM and a nonce lattice",
+          "flag": "hiCTF{h1dd3n_numb3r_l4ttice_le4k}",
+          "blurb": "A spectrogram in a 26-minute WAV draws a SplitMix64 key that selects the stego bits. The payload is a small VM program whose output leaks biased ECDSA nonces, and a hidden-number lattice recovers the private key that decrypts the flag."
+        },
+        {
+          "slug": "no-bit-sings-alone",
+          "name": "No Bit Sings Alone",
+          "category": "forensics",
+          "subtitle": "Spectrogram, matrix embedding, inverse NTT",
+          "flag": "hiCTF{m4th3m4t!c5_g4v3_m3_4_l0t_Of_p4!n_8d52ae513}",
+          "blurb": "The spectrogram gives an AES-GCM nonce and ciphertext. Guide tones set the step size for Hamming(31,26) matrix embedding in the left channel's LSBs, and an inverse NTT over GF(257) turns the recovered values into the AES key."
+        },
+        {
+          "slug": "dead-air",
+          "name": "Dead Air",
+          "category": "forensics",
+          "subtitle": "Morse, spectrogram glyphs and Vigenere",
+          "flag": "hiCTF{s1l3nc3_w4s_th3_m3ss4g3_6r3v}",
+          "blurb": "One stereo channel is Morse giving the key NIGHTJAR, and the other draws a 7z password in its spectrogram. The logbook glyphs map through the code pad to ciphertext, and Vigenere over a 37-symbol alphabet decodes the message."
+        },
+        {
+          "slug": "resurrection",
+          "name": "RESURRECTION (Operation Eclipse Void)",
+          "category": "forensics",
+          "subtitle": "Five NTFS recovery phases",
+          "flag": "hiCTF{p3_0v3rl4y_71m3d473574mp_k3y_n7f5_runl157_cl5_g30m37ry_7r4ns4c710n_n4n0_f1l371m3_3v7x_b1n4ry_xml_70k3n5_b17m4p_orph4n_v01d_r35urr3c710n}",
+          "blurb": "A scorched 1 GiB NTFS image hides five payload segments behind five different recovery techniques. Each segment carries an ordinal label that is only an ordering tag, so stripping the labels and joining the payloads gives the flag."
+        },
+        {
+          "slug": "tessera",
+          "name": "TESSERA",
+          "category": "forensics",
+          "subtitle": "UTF-16 ScriptBlock logs and NTFS metadata",
+          "flag": "hiCTF{alpc_p0rt_c0lloquy_s35s10n_z3r0_syst3npr0f1l3_r3p4r53_buff3r_vort3x}",
+          "blurb": "The attacker's whole PowerShell script sits in the ScriptBlock log as mixed-endian UTF-16, which ASCII scans miss. Its three labelled parts map onto the riddle's ALPC port, Session 0 profile and reparse-point clues."
+        },
+        {
+          "slug": "tasmota-vault",
+          "name": "Tasmota Vault",
+          "category": "forensics",
+          "subtitle": "Berry bytecode, LittleFS and MQTT",
+          "flag": "hiCTF{b3rry_r0t4t10n_c94934d76344ab1151e03afd}",
+          "blurb": "An ESP32 Tasmota flash image holds a LittleFS vault and a custom Berry agent. Decoding the agent's unseal routine from bytecode and replaying its KDF and AEAD with the epoch and nonce from the MQTT capture opens the sealed record."
+        },
+        {
+          "slug": "the-miner-that-mined-the-victim",
+          "name": "The Miner That Mined The Victim",
+          "category": "forensics",
+          "subtitle": "14-question Windows incident triage",
+          "flag": "hiCTF{c4r3ful_4b0ut_cr4ck3d_t001s_69246bf057}",
+          "blurb": "A cracked crypto miner from LimeWire encrypts files and disables Defender. Answering all 14 questions takes the event logs, Sysmon, the Recycle Bin $I files and resident MFT data."
+        },
+        {
+          "slug": "low-tide-ledger",
+          "name": "Low Tide Ledger",
+          "category": "osint",
+          "subtitle": "Pinning an apartment from a recovered call",
+          "flag": "hiCTF{Eko-Atlantic_Lagos_Nigeria_Nairahomes-Realty_3C}",
+          "blurb": "Riddles about reclaimed land, an Atlantic view and a fixed UTC+1 clock lead to Eko Atlantic in Lagos. The agency comes from the original business name on an old 360 degree tour of the Eko Pearl Towers pin."
+        },
+        {
+          "slug": "shadow-identity",
+          "name": "Shadow Identity",
+          "category": "osint",
+          "subtitle": "Naming the face on a pageant poster",
+          "flag": "hiCTF{Jihan-Mohin-Dimachk}",
+          "blurb": "The poster is clean of metadata and hidden data, so it comes down to the face. Reverse searching a crop of it with the Miss Grand Tanzania caption finds the real person behind the AI-styled poster."
+        },
+        {
+          "slug": "the-foxglove-trace",
+          "name": "The Foxglove Trace",
+          "category": "osint",
+          "subtitle": "Rebuilding a lost Wi-Fi tracker's scoring",
+          "flag": "hiCTF{FoxgloveCoffee_Guest}",
+          "blurb": "The tracker script is gone, but its notes, config and one good run log pin down the rules: keep rows with step_delta of at least 41 and weight each AP's signal. Rescoring the scan export puts FoxgloveCoffee_Guest on top."
+        },
+        {
+          "slug": "labyrinth",
+          "name": "Labyrinth",
+          "category": "misc",
+          "subtitle": "Learning a binary protocol from its errors",
+          "flag": "hiCTF{l34rn3d_th3_t0ngu3_w4lk3d_th3_l4byr1nth_a06a8b7fdf}",
+          "blurb": "The service speaks an undocumented framed protocol, and its own error messages give away the magic, length limit and opcodes. After the nonce probe and transform challenge, the maze gate wants the shortest path back as raw bytes."
+        },
+        {
+          "slug": "the-collectors-trail",
+          "name": "The Collector's Trail",
+          "category": "misc",
+          "subtitle": "Six paintings, six stego fragments",
+          "flag": "hiCTF{marble_sparrow_9eb44602eedb764aac082a3816b7d7cb}",
+          "blurb": "Each of six museum images hides a sealed fragment in a different way. Ordering them by the artists' birth years and running them through HKDF opens the cabinet, whose stego PNG points at a GitHub release holding the final key."
+        },
+        {
+          "slug": "c3-vault",
+          "name": "C3 Vault",
+          "category": "misc",
+          "subtitle": "ESP32-C3 flash and NVS decryption",
+          "flag": "hiCTF{efus3_cl34r_jt4g_0p3n_nv5_017026ab04}",
+          "blurb": "The eFuse dump holds the flash encryption key, and the decrypted NVS gives the device ID, generation and current vault seed. Rebuilding the HMAC challenge-response from the firmware lets us authenticate to the live vault as the gateway."
+        },
+        {
+          "slug": "cold-chain",
+          "name": "Cold Chain",
+          "category": "misc",
+          "subtitle": "Fixing a refrigeration controller that fights back",
+          "flag": "hiCTF{cold_chain_restored_defrost_cleared_142a475ab7}",
+          "blurb": "A forced-defrost schedule keeps six cases warm, and a macro re-enables it every 90 seconds. Authenticating with the leaked fleet key, killing the macro first and then the schedule, and holding the cases cold for 60 seconds returns the flag."
+        },
+        {
+          "slug": "ground-station",
+          "name": "Ground Station",
+          "category": "misc",
+          "subtitle": "Firmware challenge-response, then a fix that sticks",
+          "flag": "hiCTF{ground_station_fueling_test_nominal_66e05dd7a0}",
+          "blurb": "Reversing gsc-fw.bin gives the access routine, verified against the image signature it prints. Feeding the session nonce as the key authenticates as engineer, and the fueling fix then has to be persisted past the watchdog."
+        },
+        {
+          "slug": "standing-order",
+          "name": "Standing Order",
+          "category": "misc",
+          "subtitle": "Reentrancy across two redemption paths",
+          "flag": "hiCTF{one_sig_two_paths_then_the_l00p_df97c83cf9}",
+          "blurb": "The same committee signature is valid on both voucher paths, and disburse() pays out before marking the voucher used. A contract that re-enters disburse() from receive() drains the reserve 1 ether at a time."
+        },
+        {
+          "slug": "quiet-upgrade",
+          "name": "Quiet Upgrade",
+          "category": "misc",
+          "subtitle": "Proxy storage slot collision",
+          "flag": "hiCTF{sl0t0_c0llision_then_a_qu1et_upgrade_4bcccd7d74}",
+          "blurb": "The proxy keeps its admin in slot 0, and the implementation's open registerBranch() writes slot 0 through delegatecall. Taking admin that way and upgrading to a malicious implementation lets us release the treasury's reserve."
+        },
+        {
+          "slug": "hollow-reserve",
+          "name": "Hollow Reserve",
+          "category": "misc",
+          "subtitle": "Flash loan against a spot-price oracle",
+          "flag": "hiCTF{th1n_p00l_was_the_r3al_0racle}",
+          "blurb": "The credit facility prices collateral off a thin AMM pool's spot price. A flash loan skews the pool, the inflated price lets us borrow far past fair value, and the vault drops below 10 percent of its reserve."
+        },
+        {
+          "slug": "pruned-ledger",
+          "name": "Pruned Ledger",
+          "category": "misc",
+          "subtitle": "Rebuilding a case file from a replayed chain",
+          "flag": "hiCTF{pruned_storage_calldata_never_forgets}",
+          "blurb": "Replaying the archived transactions rebuilds the pruned chain. The four case-file fields come from contract code, the only non-reverted configure() calldata, a derived storage slot and a revert that leaks the unmasked note."
+        }
+      ]
+    },
+    {
+      "id": "metactf-2026-10",
+      "event": "October 2026 MetaCTF Flash CTF",
+      "team": "NxT, NxD",
+      "attribution": "solo",
+      "placements": {
+        "nxt": "22nd",
+        "nxd": "200+"
+      },
+      "result": {
+        "placement": "22nd",
+        "field": "of 326",
+        "solves": 6,
+        "date": "29 October 2026"
+      },
+      "challenges": [
+        {
+          "slug": "doyounow",
+          "name": "doyounow",
+          "category": "pwn",
+          "subtitle": "Unchecked note index to a forged stdout FILE",
+          "flag": "SkillBit{simplememoryheresimplememorytheregivesoverflow}",
+          "blurb": "Every note handler takes an index with no bounds check, but full RELRO makes the GOT read-only. Out-of-range indices reach the writable stdout pointer instead, and a forged FILE with a wide vtable turns the next puts into system(\" sh\")."
+        },
+        {
+          "slug": "treat-dispenser",
+          "name": "Treat Dispenser",
+          "category": "rev",
+          "subtitle": "Unlock key in an embedded service log",
+          "flag": "SkillBit{fu11_s1z3_tr34t_unl0ck3d}",
+          "blurb": "strings leaks a maintenance log that names the keypad key, KEY=6767. The menu accepts any number as a keypad entry, so typing 6767 drops the full-size bar with the flag."
+        },
+        {
+          "slug": "rrsa",
+          "name": "RRSA",
+          "category": "crypto",
+          "subtitle": "Primes of the form x*r + 1",
+          "flag": "SkillBit{aLLLways_th3_w4yy}",
+          "blurb": "Both primes are a multiple of a known r plus one. Since x + y is smaller than r, (n-1)/r mod r gives x + y directly, the quotient gives x*y, and a quadratic recovers p and q."
+        },
+        {
+          "slug": "gifted",
+          "name": "GIFTed",
+          "category": "forensics",
+          "subtitle": "25 GIF frames tiled into a QR code",
+          "flag": "Skillbit{the_wrapping_was_more_interesting_than_the_gift}",
+          "blurb": "The tiny 82x82 GIF has 25 frames. Laying them out as a 5x5 grid builds a 410x410 QR code, which decodes to the flag."
+        },
+        {
+          "slug": "hatevibes",
+          "name": "HateVibes",
+          "category": "forensics",
+          "subtitle": "Four-stage maldoc to a beacon",
+          "flag": "MetaCTF{East_or_West_h0m3_1S_b3st}",
+          "blurb": "A diplomatic-statement Word document runs a macro that enables VBOM access and rebuilds a payload from document variables. That drops an encoded HTA, and decoding it reveals the final beacon carrying the flag."
+        },
+        {
+          "slug": "passwordlesschecks",
+          "name": "PasswordlessChecks",
+          "category": "forensics",
+          "subtitle": "Replaying an Xbox controller into RPG Maker",
+          "flag": "MetaCTF{Nbu8W32GsvbSNSNS}",
+          "blurb": "The game only asks for a 16-character name, and the USB capture is a controller typing it. Decoding the GIP input reports and replaying them on the stock name-input grid gives the flag."
+        }
+      ]
+    },
+    {
       "id": "solarctf-2026",
       "event": "SolarCTF 2026",
       "team": "NxT, TxN",
@@ -1081,6 +1593,8 @@
       "bio": "Forensics and OSINT by habit, crypto when a lattice is involved. Runs the occasional CTF solo under the handle NxT.",
       "linkedin": "https://www.linkedin.com/in/ashton-ang-wu-zun-846999353/",
       "events": [
+        "hicybercon-ctf-2026",
+        "metactf-2026-10",
         "solarctf-2026",
         "cryovault-ctf-2026",
         "byteme-ctf-26",
@@ -1140,6 +1654,8 @@
       "focus": [],
       "bio": "New member of the team.",
       "events": [
+        "hicybercon-ctf-2026",
+        "metactf-2026-10",
         "hitcon-ctf-2026"
       ]
     },

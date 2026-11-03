@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tasmota Vault · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="An ESP32 Tasmota flash image holds a LittleFS vault and a custom Berry agent. Decoding the agent's unseal routine from bytecode and replaying its KDF and AEAD with the epoch and nonce from the MQTT capture opens the sealed record." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>tasmota-vault</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Tasmota Vault <span class="page-sub">Berry bytecode, LittleFS and MQTT</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{b3rry_r0t4t10n_c94934d76344ab1151e03afd}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="summary"><a class="wu-anchor" href="#summary" aria-hidden="true">#</a>Summary</h2>
+<p>An ESP32 Tasmota32 v15.6.0 flash image contains a custom Berry agent plus a
+LittleFS partition holding a vault (device id, per-epoch keyring, sealed
+record). A short MQTT capture delivers the <code>VaultRotate</code> request (epoch +
+nonce) the gateway authenticated. Reconstructing the agent&#39;s <code>unseal()</code>
+routine from the Berry bytecode and replaying the KDF/AEAD offline recovers
+the sealed record.</p>
+<p><strong>Flag: <code>hiCTF{b3rry_r0t4t10n_c94934d76344ab1151e03afd}</code></strong></p>
+<h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
+<ul>
+<li><code>flash.bin</code> - 4 MiB ESP32 flash, physical offsets preserved.</li>
+<li><code>mqtt.pcap</code> - MQTT 3.1.1 lab traffic (historical state + a TCP retransmit).</li>
+<li><code>upstream/Tasmota-v15.6.0.tar.gz</code> - pinned source (Berry + <code>berry_port</code>).</li>
+</ul>
+<h2 id="1-partition-table"><a class="wu-anchor" href="#1-partition-table" aria-hidden="true">#</a>1. Partition table</h2>
+<p>ESP32 partition table at offset <code>0x8000</code>:</p>
+<table>
+<thead>
+<tr>
+<th>label</th>
+<th>type/subtype</th>
+<th>offset</th>
+<th>size</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>nvs</td>
+<td>1/2</td>
+<td>0x9000</td>
+<td>0x5000</td>
+</tr>
+<tr>
+<td>otadata</td>
+<td>1/0</td>
+<td>0xe000</td>
+<td>0x2000</td>
+</tr>
+<tr>
+<td>safeboot</td>
+<td>0/0</td>
+<td>0x10000</td>
+<td>0xd0000</td>
+</tr>
+<tr>
+<td>app0</td>
+<td>0/0x10</td>
+<td>0xe0000</td>
+<td>0x2d0000</td>
+</tr>
+<tr>
+<td>spiffs</td>
+<td>1/0x82</td>
+<td><strong>0x3b0000</strong></td>
+<td><strong>0x50000</strong></td>
+</tr>
+</tbody></table>
+<p>The partition labelled <code>spiffs</code> actually holds LittleFS (disk format 2.0,
+erase block 4096) per <code>recovery.txt</code>.</p>
+<h2 id="2-carve-and-read-littlefs"><a class="wu-anchor" href="#2-carve-and-read-littlefs" aria-hidden="true">#</a>2. Carve and read LittleFS</h2>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">dd</span> <span class="hljs-keyword">if</span>=flash.bin of=/tmp/lfs.img bs=1 skip=$((<span class="hljs-number">0</span>x3b0000)) count=$((<span class="hljs-number">0</span>x50000))</span></span></code></pre>
+      
+    </figure><p>Read with <code>littlefs-python</code> (mount via <code>LittleFS(block_size=4096, block_count=128)</code>,
+<code>fs.context.buffer = image</code>, <code>fs.mount()</code>). Extracted:</p>
+<ul>
+<li><code>/autoexec.be</code> - <code>load(&quot;vault.bec&quot;)</code></li>
+<li><code>/vault.bec</code> - 1464 bytes, Berry bytecode v4 (32-bit int/float)</li>
+<li><code>/vault/device.id</code> - 16 bytes  <code>f5ed39bba88daddd7159956e7ee8254b</code></li>
+<li><code>/vault/keyring.bin</code> - 108 bytes = 3 × (4-byte LE epoch || 32-byte key)</li>
+<li><code>/vault/sealed.bin</code> - 74 bytes  = 12-byte IV || 46-byte ciphertext || 16-byte tag</li>
+</ul>
+<p>keyring entries: epoch 6, 7, 8 with 32-byte keys each.</p>
+<h2 id="3-mqtt-traffic"><a class="wu-anchor" href="#3-mqtt-traffic" aria-hidden="true">#</a>3. MQTT traffic</h2>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">tshark -r mqtt.pcap -Y mqtt -T fields -e mqtt.topic -e mqtt.msg</span></span></code></pre>
+      
+    </figure><p>Publishes on <code>farm/gw-01/cmnd/VaultRotate</code> (JSON, hex payloads):</p>
+<ul>
+<li>epoch 7: <code>{&quot;device&quot;:&quot;f5ed…254b&quot;,&quot;epoch&quot;:7,&quot;nonce&quot;:&quot;9bb1…65f0&quot;}</code></li>
+<li>epoch 8: <code>{&quot;device&quot;:&quot;f5ed…254b&quot;,&quot;epoch&quot;:8,&quot;nonce&quot;:&quot;1a3d…2606&quot;}</code></li>
+</ul>
+<p>(<code>nonce</code> is a 32-byte hex value; the epoch-8 publish is a TCP
+retransmission/duplicate of the same rotation.)</p>
+<h2 id="4-decode-the-berry-agent"><a class="wu-anchor" href="#4-decode-the-berry-agent" aria-hidden="true">#</a>4. Decode the Berry agent</h2>
+<p>Use the pure-Python Berry port from the pinned source:</p>
+<figure class="wu-code" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> sys; sys.path.insert(<span class="hljs-number">0</span>,<span class="hljs-string">&#x27;.../lib/libesp32/berry&#x27;</span>)</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">from</span> berry_port <span class="hljs-keyword">import</span> be_vm, be_bytecode, be_debug</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">vm = be_vm.be_vm_new()</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">cl = be_bytecode.be_bytecode_load(vm, <span class="hljs-string">&#x27;vault.bec&#x27;</span>)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">be_debug.be_dumpclosure(cl)   <span class="hljs-comment"># + walk proto.ptab for sub-protos</span></span></span></code></pre>
+      
+    </figure><p>The port&#39;s defaults (<code>BE_INTGER_TYPE=0</code>, <code>BE_USE_SINGLE_FLOAT=1</code>) already match
+the bytecode header (<code>BE CD FE 04 00 …</code>).</p>
+<p><code>unseal(request)</code> reconstructed:</p>
+<ol>
+<li><code>req = json.load(request)</code>; verify <code>bytes(req.device) == read_blob(&quot;vault/device.id&quot;)</code>.</li>
+<li><code>epoch</code> must be <code>int</code> and <code>&gt;= 1</code>; <code>nonce</code> must be 32 bytes.</li>
+<li>Look up the 32-byte key for <code>epoch</code> in <code>vault/keyring.bin</code>
+(entries of <code>4 + 32</code> bytes); missing epoch → error <code>epoch</code>, more than one
+→ <code>duplicate epoch</code>.</li>
+<li><code>info = bytes().fromstring(&quot;tasmota-vault/unwrap/v2&quot;) + bytes(&quot;00&quot;)</code>
+→ <code>b&quot;tasmota-vault/unwrap/v2\x00&quot;</code>.</li>
+<li><code>derived = HMAC_SHA256(key, info + device.id + epoch_le4 + nonce)</code>.</li>
+<li><code>gcm = crypto.AES_GCM(derived, sealed[0:12])</code>
+<code>plaintext = gcm.decrypt(sealed[12:58])</code>; <code>gcm.tag() == sealed[58:74]</code>.</li>
+</ol>
+<p>Note the vm uses inclusive ranges for slices, so the split is IV <code>[0:12)</code>,
+ciphertext <code>[12:58)</code>, tag <code>[58:74)</code>.</p>
+<h2 id="5-recover-the-record"><a class="wu-anchor" href="#5-recover-the-record" aria-hidden="true">#</a>5. Recover the record</h2>
+<figure class="wu-code" data-lines="9">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> hmac, hashlib</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">from</span> cryptography.hazmat.primitives.ciphers.aead <span class="hljs-keyword">import</span> AESGCM</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">key  = <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&quot;770a76ce441e8722482aa05dcc8f06424a4ade0c3cf0f0e01676a9d0ac69ef66&quot;</span>)  <span class="hljs-comment"># epoch 8</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">dev  = <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&quot;f5ed39bba88daddd7159956e7ee8254b&quot;</span>)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">non  = <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&quot;1a3dfb1382455e073f25450c8c8cee24ba89b0a924f86b7103a732ab902a2606&quot;</span>)</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">msg  = <span class="hljs-string">b&quot;tasmota-vault/unwrap/v2\x00&quot;</span> + dev + (<span class="hljs-number">8</span>).to_bytes(<span class="hljs-number">4</span>,<span class="hljs-string">&quot;little&quot;</span>) + non</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">dk   = hmac.new(key, msg, hashlib.sha256).digest()</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">iv, ct, tag = sealed[:<span class="hljs-number">12</span>], sealed[<span class="hljs-number">12</span>:<span class="hljs-number">58</span>], sealed[<span class="hljs-number">58</span>:]</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">pt   = AESGCM(dk).decrypt(iv, ct + tag, <span class="hljs-literal">None</span>)</span></span></code></pre>
+      
+    </figure><p>Only the epoch-8 request (with a NUL separator) yields a valid GCM tag
+(the epoch-7 historical request does not authenticate).</p>
+<p>Result: <code>hiCTF{b3rry_r0t4t10n_c94934d76344ab1151e03afd}</code></p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">hiCTF{b3rry_r0t4t10n_c94934d76344ab1151e03afd}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#summary">Summary</a></li><li><a href="#files">Files</a></li><li><a href="#1-partition-table">1. Partition table</a></li><li><a href="#2-carve-and-read-littlefs">2. Carve and read LittleFS</a></li><li><a href="#3-mqtt-traffic">3. MQTT traffic</a></li><li><a href="#4-decode-the-berry-agent">4. Decode the Berry agent</a></li><li><a href="#5-recover-the-record">5. Recover the record</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="tessera.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">TESSERA</span></a>
+    <a class="wu-pager-link wu-pager-next" href="the-miner-that-mined-the-victim.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">The Miner That Mined The Victim</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

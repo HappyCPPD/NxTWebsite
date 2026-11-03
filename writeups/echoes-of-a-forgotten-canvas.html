@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Echoes of a Forgotten Canvas · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The PNG decodes to 500 more rows than its header claims, with half the flag in the alpha channel. A ZIP after IEND, a steghide payload keyed by the poem and an over-tall JPEG scan give up the rest." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>echoes-of-a-forgotten-canvas</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Echoes of a Forgotten Canvas <span class="page-sub">Four nested stego layers</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{mu1t!14y3r3d_st3g0o_ju5t_l0v333}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hiCTF{mu1t!14y3r3d_st3g0o_ju5t_l0v333}</code></p>
+<h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
+<ul>
+<li><code>chall.png</code> (8,877,501 B) - declared 4000x4000, but the IDAT actually decodes to <strong>4000x4500</strong>.</li>
+</ul>
+<h2 id="solve-four-layers"><a class="wu-anchor" href="#solve-four-layers" aria-hidden="true">#</a>Solve (four layers)</h2>
+<h3 id="layer-1-hidden-rows-in-the-png-alpha-channel"><a class="wu-anchor" href="#layer-1-hidden-rows-in-the-png-alpha-channel" aria-hidden="true">#</a>Layer 1 - hidden rows in the PNG (alpha channel)</h3>
+<p>The IHDR says 4000x4000 but <code>zlib</code>/PIL decode the IDAT to <strong>4000x4500</strong> (500 extra rows;
+the IHDR CRC was computed over the true 4500 height). The extra rows are <strong>black in RGB</strong>
+and carry rasterised text in the <strong>alpha channel</strong> at the bottom-right (~x3759-3969, y4461-4481):</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">hiCTF{mu1t!14y3r3d_            -&gt;  &quot;multilayered_&quot;</code></pre>
+      
+    </figure><h3 id="layer-2-appended-zip-after-iend"><a class="wu-anchor" href="#layer-2-appended-zip-after-iend" aria-hidden="true">#</a>Layer 2 - appended ZIP after IEND</h3>
+<p><code>IEND</code> ends at offset 5518394; the remaining <strong>3,359,095 bytes are a password-protected
+(ZipCrypto) ZIP</strong> containing <code>carrier.jpg</code>. Cracked with a wordlist:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">dreamcatcher                   (hint: poem line &quot;Dreams take flight&quot;)</code></pre>
+      
+    </figure><p><code>carrier.jpg</code> (2816x1536) is a photo of a parchment poem titled <strong>&quot;WILDER ECHOES&quot;</strong>.</p>
+<h3 id="layer-3-steghide-on-carrierjpg"><a class="wu-anchor" href="#layer-3-steghide-on-carrierjpg" aria-hidden="true">#</a>Layer 3 - steghide on carrier.jpg</h3>
+<p>The poem&#39;s words are the password source. <code>steghide</code> payload password:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">profound                       (poem line &quot;A profound stillness settles&quot;)</code></pre>
+      
+    </figure><p>Extracts <strong><code>finall.jpg</code></strong> (495x647, a Gozo/Malta alley photo).</p>
+<h3 id="layer-4-hidden-strip-in-the-jpeg-scan-of-finalljpg"><a class="wu-anchor" href="#layer-4-hidden-strip-in-the-jpeg-scan-of-finalljpg" aria-hidden="true">#</a>Layer 4 - hidden strip in the JPEG scan of finall.jpg</h3>
+<p><code>finall.jpg</code> triggers libjpeg: <em>&quot;3377 extraneous bytes before marker 0xd9&quot;</em> - the scan holds
+MCU rows for a <strong>taller image than the declared height</strong>. Patch the SOF0 height
+(offset 199-200, <code>0x0287</code>=647) upward and re-decode; the strip below y=647 renders:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">st3g0o_ju5t_l0v333}</code></pre>
+      
+    </figure><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">hiCTF{mu1t!14y3r3d_st3g0o_ju5t_l0v333}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#files">Files</a></li><li><a href="#solve-four-layers">Solve (four layers)</a><ol class="wu-toc-sub"><li><a href="#layer-1-hidden-rows-in-the-png-alpha-channel">Layer 1 - hidden rows in the PNG (alpha channel)</a></li><li><a href="#layer-2-appended-zip-after-iend">Layer 2 - appended ZIP after IEND</a></li><li><a href="#layer-3-steghide-on-carrierjpg">Layer 3 - steghide on carrier.jpg</a></li><li><a href="#layer-4-hidden-strip-in-the-jpeg-scan-of-finalljpg">Layer 4 - hidden strip in the JPEG scan of finall.jpg</a></li></ol></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="forgotten-secrets.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Forgotten Secrets</span></a>
+    <a class="wu-pager-link wu-pager-next" href="roof-of-africa.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Roof of Africa</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

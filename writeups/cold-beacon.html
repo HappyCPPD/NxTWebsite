@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cold Beacon · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A Nim implant checks a 24-byte key against 23 table-driven XOR, sum and product constraints plus three extra relations. Every constraint is byte-local, so z3 solves it straight to C0ldB34c0n::unl0ck::7a3f, which unseals the config." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>cold-beacon</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Cold Beacon <span class="page-sub">Nim key validator solved with z3</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{c0ld_b34c0n_cfg_uns34l3d_fr0m_th3_s4mpl3}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="result"><a class="wu-anchor" href="#result" aria-hidden="true">#</a>Result</h2>
+<ul>
+<li><strong>Key:</strong> <code>C0ldB34c0n::unl0ck::7a3f</code></li>
+<li><strong>Flag:</strong> <code>hiCTF{c0ld_b34c0n_cfg_uns34l3d_fr0m_th3_s4mpl3}</code></li>
+</ul>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">$ ./cold-beacon 'C0ldB34c0n::unl0ck::7a3f'
+hiCTF{c0ld_b34c0n_cfg_uns34l3d_fr0m_th3_s4mpl3}</code></pre>
+      
+    </figure><h2 id="files"><a class="wu-anchor" href="#files" aria-hidden="true">#</a>Files</h2>
+<ul>
+<li><code>extracted/cold-beacon</code> - ELF x86-64, stripped, non-PIE, dynamically linked, <strong>compiled from Nim</strong> (evidence: <code>syncio.nim</code>, <code>cmdline.nim</code>, <code>IOError</code>, <code>paramStr</code>, <code>readFile</code>, Nim signal handlers).</li>
+<li><code>cold-beacon.zip</code>, <code>chall-info.txt</code>.</li>
+</ul>
+<h2 id="triage-analysis"><a class="wu-anchor" href="#triage-analysis" aria-hidden="true">#</a>Triage / analysis</h2>
+<ul>
+<li>Takes one argument (<code>./cold-beacon &lt;key&gt;</code>). Wrong/absent key prints <code>config sealed</code>.</li>
+<li><code>strings</code>/rodata showed:<ul>
+<li>a <strong>TracerPid anti-debug</strong>: it reads <code>/proc/self/status</code> and bails if <code>TracerPid</code> is non-zero (function <code>0x403aec</code>).</li>
+<li>an obfuscated 14-byte string at <code>.rodata 0x405e00</code> (<code>954&lt;3=z)?;6?&gt;P</code>) - decoded at runtime by <code>XOR 0x5a</code> → <code>&quot;config sealed\n&quot;</code> (function <code>0x4041f9</code>).</li>
+<li>SHA-256 (K constants at <code>0x405e80</code>, IV at <code>0x405f80</code>, custom compression routine at <code>0x403de7</code>).</li>
+<li>an <strong>encrypted config blob</strong> at <code>.rodata 0x405e40</code> (47 bytes) and a 32-byte <strong>expected SHA-256</strong> value at <code>0x405e20</code>.</li>
+</ul>
+</li>
+</ul>
+<h2 id="key-check-function-0x4043c0-0x403cff-0x403dc4"><a class="wu-anchor" href="#key-check-function-0x4043c0-0x403cff-0x403dc4" aria-hidden="true">#</a>Key check (function <code>0x4043c0</code> / <code>0x403cff</code> / <code>0x403dc4</code>)</h2>
+<p>Arguments are the Nim <code>argv</code> string; Nim stores a string as <code>{len; data…}</code> so the key bytes live at <code>argv_ptr + 8</code>, length must be <strong>24</strong>.</p>
+<p><code>0x403cff</code> is a table-driven validator over 23 constraint groups. For each group it indexes key bytes via a permutation table (<code>0x405fc0</code>) and applies one of three ops against an expected byte (<code>0x405fa0</code>), with counts (<code>0x406050</code>) and opcodes (<code>0x406070</code>):</p>
+<ul>
+<li><code>op 0/3/5</code> → XOR of the selected key bytes must equal expected</li>
+<li><code>op 1/4</code>   → (mod-256) SUM of the selected key bytes must equal expected</li>
+<li><code>op 2</code>     → product (low byte) of two selected key bytes must equal expected</li>
+</ul>
+<p><code>0x403dc4</code> adds three more relations (key index = raw offset − 8):</p>
+<ul>
+<li><code>key[10] = (0xa8 - key[9]) &amp; 0xff</code></li>
+<li><code>key[20] = key[12] ^ key[4]</code></li>
+<li><code>(key[12] + key[13]) &amp; 0xff == 0xe3</code></li>
+</ul>
+<p>Solving the whole system (all constraints are linear/byte-local, so any solver works - used <button type="button" class="wu-gloss" data-def="An SMT solver: give it symbolic variables and constraints and it finds a satisfying assignment or proves none exists.">z3</button> with a printable-ASCII constraint):</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">KEY: C0ldB34c0n::unl0ck::7a3f</code></pre>
+      
+    </figure><h2 id="config-decryption-function-0x404333"><a class="wu-anchor" href="#config-decryption-function-0x404333" aria-hidden="true">#</a>Config decryption (function <code>0x404333</code>)</h2>
+<p>Once the key passes (and TracerPid == 0):</p>
+<ol>
+<li><code>sha256(key)</code> (<code>0x403de7</code>) is computed into a 32-byte value.</li>
+<li>Keystream generated by <code>0x404119(sha256, 47)</code>: repeatedly <code>sha256(state32 || be32(counter))</code> for counter = 0,1,… concatenating digests until 47 bytes are produced (SHA-256-based DRBG/CTR).</li>
+<li>Ciphertext = <code>.rodata 0x405e40</code> (47 bytes); plaintext = ciphertext XOR keystream.</li>
+<li>It first compares <code>sha256(key)</code> against the stored value at <code>0x405e20</code> (integrity/self-check). Then prints the decrypted config, i.e. the flag string.</li>
+</ol>
+<h2 id="commands-used"><a class="wu-anchor" href="#commands-used" aria-hidden="true">#</a>Commands used</h2>
+<figure class="wu-code" data-lines="13">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">file extracted/cold-beacon</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">readelf -S/-d extracted/cold-beacon</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">objdump -d extracted/cold-beacon            <span class="hljs-comment"># located refs to 0x405e00/0x405e20/0x405e40</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">objdump -s -j .rodata extracted/cold-beacon <span class="hljs-comment"># extracted tables + blobs</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"><span class="hljs-comment"># Bypass the TracerPid anti-debug for dynamic analysis (LD_PRELOAD shim</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-comment"># redirects /proc/self/status to a file with &quot;TracerPid:\t0&quot;);</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"><span class="hljs-comment"># then gdb at 0x403cff / 0x403dc4 to confirm the string ABI and constraint logic.</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-comment"># Solve key constraints (z3)</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">python3 solve.py            <span class="hljs-comment"># -&gt; C0ldB34c0n::unl0ck::7a3f</span></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">./extracted/cold-beacon <span class="hljs-string">&#x27;C0ldB34c0n::unl0ck::7a3f&#x27;</span></span></span></code></pre>
+      
+    </figure><h2 id="notes"><a class="wu-anchor" href="#notes" aria-hidden="true">#</a>Notes</h2>
+<ul>
+<li>Non-PIE → absolute addresses in gdb work directly.</li>
+<li>The TracerPid check only matters under a debugger; a normal run passes it, so the real key alone is sufficient (verified without any preload).</li>
+</ul>
+<h2 id="the-validators-are-not-enough"><a class="wu-anchor" href="#the-validators-are-not-enough" aria-hidden="true">#</a>The validators are not enough</h2>
+<p>One catch: the 23 table groups (<code>0x403cff</code>) + 3 relations (<code>0x403dc4</code>) do <strong>not</strong> pin the
+key - they are necessary but not sufficient.</p>
+<ul>
+<li>Enumerating every printable-ASCII key of length 24 that satisfies all 26 relations
+yields exactly <strong>4</strong> candidates:<ul>
+<li><code>C ltB#$c0n::unl0ck::7a3f</code></li>
+<li><code>C</code>l4Bcdc0n::unl0ck::7a3f`</li>
+<li><code>Cpl$Bstc0n::unl0ck::7a3f</code></li>
+<li><code>C0ldB34c0n::unl0ck::7a3f</code>  ← only one that unlocks</li>
+</ul>
+</li>
+<li>Confirmed in gdb: the first three <strong>pass</strong> both <code>0x403cff</code> and <code>0x403dc4</code>
+(al=1 for each) yet the binary prints <code>config sealed</code>. So the validators alone are
+a decoy-friendly check.</li>
+<li>The real gate is at <code>0x4043c8</code>: after decrypting <code>.rodata 0x405e40</code>, it computes
+<code>sha256(plaintext)</code> and compares against the 32-byte pin at <code>.rodata 0x405e20</code>.
+The stored pin is <strong>sha256 of the flag</strong>, NOT sha256(key) (verified:
+<code>sha256(b&quot;hiCTF{c0ld_b34c0n_cfg_uns34l3d_fr0m_th3_s4mpl3}&quot;)</code> == <code>0502f285…66ad40</code>).
+Because the keystream is seeded by <code>sha256(key)</code>, only the single key whose
+seed reproduces the pinned plaintext passes — a classic tag-pinned key recovery.</li>
+<li>Keystream <code>0x404119</code>: <code>sha256(key)</code> → DRBG <code>sha256(state32 || be32(counter))</code>,
+counter = 0,1,… concatenated to 47 bytes. <code>pt = ct XOR ks</code> → flag. Reproduced
+byte-exact offline.</li>
+</ul>
+<h2 id="result-2"><a class="wu-anchor" href="#result-2" aria-hidden="true">#</a>Result</h2>
+<ul>
+<li><strong>Key:</strong> <code>C0ldB34c0n::unl0ck::7a3f</code></li>
+<li><strong>Flag:</strong> <code>hiCTF{c0ld_b34c0n_cfg_uns34l3d_fr0m_th3_s4mpl3}</code></li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#result">Result</a></li><li><a href="#files">Files</a></li><li><a href="#triage-analysis">Triage / analysis</a></li><li><a href="#key-check-function-0x4043c0-0x403cff-0x403dc4">Key check (function 0x4043c0 / 0x403cff / 0x403dc4)</a></li><li><a href="#config-decryption-function-0x404333">Config decryption (function 0x404333)</a></li><li><a href="#commands-used">Commands used</a></li><li><a href="#notes">Notes</a></li><li><a href="#the-validators-are-not-enough">The validators are not enough</a></li><li><a href="#result-2">Result</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="obfuscated-flow.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Obfuscated Flow</span></a>
+    <a class="wu-pager-link wu-pager-next" href="epsilon-drift.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Epsilon Drift</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cairn · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The key comes from a deterministic isogeny walk of 2^20 sequential steps over GF(p^2), with no shortcuts. Generic root finding would take days, so each step uses one exponentiation to p and a few gcds, bringing the whole walk down to under three hours on one core." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>cairn</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Cairn <span class="page-sub">A 2^20-step isogeny walk, done fast</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{w41k_th3_sup3rs1n9u14r_l46yr1ntH}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag: <code>hiCTF{w41k_th3_sup3rs1n9u14r_l46yr1ntH}</code></strong></p>
+<p>Runtime of the walk: 9,891 s (2 h 45 m) at 9.44 ms/step on one core; 1,048,576 steps.
+Final state j_T = (2951744835154356679408485058539998725114852725772335444978399055687248892073,
+76297261829986891261504719508868871098352200233656976244600190934732692176052)
+key = SHA256(ser(j_T) || &quot;IsogenyLabyrinth&quot;) = bf722c55d3a4656cd731699335706f1dab4ba16caf8c2a6bb45b1f949adbc5ca</p>
+<h2 id="the-challenge"><a class="wu-anchor" href="#the-challenge" aria-hidden="true">#</a>The challenge</h2>
+<p>Rule sheet <code>challenge files/RULES.md</code> (and the author&#39;s design source, SAC2021
+&quot;Verifiable Isogeny Walks: Towards an Isogeny-based Postquantum VDF&quot;):
+p = 2^256-2^32-977, GF(p^2) = GF(p)[i]/(i^2+1), j0 = 1728, T = 2^20, L = [2,3,5,7].
+Step i: h = SHA256(LE32(a)||LE32(b)||BE8(i)||salt); l = L[h[0] mod 4];
+f_sq = squarefree part of Phi_l(j,Y); j := (h[1] mod n)-th smallest root of f_sq in GF(p^2).
+Then key = SHA256(ser(j_T)||&quot;IsogenyLabyrinth&quot;) and the flag is AES-256-GCM.</p>
+<p>This is a VDF by construction: 2^20 <em>sequential</em> root extractions, and each state is a
+fresh 512-bit field element, so there is no lookahead, no cycle and no reuse. &quot;One step
+at a time. Do not look back.&quot; is literal.</p>
+<h2 id="why-naive-solves-are-hopeless"><a class="wu-anchor" href="#why-naive-solves-are-hopeless" aria-hidden="true">#</a>Why naive solves are hopeless</h2>
+<p>Finding the roots of a degree-&lt;=8 polynomial that splits over GF(p^2) by generic
+factorisation costs 20-130 ms/step with PARI / NTL / FLINT / Sage (<code>f.roots()</code> /
+<code>factor()</code>), i.e. 6-40 hours for 2^20 steps. Measured on this box: Sage 134 ms/step,
+PARI factor 29 ms, PARI Mod(T,N)^p 10 ms, FLINT factor 7-13 ms, NTL CanZass 14 ms.</p>
+<h2 id="the-fast-method-one-exponentiation-to-p-per-step"><a class="wu-anchor" href="#the-fast-method-one-exponentiation-to-p-per-step" aria-hidden="true">#</a>The fast method: one exponentiation to p per step</h2>
+<ol>
+<li><code>N = f*conj(f)</code> in GF(p)[Y] is just <code>(Re f)^2 + (Im f)^2</code> (no GF(p^2) arithmetic
+needed). Its roots are the roots of f and their conjugates, so every irreducible
+factor of <code>Nsf = radical(N)</code> has degree 1 or 2.</li>
+<li><code>A = Y^p mod Nsf</code> - the whole cost of the step (256 squarings of deg-&lt;=16 polys).</li>
+<li><code>G1 = gcd(Nsf, A-Y)</code> are the F_p-rational factors; <code>H1 = Nsf/G1</code> is a product of
+distinct irreducible quadratics <code>Y^2 - t_j Y + n_j</code>, because Y^p == conj(z) ==
+t_j - Y in the component of a conjugate pair.</li>
+<li><code>T = A + Y mod H1</code> is therefore F_p-valued with value <code>t_j</code> in component j. Its
+values (the traces) are the roots of a degree-m (m &lt;= 8) polynomial Psi over F_p,
+recovered with Newton&#39;s identities from <code>sum_j t_j^k = Tr_{alg}(T^k)/2</code>, where Tr
+is the trace of multiplication-by-x on F_p[Y]/H1 (an m x m matrix, cheap).</li>
+<li>Split H1 by <code>gcd(H1, T - t)</code> for each root t of Psi (roots of a split poly over
+F_p by Cantor-Zassenhaus/EDF with one small pow_mod per level).</li>
+<li>Roots of <code>Y^2 - tY + n</code> are <code>(t +- sqrt(t^2-4n))/2</code>. Every element of F_p is a
+square in GF(p^2), and <code>s = disc^((p+1)/4)</code> gives <code>s^2 = +disc</code> (QR, sqrt is s) or
+<code>-disc</code> (non-QR, sqrt is s*i) - exactly one exponentiation, no Legendre test.</li>
+<li>Keep the candidates with <code>f(candidate) == 0</code> (this discards the conjugate roots),
+sort by (a,b) as unsigned 256-bit pairs, take index <code>h[1] mod n</code>.</li>
+</ol>
+<p>Two further savings, both exact:</p>
+<ul>
+<li>The previous vertex is a root of Phi_l(j,.) only when the degree did not change
+(the supplied Phi_l are not symmetric in X,Y - verified - so the backward edge
+exists only for the same l). It is deflated out whenever <code>Phi_l(j,j_prev) == 0</code>,
+which cuts the modulus degree by 2 for ~25% of steps.</li>
+<li>f_sq is only recomputed (via gcd(f,f&#39;)) when the number of distinct roots found
+differs from deg f; normally f is already squarefree.</li>
+</ul>
+<h2 id="verification"><a class="wu-anchor" href="#verification" aria-hidden="true">#</a>Verification</h2>
+<ul>
+<li>Root sets per step identical to an independent Sage implementation
+(<code>ref_roots.py</code>) for the first 25 steps, with and without the deflation path -
+<code>diff</code> clean. That cross-checks norm/radical/Frobenius/trace-Newton/quadratic
+extraction end to end.</li>
+<li>143 returned roots over 30 steps: each satisfies <code>f_sq(root) = 0</code>, count equals
+deg f_sq and the number of distinct roots, list is sorted.</li>
+<li>The final flag is gated by the AES-GCM tag: a wrong j_T cannot produce a flag.
+It was re-derived and decrypted with a second library (python <code>cryptography</code>
+AESGCM) as well as pycryptodome, same plaintext, format <code>hiCTF{...}</code>.</li>
+<li>The walk ran 1,048,576 steps with no assertion failure (the solver raises rather
+than continuing on any internal inconsistency).</li>
+</ul>
+<h2 id="pitfalls-worth-remembering"><a class="wu-anchor" href="#pitfalls-worth-remembering" aria-hidden="true">#</a>Pitfalls worth remembering</h2>
+<ul>
+<li>cypari2 has no <code>deriv</code>; <code>pari.Polrev</code> vs <code>pari.Pol</code> (ascending vs descending) and
+PARI <code>factor</code> over a modulus needs the <code>Mod(1,p)</code> factor or it factors over Z.</li>
+<li>FLINT <code>fmpz_mod_poly</code> gcd/divmod/radical/pow_mod/factor are the useful entry
+points from python (<code>python-flint</code>, installed for the system python3.14).</li>
+<li>The <code>Re/Im</code>-gcd shortcut (&quot;F_p-rational roots = gcd(Re f, Im f)&quot;) is WRONG in
+general: fsq(z)=0 gives Re(z) = -i*Im(z), not Re(z)=Im(z)=0. The norm-based route
+(<code>radical(f*conj(f))</code>) is the correct one.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#the-challenge">The challenge</a></li><li><a href="#why-naive-solves-are-hopeless">Why naive solves are hopeless</a></li><li><a href="#the-fast-method-one-exponentiation-to-p-per-step">The fast method: one exponentiation to p per step</a></li><li><a href="#verification">Verification</a></li><li><a href="#pitfalls-worth-remembering">Pitfalls worth remembering</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="rocinate.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Rocinate</span></a>
+    <a class="wu-pager-link wu-pager-next" href="chronogrind.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">ChronoGrind</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Titan Relay · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A Rust console app runs uploaded capsules as bytecode, after XOR-decrypting them with a position key. A guarded leak plus a signed-index out-of-bounds write reaches a privileged handler that reads /flag.txt through Wine's Z: drive." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>titan-relay</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Titan Relay <span class="page-sub">Rust VM capsule to a privileged handler</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-pwn">pwn</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{ru5t_vm_g4te_and_h4ndler_ch41n_152bad75bf}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag: <code>hiCTF{ru5t_vm_g4te_and_h4ndler_ch41n_152bad75bf}</code></strong></p>
+<p>Recovered from the <strong>live</strong> service (the server itself printed it):</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">$ python3 exploit.py --remote --host titan-relay-2409d376ae08.chall.hiddeninvestigations.net
+[*] trying path b'Z:/flag.txt.'  capsule 392 bytes
+=== TITAN RELAY :: route consensus vm ===
+[+] capsule accepted
+hiCTF{ru5t_vm_g4te_and_h4ndler_ch41n_152bad75bf}</code></pre>
+      
+    </figure><h2 id="artifact"><a class="wu-anchor" href="#artifact" aria-hidden="true">#</a>Artifact</h2>
+<p><code>titan_relay.exe</code> - PE32+ x86-64 <strong>Rust</strong> console app, 286208 B. Served under <strong>Wine</strong> inside
+ubuntu:24.04 via <code>socat -T 60 TCP-LISTEN:7260,reuseaddr,fork EXEC:&quot;./run_titan.sh work&quot;,su=ctf</code>
+(the platform proxies it to :1337 over TLS). The real flag lives at <code>/flag.txt</code> (mode 444);
+the <code>flag.txt</code> shipped in the zip is a placeholder.</p>
+<h2 id="console-surface"><a class="wu-anchor" href="#console-surface" aria-hidden="true">#</a>Console / surface</h2>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">=== TITAN RELAY :: route consensus vm ===
+1) load capsule
+2) quit
+Option &gt; Capsule length &gt; Capsule hex &gt;</code></pre>
+      
+    </figure><p>You upload a hex byte-string (&quot;capsule&quot;) which the app treats as bytecode for a small VM.</p>
+<h2 id="why-a-raw-capsule-never-runs-the-first-trap"><a class="wu-anchor" href="#why-a-raw-capsule-never-runs-the-first-trap" aria-hidden="true">#</a>Why a raw capsule never runs (the first trap)</h2>
+<p>The loader <strong>decrypts</strong> the uploaded capsule before executing it:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">plain[i] = cipher[i] ^ ((0x71 + 0x3d * i) &amp; 0xff)</code></pre>
+      
+    </figure><p>(SIMD at <code>0x1400031bc–0x140003301</code>; scalar tail at <code>0x1400032ec</code> computes <code>key = 0x71 + 0x3d*i</code>.)
+So a &quot;valid&quot; opcode like <code>0x51</code> sends <code>0x51 ^ 0x71</code> and the VM runs off the end →
+silent <code>[!] route fault contained</code>. Capsules must be encrypted with that keystream.</p>
+<h2 id="vm-layout"><a class="wu-anchor" href="#vm-layout" aria-hidden="true">#</a>VM layout</h2>
+<ul>
+<li>Dispatch loop inlined in <code>main</code> at <strong><code>0x1400035a7–0x140003c6c</code></strong>; two decode tables:
+<code>T1 @0x14003c164</code> (0x71 - 0xB1), <code>T2 @0x14003c0a0</code> (0x21 - 0x51).</li>
+<li>8 registers at <code>state+0x18</code>; memory <code>mem[0..15]</code> at <code>state+0x58</code>;
+a <strong><code>relay</code> array at <code>state+0xd8</code></strong> whose first 3 entries leak <code>lo32(canary)</code>, <code>hi32(canary)</code>,
+<code>hi32^valid</code> - so the canary is obtainable <em>from inside the VM</em>.</li>
+</ul>
+<h2 id="the-primitive-submit-host-createfilew-arbitrary-file-read"><a class="wu-anchor" href="#the-primitive-submit-host-createfilew-arbitrary-file-read" aria-hidden="true">#</a>The primitive: SUBMIT → host <code>CreateFileW</code> (arbitrary file read)</h2>
+<p><code>SUBMIT</code> = opcode <strong><code>0x51</code></strong>, handler <code>0x140003b26–0x140003b4e</code>, which requires:</p>
+<ul>
+<li><code>state+0x08 == state+0x00</code> (canary echoed)</li>
+<li><code>state+0x10 == 0x1400018c0</code> (the validator&#39;s PIE-relative address)</li>
+<li><code>reg6 != 0</code></li>
+</ul>
+<p>then <code>call 0x1400018c0</code> at <code>0x140003c62</code>. The host validator expects the 0x20-byte struct at <code>reg6</code>:</p>
+<table>
+<thead>
+<tr>
+<th>off</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>+0x00</td>
+<td>canary</td>
+</tr>
+<tr>
+<td>+0x08</td>
+<td>pointer to the filename buffer</td>
+</tr>
+<tr>
+<td>+0x10</td>
+<td><code>lo32(can) ^ hi32(can)</code></td>
+</tr>
+<tr>
+<td>+0x14</td>
+<td><code>0x0b</code> (11 - the filename length)</td>
+</tr>
+<tr>
+<td>+0x18</td>
+<td><code>+lo32(can)</code></td>
+</tr>
+</tbody></table>
+<p>The buffer is de-obfuscated as <code>buf[i] ^ canary_byte(map(i))</code> with <code>map = 0..7,0..2</code> and the
+constraint <code>buf[11] == canary_byte(3)</code>; the resulting 11-byte NUL-free UTF-8 string is passed to
+<code>File::open</code> and the contents are printed. Failure prints <code>[!] order rejected</code>.</p>
+<h2 id="exploit"><a class="wu-anchor" href="#exploit" aria-hidden="true">#</a>Exploit</h2>
+<p><code>exploit.py</code> builds a capsule that (1) reads the canary via <code>RELAY</code>, (2) derives the validator
+address and all gate values, (3) sets up the 0x20-byte validator struct with the target filename,
+and (4) issues <code>SUBMIT</code>; the whole capsule is XOR-encrypted with the loader keystream.
+The target path used is the 11-byte <code>Z:/flag.txt.</code> (Wine maps <code>Z:</code> → <code>/</code>, so this opens
+<code>/flag.txt</code>; the trailing byte satisfies the 11-byte length/NUL-free constraint).</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 exploit.py --<span class="hljs-built_in">local</span>          <span class="hljs-comment"># proves the primitive against the shipped binary</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 exploit.py --remote --host &lt;instance&gt;   <span class="hljs-comment"># pulls the real flag</span></span></span></code></pre>
+      
+    </figure><h2 id="verification"><a class="wu-anchor" href="#verification" aria-hidden="true">#</a>Verification</h2>
+<p>The flag came out of the <strong>live</strong> server process - the reliable <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> for a pwn service
+(the local run can only prove the file-read primitive, since the shipped <code>flag.txt</code> is
+<code>hiCTF{fake_flag_for_local_testing}</code>).</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#artifact">Artifact</a></li><li><a href="#console-surface">Console / surface</a></li><li><a href="#why-a-raw-capsule-never-runs-the-first-trap">Why a raw capsule never runs (the first trap)</a></li><li><a href="#vm-layout">VM layout</a></li><li><a href="#the-primitive-submit-host-createfilew-arbitrary-file-read">The primitive: SUBMIT → host CreateFileW (arbitrary file read)</a></li><li><a href="#exploit">Exploit</a></li><li><a href="#verification">Verification</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="orphaned-context.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Orphaned Context</span></a>
+    <a class="wu-pager-link wu-pager-next" href="project-mangoo.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Project Mangoo</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

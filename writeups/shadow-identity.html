@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shadow Identity · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The poster is clean of metadata and hidden data, so it comes down to the face. Reverse searching a crop of it with the Miss Grand Tanzania caption finds the real person behind the AI-styled poster." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>shadow-identity</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Shadow Identity <span class="page-sub">Naming the face on a pageant poster</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-osint">osint</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{Jihan-Mohin-Dimachk}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<p>We were given a single file, <code>miss_grand.jpeg</code> (481x636), an AI-styled promotional poster reading &quot;Miss Grand Tanzania 2026&quot;. The task is to put the woman&#39;s full name in the flag.</p>
+<p><img src="../images/writeups/shadow-identity-attachment.jpg" alt="The challenge poster: a woman in a green beaded gown and crown, with a Tanzanian flag, Mount Kilimanjaro and gold filigree, captioned Miss Grand Tanzania 2026" width="481" height="636" loading="lazy"></p>
+<h2 id="solution"><a class="wu-anchor" href="#solution" aria-hidden="true">#</a>Solution</h2>
+<h3 id="step-1-rule-out-hidden-data"><a class="wu-anchor" href="#step-1-rule-out-hidden-data" aria-hidden="true">#</a>Step 1 - Rule out hidden data</h3>
+<p>First the usual checks, in case the name was buried instead of visible:</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>EXIF / GPS</td>
+<td>none, only basic JFIF density tags</td>
+</tr>
+<tr>
+<td>C2PA / JUMBF manifest</td>
+<td>none</td>
+</tr>
+<tr>
+<td>Trailing data after the JPEG EOI</td>
+<td>none (0 bytes)</td>
+</tr>
+<tr>
+<td>ASCII strings</td>
+<td>nothing readable, no flag, no handle</td>
+</tr>
+</tbody></table>
+<p>The image is clean. Everything we need is in the picture itself, so this is a face-identification problem, not a forensics one.</p>
+<h3 id="step-2-reverse-search-the-face"><a class="wu-anchor" href="#step-2-reverse-search-the-face" aria-hidden="true">#</a>Step 2 - Reverse search the face</h3>
+<p>The background (Kilimanjaro, the flag, the gold mandala) is AI filler, so the &quot;Miss Grand Tanzania 2026&quot; caption plus a crop of the face is what we search on. Running the face through reverse image search returns the real person behind the styled poster:</p>
+<table>
+<thead>
+<tr>
+<th>Engine</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Reverse image / face search</td>
+<td>matches the Miss Grand Tanzania 2026 titleholder</td>
+</tr>
+<tr>
+<td>News confirmation</td>
+<td>crowned Miss Grand Tanzania 2026 (Mwanza), then won Miss Grand International 2026 in Bangkok</td>
+</tr>
+</tbody></table>
+<p>Her full name, as carried by the international pageant press, is <strong>Jihan Mohin Dimachk</strong> (Tanzanian outlets also write it <em>Jihan Dimack</em>).</p>
+<h3 id="step-3-confirm"><a class="wu-anchor" href="#step-3-confirm" aria-hidden="true">#</a>Step 3 - Confirm</h3>
+<p>Cross-checking the news: Jihan Mohin Dimachk, representing Mwanza, won the national Miss Grand Tanzania title on 8 August 2026, then on 10 October 2026 became the first African woman to win Miss Grand International. The face, the sash title and the year all agree with the poster.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">text</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">hiCTF{Jihan-Mohin-Dimachk}</code></pre>
+      
+    </figure><h2 id="takeaways"><a class="wu-anchor" href="#takeaways" aria-hidden="true">#</a>Takeaways</h2>
+<ul>
+<li>Check for metadata, trailing bytes and embedded strings before assuming a poster is &quot;just&quot; an identify-the-person task, but do not over-think a clean file.</li>
+<li>AI-styled graphics still reverse-search on the real face. Crop to the face and ignore the generated background.</li>
+<li>Names cross borders in more than one spelling. Pin the identity down with a dated news source, and note the variant spelling the scoreboard expects.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#solution">Solution</a><ol class="wu-toc-sub"><li><a href="#step-1-rule-out-hidden-data">Step 1 - Rule out hidden data</a></li><li><a href="#step-2-reverse-search-the-face">Step 2 - Reverse search the face</a></li><li><a href="#step-3-confirm">Step 3 - Confirm</a></li></ol></li><li><a href="#flag">Flag</a></li><li><a href="#takeaways">Takeaways</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="low-tide-ledger.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Low Tide Ledger</span></a>
+    <a class="wu-pager-link wu-pager-next" href="the-foxglove-trace.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">The Foxglove Trace</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Labyrinth · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The service speaks an undocumented framed protocol, and its own error messages give away the magic, length limit and opcodes. After the nonce probe and transform challenge, the maze gate wants the shortest path back as raw bytes." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>labyrinth</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Labyrinth <span class="page-sub">Learning a binary protocol from its errors</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{l34rn3d_th3_t0ngu3_w4lk3d_th3_l4byr1nth_a06a8b7fdf}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hiCTF{l34rn3d_th3_t0ngu3_w4lk3d_th3_l4byr1nth_a06a8b7fdf}</code></p>
+<blockquote>
+<p>Note: the service&#39;s flag frame was received byte-spliced (<code>iCTF{...}</code> - the leading <code>h</code> was
+eaten by the same frame-desync artifact seen elsewhere as trailing <code>LB</code>), so it was confirmed
+against the platform before writing it down here.</p>
+</blockquote>
+<p>Live instance: <code>labyrinth-...chall.hiddeninvestigations.net:1337</code> (TLS).</p>
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<p>A custom binary protocol over TLS. You learn it from its own error messages:</p>
+<ol>
+<li><strong>Frame format</strong> - <code>MAGIC(4) = &quot;LBY\x7f&quot;</code> + <code>opcode(1)</code> + <code>len(2, BE)</code> + <code>payload(len)</code>.
+<em>No</em> flags byte (the antenna-greeting frame is <code>LBY\x7f 80 00 24 01 ...</code>).</li>
+<li><code>op 0x01</code> → <code>{nonce:8}&quot;PROBE the nonce&quot;</code></li>
+<li><code>op 0x10</code> + nonce(8) → transform challenge: 28 data bytes + <code>&quot;ANSWER T(challenge)&quot;</code></li>
+<li><code>op 0x30</code> + answer(4) → enters the maze (&quot;entrance&quot;)</li>
+<li><code>op 0x20</code> + <code>dir(1) + token(2)</code> → MOVE</li>
+<li>Gate room (<code>status 0xa1</code>): <code>&quot;a sealed gate. it asks how you came, by the shortest way&quot;</code></li>
+<li><code>op 0x30</code> + path bytes → <strong>flag</strong></li>
+</ol>
+<h2 id="1-learning-the-tongue"><a class="wu-anchor" href="#1-learning-the-tongue" aria-hidden="true">#</a>1. Learning the tongue</h2>
+<p>Sending junk yields instructive errors: <code>bad magic; frames start with my banner&#39;s first 4 bytes</code>,
+<code>frame too long; max 1024</code>, <code>unknown opcode; known: 01 02 10 20 30 40 50 60</code>.</p>
+<p>The greeting is <code>4c 42 59 7f | 80 00 24 01 | &quot;LABYRINTH speaks in frames. listen.&quot;</code>
+→ magic = <code>LBY\x7f</code>, then <code>op=0x80</code> (a <em>response</em>), <code>len=0x0024</code>, a <code>code</code> byte, payload.
+Client frames use the same magic with an opcode from the known set.</p>
+<p>Pitfall: the client frame has <strong>no flags byte</strong>. Adding one desyncs the server&#39;s parser:
+frame 1 replies fine, then <em>every</em> later frame on that connection gets <code>bad magic</code> (the server
+consumes <code>flags+payload[0..len-1]</code>, leaving one stray byte). That cost a while.</p>
+<h2 id="2-the-nonce-handshake-and-the-transform"><a class="wu-anchor" href="#2-the-nonce-handshake-and-the-transform" aria-hidden="true">#</a>2. The &quot;nonce&quot; handshake and the transform</h2>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">op01            -&gt; {nonce:8} &quot;PROBE the nonce&quot;
+op10 + nonce(8) -&gt; {28 bytes} &quot;ANSWER T(challenge)&quot;</code></pre>
+      
+    </figure><p>The 28 bytes are three shown input→output examples plus the challenge word:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">G0 = 00000000          -&gt; G1 = c c c c
+G2 = 01 02 03 04       -&gt; G3 = ...
+G4 = (random)          -&gt; G5 = ...
+G6 = challenge(4)      -&gt; ?</code></pre>
+      
+    </figure><p>Decoding: <code>T(v) = reverse(v XOR c)</code>, where <code>c = G1[0]</code> (the constant byte in the first output).
+Verified on all three examples, then:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">answer = reverse(challenge XOR c)          # 4 bytes
+op30 + answer -&gt; &quot;entrance. MOVE dir+token&quot;</code></pre>
+      
+    </figure><h2 id="3-the-maze"><a class="wu-anchor" href="#3-the-maze" aria-hidden="true">#</a>3. The maze</h2>
+<p><code>op20 + dir(1) + token(2)</code>, token = last 2 bytes of the current room descriptor.
+A room replies <code>payload = hi(1) mask(1) 00 token(2)</code>:</p>
+<ul>
+<li><code>mask</code> bit <em>d</em> set ⇒ direction <em>d</em> is open (<code>0x04</code> → only dir 2; <code>0x05</code> → dirs 0 and 2).</li>
+<li>reverse(d) = <code>d XOR 2</code>, so the maze is fully backtrackable using the <em>current</em> token.</li>
+<li>Walls: <code>code 5 &quot;wall. token unchanged&quot;</code> (free - the token doesn&#39;t change, so you may probe).</li>
+<li><code>op 0x40</code> from anywhere = <strong>decoy</strong> <code>hiCTF{not_the_exit}</code> (&quot;not every door that glows is an exit&quot;).</li>
+<li>A room with <code>&quot;a light! ... hiCTF{not_the_exit}&quot;</code> is a glowing non-exit.</li>
+</ul>
+<p>Then a straightforward DFS (backtrack by <code>d^2</code>) finds the <strong>sealed gate</strong> (status <code>0xa1</code>).</p>
+<h2 id="4-gate"><a class="wu-anchor" href="#4-gate" aria-hidden="true">#</a>4. Gate</h2>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">gate payload: &quot;a sealed gate. it asks how you came, by the shortest way&quot;
+op30 + &lt;path bytes&gt; -&gt; status 0xf0 + hiCTF{...}</code></pre>
+      
+    </figure><p>The answer is the sequence of directions walked from the entrance to the gate, one byte each.
+(The gateway&#39;s suffix differs per session; only the path is verified.)</p>
+<h2 id="5-operational-notes"><a class="wu-anchor" href="#5-operational-notes" aria-hidden="true">#</a>5. Operational notes</h2>
+<ul>
+<li><strong>Rate limit:</strong> &gt;~32 frames with no delay ⇒ the server silently closes. Pace ~0.12 - 0.25 s/frame.
+Early &quot;stale token&quot;/&quot;say HELLO&quot; cascades were rate-limit artifacts, not maze traps.</li>
+<li>The maze layout is (essentially) deterministic per session-epoch, but the entrance can be
+mirrored (<code>(0,4)</code> vs <code>(0,2)</code>); a per-session DFS is the robust approach.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#1-learning-the-tongue">1. Learning the tongue</a></li><li><a href="#2-the-nonce-handshake-and-the-transform">2. The &quot;nonce&quot; handshake and the transform</a></li><li><a href="#3-the-maze">3. The maze</a></li><li><a href="#4-gate">4. Gate</a></li><li><a href="#5-operational-notes">5. Operational notes</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="the-foxglove-trace.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">The Foxglove Trace</span></a>
+    <a class="wu-pager-link wu-pager-next" href="the-collectors-trail.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">The Collector's Trail</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

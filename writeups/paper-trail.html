@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Paper Trail · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Comparing the PDF with its archived original shows four new invisible-text streams whose only content is integer kerning values. The long runs are AES-128-CBC ciphertext, and the key and IV are the two halves of the trailer /ID that the author changed." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>paper-trail</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Paper Trail <span class="page-sub">AES hidden in invisible TJ kerning</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{n3w_ar34_fOr_hid!ng_d4t4_n4m3d_TJ}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="challenge"><a class="wu-anchor" href="#challenge" aria-hidden="true">#</a>Challenge</h2>
+<blockquote>
+<p>&quot;The document passed its final review without raising any concerns. What was submitted
+appeared complete, and nothing seemed out of place. But the archived copy tells a different
+story. Some changes leave no visible trace.&quot;</p>
+</blockquote>
+<p>We get <code>chall.pdf</code>, 13 pages, 516,033 bytes.</p>
+<h2 id="finding-what-changed"><a class="wu-anchor" href="#finding-what-changed" aria-hidden="true">#</a>Finding what changed</h2>
+<p>The PDF is a real published paper, <em>&quot;Forensic Analysis of Virtual Hard Drives&quot;</em> (JDFSL, 2017).
+The description says the archived copy tells a different story, so I pulled the original from
+the Wayback Machine and diffed the two at the object level, hashing every object and every
+decompressed stream.</p>
+<ul>
+<li>The challenge file has <strong>exactly four</strong> streams the original lacks, objects 179 to 182, and
+nothing removed or altered. The other new objects are structural (StructTree kids, <code>/Nums</code>, a
+rewritten <code>/Info</code>).</li>
+<li><code>pdftotext</code> output is byte-identical on all 13 pages, so no visible text changed.</li>
+<li>The original has no <code>Tr</code> operators at all. The challenge file has four.</li>
+<li>Every font is byte-identical to the original, there are no embedded files, and the XMP is
+clean.</li>
+</ul>
+<p>So the whole plant is those four streams.</p>
+<h2 id="the-invisible-overlays"><a class="wu-anchor" href="#the-invisible-overlays" aria-hidden="true">#</a>The invisible overlays</h2>
+<p>Each new stream is appended to the content of pages 2, 5, 8 and 11 (zero-indexed), and looks
+like this:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">q BT /F1 1 Tf 3 Tr 1 0 0 1 8 8 Tm
+[() A () B () C n1 n2 ... nk] TJ
+... ET Q</code></pre>
+      
+    </figure><p><code>3 Tr</code> is render mode 3, invisible text, at 1 pt in the corner of the page. Every string in the
+<code>TJ</code> arrays is empty, so the only thing these streams carry is the numbers, which <code>TJ</code> would
+normally treat as kerning adjustments.</p>
+<ul>
+<li>There are 20 <code>TJ</code> lines and <strong>169 integers</strong> in total, ranging from -77 to 254.</li>
+<li>Real kerning elsewhere in this PDF is fractional (for example <code>-18688.6</code>). These are all
+integers, so they are data.</li>
+<li>Three of the lines are much longer than the rest and hold 64 values, all between 1 and 254.
+Every other value sits in a small band around zero and acts as a decoy.</li>
+</ul>
+<p>64 values in byte range is exactly four AES blocks, which points at a block cipher rather than a
+text encoding.</p>
+<h2 id="the-key-was-in-the-trailer"><a class="wu-anchor" href="#the-key-was-in-the-trailer" aria-hidden="true">#</a>The key was in the trailer</h2>
+<p>The trailer <code>/ID</code> array normally stays the same when a PDF is re-saved with qpdf or pikepdf. Here
+<strong>both</strong> <code>/ID</code> elements differ from the archived original, which means the author set them on
+purpose. They are 16 bytes each, a perfect AES-128 key and IV.</p>
+<ul>
+<li>Key = <code>/ID[0]</code> = <code>e3b51a3ba231502d79c55593eb522037</code></li>
+<li>IV = <code>/ID[1]</code> = <code>6749db1175e3e659a640695dcc830c82</code></li>
+<li>Ciphertext = the three long <code>TJ</code> arrays from their third number onward, in stream order
+179, 180, 181 (21 + 21 + 22 = 64 bytes)</li>
+</ul>
+<p>AES-128-CBC decryption gives a small framed record:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">&quot;CTF1&quot; | u16 BE length (0x0028 = 40) | flag (40 bytes) | 8-byte tag | PKCS#7 padding (10 x 0x0a)</code></pre>
+      
+    </figure><p>The length field matches the flag exactly and the padding is valid, which confirms the key, IV
+and byte selection are right.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">hiCTF{n3w_ar34_fOr_hid!ng_d4t4_n4m3d_TJ}</code></pre>
+      
+    </figure><p>The flag names the carrier: data hidden in the <code>TJ</code> operator.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#challenge">Challenge</a></li><li><a href="#finding-what-changed">Finding what changed</a></li><li><a href="#the-invisible-overlays">The invisible overlays</a></li><li><a href="#the-key-was-in-the-trailer">The key was in the trailer</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="whispers-in-the-margin.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Whispers in the Margin</span></a>
+    <a class="wu-pager-link wu-pager-next" href="hall-of-mirrors.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Hall of Mirrors</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

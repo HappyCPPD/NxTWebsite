@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cold Chain · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A forced-defrost schedule keeps six cases warm, and a macro re-enables it every 90 seconds. Authenticating with the leaked fleet key, killing the macro first and then the schedule, and holding the cases cold for 60 seconds returns the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>cold-chain</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Cold Chain <span class="page-sub">Fixing a refrigeration controller that fights back</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{cold_chain_restored_defrost_cleared_142a475ab7}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hiCTF{cold_chain_restored_defrost_cleared_142a475ab7}</code></p>
+<h2 id="what-was-going-on"><a class="wu-anchor" href="#what-was-going-on" aria-hidden="true">#</a>What was going on</h2>
+<p>&quot;ColdLink&quot; CM-900 case controllers speak <strong>CLMP/1.1</strong> - line-oriented UTF-8 over
+TCP. On the hosted instance both the control service (port 7601 locally) and the
+read-only historian feed (7602) are exposed as TLS/SNI-routed endpoints on the
+challenge page. Two things were forcing continuous defrost:</p>
+<ul>
+<li>Schedule <code>S9 WINTER_DEFROST_ALL</code> with <code>action=force_defrost enabled=1</code></li>
+<li>Macro <code>M2 AUTO_WINTERIZE</code> with <code>action=ensure_schedule target=S9 period=90</code>,
+which <strong>re-enables S9 every 90 s</strong> if a technician disables or deletes it -
+hence &quot;a naive fix doesn&#39;t stick&quot; (matches the historian sample: <code>event=macro_apply macro=M2 schedule=S9 detail=re-enabled_forced_defrost</code>).</li>
+</ul>
+<p><code>STATUS</code> before the fix:
+<code>compliant=0 cases_cold=0/6 held=0s reason=forced_defrost_schedule_active,cases_above_5C=6,persistence_macro_enabled</code></p>
+<h2 id="authentication"><a class="wu-anchor" href="#authentication" aria-hidden="true">#</a>Authentication</h2>
+<p>The toolkit ships the fleet master key <code>CLNK-FIELD-MASTER-6E1D-DO-NOT-DISTRIBUTE</code>.
+The controller greets with <code>SERIAL</code> + per-connection <code>NONCE</code>; the token is
+<code>sha256(&quot;&lt;KEY&gt;|&lt;SERIAL&gt;|&lt;NONCE&gt;&quot;)[:16]</code>. Then <code>AUTH &lt;serial&gt; &lt;token&gt;</code> → <code>OK role=technician</code>.</p>
+<h2 id="fix-order-matters"><a class="wu-anchor" href="#fix-order-matters" aria-hidden="true">#</a>Fix (order matters)</h2>
+<ol>
+<li><code>MACRO DISABLE M2</code> - kill the persistence engine <strong>first</strong> (otherwise S9 returns
+within 90 s).</li>
+<li><code>SCHED SET S9 enabled=0</code> - stop the forced defrost (deleting S9 also works now,
+but disabling is less destructive).</li>
+<li>Ensure the cool schedules (<code>S1</code>, <code>S3</code>, <code>action=cool_all</code>) stay enabled and
+<code>MODE &lt;n&gt; cool</code> on all six cases.</li>
+<li>Wait out the <strong>60 s sustained hold window</strong> with all six cases ≤ 5 °C.</li>
+</ol>
+<p><code>STATUS</code> after: <code>compliant=1 cases_cold=6/6 held=136s</code> → <code>DATA flag=hiCTF{...}</code>.</p>
+<h2 id="the-flag-line"><a class="wu-anchor" href="#the-flag-line" aria-hidden="true">#</a>The flag line</h2>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">DATA compliant=1 cases_cold=6/6 held=136s
+DATA flag=hiCTF{cold_chain_restored_defrost_cleared_142a475ab7}
+OK compliant</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#what-was-going-on">What was going on</a></li><li><a href="#authentication">Authentication</a></li><li><a href="#fix-order-matters">Fix (order matters)</a></li><li><a href="#the-flag-line">The flag line</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="c3-vault.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">C3 Vault</span></a>
+    <a class="wu-pager-link wu-pager-next" href="ground-station.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Ground Station</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

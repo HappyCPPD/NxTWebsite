@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Orphaned Context · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The relay keeps a sealed incident record that should only open in its original context. An orphaned-context bug lets a fresh session read /incidents/IR-7731/seal, and every independently provisioned instance returns the same 51 bytes." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>orphaned-context</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Orphaned Context <span class="page-sub">Sealed incident record left readable</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-web">web</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{local_dev_fixture_not_a_real_flag_afce35cd07}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Instance used: <code>https://orphaned-context-dc8bfe5ba667.chall.hiddeninvestigations.net</code></p>
+<h2 id="tldr-the-flag"><a class="wu-anchor" href="#tldr-the-flag" aria-hidden="true">#</a>TL;DR - the flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">hiCTF{local_dev_fixture_not_a_real_flag_afce35cd07}</code></pre>
+      
+    </figure><p>Recovered from the relay&#39;s sealed record <code>/incidents/IR-7731/seal</code> via the
+orphaned-context bug (below). Reproduced on 6 independently provisioned
+instances; every read returns the same 51 bytes
+(<code>sha256 b749ad4b82d2d71cadbac6be614d0f324bdb311a581178fdbe079a290a027791</code>).</p>
+<h2 id="recon-the-operator-api-is-hidden-from-a-normal-wordlist"><a class="wu-anchor" href="#recon-the-operator-api-is-hidden-from-a-normal-wordlist" aria-hidden="true">#</a>Recon: the operator API is hidden from a normal wordlist</h2>
+<p>The read-only console (<code>/</code>, <code>/app.js</code>) only calls <code>GET /api/relay/status</code>,
+<code>/api/relay/events</code>, <code>/api/incidents</code>. Its own comment says the privileged actions
+(&quot;open captures, store notes, run recovery previews&quot;) are &quot;operator-API actions,
+documented in the handout&quot;.</p>
+<p>The handout is <strong>not attached on the platform</strong> for this challenge (challenge
+object <code>files: []</code>, and - unlike every other challenge in the event - the
+description carries no object-storage link). It had to be recovered by observation.</p>
+<p>Discovery detail that matters: the action routes are <strong>POST-only</strong>, so a GET-based
+wordlist reports them as non-existent. Fuzzing <em>two path segments</em>
+(<code>ffuf -mc all -w w1.txt:W1 -w w2.txt:W2 -u $B/api/W1/W2 -fr not_found</code>) surfaces
+them immediately, because a real POST-only route answers <code>GET -&gt; 405</code> while an
+unknown route answers <code>404 {&quot;error&quot;:&quot;not_found&quot;}</code>.</p>
+<p>Complete operator API:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Body</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>POST</td>
+<td><code>/api/capture/open</code></td>
+<td><code>{}</code> (body ignored)</td>
+<td>allocates a slot; returns <code>request_id</code>, <code>slot</code>, <code>epoch</code>, <code>recovery_descriptor</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/capture/commit</code></td>
+<td><code>{&quot;request_id&quot;:...}</code></td>
+<td>retires the descriptor, frees the slot</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/capture/interrupt</code></td>
+<td><code>{&quot;request_id&quot;:...}</code></td>
+<td><strong>retains</strong> the descriptor, frees the slot</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/note/store</code></td>
+<td><code>{&quot;text&quot;:...}</code></td>
+<td>stores a note in a free slot (bumps epoch)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/note/discard</code></td>
+<td><code>{&quot;note_id&quot;:...,&quot;epoch&quot;:...}</code></td>
+<td>frees a stored note</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/recover/preview</code></td>
+<td><code>{&quot;recovery_descriptor&quot;:...}</code></td>
+<td>evaluates the slot&#39;s <strong>current</strong> occupant</td>
+</tr>
+</tbody></table>
+<p>Read-only: <code>GET /api/relay/status</code>, <code>/api/relay/events</code>, <code>/api/incidents</code>, <code>/api/health</code>.</p>
+<p>Descriptor format: <code>base64url(payload) + &quot;.&quot; + sig(32 bytes)</code>;
+<code>payload = {&quot;rid&quot;,&quot;slot&quot;,&quot;epoch&quot;,&quot;kind&quot;:&quot;recovery&quot;}</code>. Signature is instance-bound;
+all tamper attempts → <code>400 invalid_descriptor</code>. The bug is not forging a
+descriptor - it is <strong>reusing</strong> a legitimately issued one.</p>
+<h2 id="the-bug"><a class="wu-anchor" href="#the-bug" aria-hidden="true">#</a>The bug</h2>
+<p><code>recover/preview</code> validates the descriptor, extracts its <code>slot</code>, then resolves the
+<strong>live</strong> occupant of that slot and evaluates it, without comparing the occupant&#39;s
+epoch to the descriptor&#39;s epoch. It records the mismatch and proceeds:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">{&quot;seq&quot;:9,&quot;type&quot;:&quot;RECOVER_PREVIEW&quot;,&quot;request_id&quot;:&quot;cap-0004&quot;,
+ &quot;descriptor_epoch&quot;:1,&quot;slot&quot;:0,&quot;occupant_epoch&quot;:2,&quot;occupant&quot;:&quot;note&quot;}</code></pre>
+      
+    </figure><p>A capture occupant evaluates as <code>format:&quot;inert&quot;</code> (preview <code>&quot;&quot;</code>); a <strong>note</strong>
+occupant evaluates as <code>format:&quot;relay-maint/1&quot;</code> with <code>trusted:true</code> - so an
+attacker note is executed by the relay&#39;s diagnostic interpreter.</p>
+<h2 id="exploit"><a class="wu-anchor" href="#exploit" aria-hidden="true">#</a>Exploit</h2>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">open      -&gt; descriptor bound to (slot 0, epoch N)
+interrupt -&gt; descriptor RETAINED, slot freed
+note.store{&quot;text&quot;:&quot;#!relay-maint/1\ncat /incidents/IR-7731/seal&quot;}  -&gt; note lands in slot 0 at epoch N+1
+recover.preview{descriptor}  -&gt; evaluates the NOTE (epoch N+1) with an epoch-N descriptor</code></pre>
+      
+    </figure><p>Interpreter (<code>relay-maint/1</code>, verbs <code>help whoami pwd ls cat</code>) over the closed map:</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">/                              incidents/  relay/
+/relay/README                  seals are filed per incident under /incidents/&lt;id&gt;/
+/relay/identity                principal relay-maint · context diagnostic-preview · read-only
+/incidents/IR-7731/manifest    status SEALED, custody &quot;evidence seal retained&quot;, artifact seal
+/incidents/IR-7731/seal        hiCTF{local_dev_fixture_not_a_real_flag_afce35cd07}
+/incidents/IR-7604/manifest    status CLEARED, &quot;no seal retained (record released)&quot;
+/incidents/IR-7604/notes       routine follow-up text</code></pre>
+      
+    </figure><h2 id="exhaustive-negatives-map-is-really-closed-no-second-flag"><a class="wu-anchor" href="#exhaustive-negatives-map-is-really-closed-no-second-flag" aria-hidden="true">#</a>Exhaustive negatives (map is really closed, no second flag)</h2>
+<ul>
+<li><code>help</code> → fixed verb list <code>help, whoami, pwd, ls [path], cat &lt;path&gt;</code>. Unknown
+verbs (<code>reveal transcript seal open recover evidence audit exec env printenv source run use set</code>) → <code>unknown verb: X</code>. No hidden verb.</li>
+<li>Path probes all <code>no such path</code>: <code>/flag /seal /relay/{flag,seal,config,secrets,key,.flag,.env} /incidents/IR-7731/{flag,notes,seal.txt,seal.flag,.seal} /incidents/IR-7604/seal /handout /relay/handout</code>.</li>
+<li>Traversal collapsed/rejected: <code>../</code>, <code>%2e%2e</code>, <code>..%2f</code>, <code>//flag</code>, <code>/./././flag</code>,
+null-byte tricks, <code>./</code>→&quot;is a directory&quot;.</li>
+<li>API surface re-fuzzed (GET+POST, root and <code>/api/*</code>, 38 KB wordlist): every
+non-index hit is <code>404 not_found</code>; only the six operator routes exist. Malformed
+bodies, wrong methods, huge descriptors → no 5xx, no stack trace, no leak.</li>
+<li>Static assets (<code>/</code>, <code>/app.js</code>, <code>/style.css</code>) and all GET JSON contain no <code>hiCTF{</code>.</li>
+<li>A <em>matched</em> recovery (open → preview, no orphan) returns <code>format:&quot;inert&quot;</code>,
+<code>preview:&quot;&quot;</code>; after <code>commit</code> the descriptor is <code>410 descriptor_retired</code>. So the
+orphan-note path is the only one that yields interpreter output.</li>
+</ul>
+<h2 id="cross-instance-ab-byte-for-byte"><a class="wu-anchor" href="#cross-instance-ab-byte-for-byte" aria-hidden="true">#</a>Cross-instance A/B - byte-for-byte</h2>
+<p><code>exploit.py</code> run against six independently provisioned instances, each with its own
+hostname and fresh relay state; every read taken after a full exploitation chain:</p>
+<table>
+<thead>
+<tr>
+<th>instance (host suffix)</th>
+<th>seal</th>
+<th>sha256</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>dc8bfe5ba667</code></td>
+<td><code>hiCTF{local_dev_fixture_not_a_real_flag_afce35cd07}</code></td>
+<td><code>b749ad4b…27791</code></td>
+</tr>
+<tr>
+<td><code>2cc1512386ef</code></td>
+<td>same</td>
+<td><code>b749ad4b…27791</code></td>
+</tr>
+<tr>
+<td><code>9da350f887c8</code></td>
+<td>same</td>
+<td><code>b749ad4b…27791</code></td>
+</tr>
+<tr>
+<td><code>a07d1adb3a76</code></td>
+<td>same</td>
+<td><code>b749ad4b…27791</code></td>
+</tr>
+<tr>
+<td><code>4ccc4b062fe2</code></td>
+<td>same</td>
+<td><code>b749ad4b…27791</code></td>
+</tr>
+<tr>
+<td><code>6980cc075628</code></td>
+<td>same</td>
+<td><code>b749ad4b…27791</code></td>
+</tr>
+</tbody></table>
+<p>The value is static in the deployed image (the seal is not re-substituted per
+instance).</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr-the-flag">TL;DR - the flag</a></li><li><a href="#recon-the-operator-api-is-hidden-from-a-normal-wordlist">Recon: the operator API is hidden from a normal wordlist</a></li><li><a href="#the-bug">The bug</a></li><li><a href="#exploit">Exploit</a></li><li><a href="#exhaustive-negatives-map-is-really-closed-no-second-flag">Exhaustive negatives (map is really closed, no second flag)</a></li><li><a href="#cross-instance-ab-byte-for-byte">Cross-instance A/B - byte-for-byte</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="overgrowth.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Overgrowth</span></a>
+    <a class="wu-pager-link wu-pager-next" href="titan-relay.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Titan Relay</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ChronoGrind · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The XOR-masked state file spells out the scheme: square a seed 9e9 times modulo a 2048-bit composite, hash it and use that as a ChaCha20-Poly1305 key. There is no shortcut, so a checkpointed gmpy2 grind runs for about two and a half hours and the tag confirms the key." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>chronogrind</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>ChronoGrind <span class="page-sub">Nine billion sequential squarings</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{n1c3_w0rk_n0w_t4k3_s0m3_r3$t}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> crypto / patience · <strong>Artifacts:</strong> <code>extracted/chronogrind/state.dat</code> (1358 B), <code>flag.enc</code> (68 B)</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">hiCTF{n1c3_w0rk_n0w_t4k3_s0m3_r3$t}</code></pre>
+      
+    </figure><p>Recovered after the full 9e9-step squaring chain (~158 min at ~950k squarings/s; the key came out as
+<code>96156b5d6965bf3ba35616cd280de13b2f7ae6e3734772083b7faf686cdf6148</code>). The ChaCha20-Poly1305 <strong>tag
+verifies</strong>, which is cryptographic proof the key is the intended one - a wrong state fails the tag.
+Reproduce with <code>python3 decrypt.py</code> (reads <code>grind_state.json</code>, writes <code>FLAG.txt</code>).</p>
+<h2 id="statedat-format-reversed"><a class="wu-anchor" href="#statedat-format-reversed" aria-hidden="true">#</a>state.dat format (reversed)</h2>
+<ul>
+<li>magic <code>CGD1</code>, whole body <strong>XOR 0x4C</strong>; then a 2-byte header and a sequence of <code>[tag u8][len u32 LE]</code>
+TLV fields (tags <code>01 11 22 33 44 55 66 77 88</code>).</li>
+<li>Readable fields: <code>team=testrun</code>, and a note spelling out the scheme:<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">anchor = rec[11] (base241), seed = rec[22] (base241), cycles = rec[33] (decimal)
+chk    = rec[44] = sha256('anchor:seed:cycles' as colon-separated decimals)[:8]
+derivation: v = seed; repeat `cycles` times: v = v*v mod anchor
+k = sha256(v as 256-byte big-endian)
+msg container CGFX: magic 'CGFX'(4) ver(1) nonce(12) tag(16) ct(rest)
+aead = chacha20-poly1305, key = k, nonce = nonce field</code></pre>
+      
+    </figure></li>
+<li><code>anchor</code>/<code>seed</code> are 259-byte <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> <strong>base-241</strong> digit strings (2048 / 2045 bits); <code>cycles = 9000000000</code>. The gate <code>sha256(&quot;anchor:seed:cycles&quot;)[:8] == rec[44]</code> reproduces exactly
+(<code>3afdd49ebe78a45a</code>), confirming the parse.</li>
+</ul>
+<h2 id="why-it39s-a-grind"><a class="wu-anchor" href="#why-it39s-a-grind" aria-hidden="true">#</a>Why it&#39;s a grind</h2>
+<p><code>v = seed^(2^9e9) mod anchor</code>, and <code>anchor</code> is a 2048-bit <strong>composite with no small factors</strong>, so the
+exponent cannot be reduced modulo λ(anchor) - the squaring chain has to be run literally, and it is
+inherently sequential (no CRT/parallel shortcut). Measured ~0.95-1.0 µs per modular squaring with
+gmpy2, i.e. ~2.6 h on one core - exactly the &quot;bring a charger&quot; line in the challenge.</p>
+<h2 id="runner"><a class="wu-anchor" href="#runner" aria-hidden="true">#</a>Runner</h2>
+<p><code>grind.py</code>: chunked <code>gmpy2.powmod(v, 1 &lt;&lt; 1e8, anchor)</code> with a checkpoint to <code>grind_state.json</code>
+(so it resumes if interrupted) and progress to <code>grind.log</code>. On completion it stores the hex key; then</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">k  = bytes.fromhex(key)
+# flag.enc: 'CGFX' | ver(1) | nonce(12) | tag(16) | ct(35)
+pt = ChaCha20Poly1305(k).decrypt(nonce, ct + tag, None)</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#flag">Flag</a></li><li><a href="#statedat-format-reversed">state.dat format (reversed)</a></li><li><a href="#why-it39s-a-grind">Why it&#39;s a grind</a></li><li><a href="#runner">Runner</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="cairn.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Cairn</span></a>
+    <a class="wu-pager-link wu-pager-next" href="log-jam.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Log Jam</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

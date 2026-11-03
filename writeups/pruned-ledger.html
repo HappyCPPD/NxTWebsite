@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pruned Ledger · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Replaying the archived transactions rebuilds the pruned chain. The four case-file fields come from contract code, the only non-reverted configure() calldata, a derived storage slot and a revert that leaks the unmasked note." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>pruned-ledger</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Pruned Ledger <span class="page-sub">Rebuilding a case file from a replayed chain</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{pruned_storage_calldata_never_forgets}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag: <code>hiCTF{pruned_storage_calldata_never_forgets}</code></strong></p>
+<p>Case tag <code>0xca5ef11e</code> → Ledger <code>0x68fb8760b1353f7349c431442d6e97ab61685ee7</code>.
+The flag is the <strong>complete four-field case file</strong>, every field recomputed from the shipped
+archive (<code>transactions.jsonl</code> + <code>genesis.json</code>) and the replayed chain - nothing is guessed:</p>
+<table>
+<thead>
+<tr>
+<th>case-file field</th>
+<th>value</th>
+<th>where it comes from</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>case reference</td>
+<td><code>pruned_storage</code></td>
+<td>immutable <code>caseReference()</code> (in code)</td>
+</tr>
+<tr>
+<td>working record</td>
+<td><code>calldata</code></td>
+<td><code>configure()</code> calldata, <strong>only non-reverted</strong> ASCII value</td>
+</tr>
+<tr>
+<td>archive entry</td>
+<td><code>never</code></td>
+<td><code>seal()</code> entry, read from the derived storage slot</td>
+</tr>
+<tr>
+<td>note</td>
+<td><code>forgets</code></td>
+<td><code>_maskedNote</code> unmasked for its caller (<code>unlock()</code> leak)</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>Two fields need care: (1) the <code>record</code> value is proven by <strong>receipt status</strong> - the
+look-alike <code>settled</code> was sent by a non-operator and <strong>reverted</strong>, so it was never stored;
+(2) the <code>entry</code> and <code>note</code> are proven by re-deriving the exact storage word and by a live
+<code>unlock()</code> revert, respectively. Each step below prints the raw bytes it produced.</p>
+</blockquote>
+<hr>
+<h2 id="0-replay-the-archive"><a class="wu-anchor" href="#0-replay-the-archive" aria-hidden="true">#</a>0. Replay the archive</h2>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> extracted/chain</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-built_in">export</span> PATH=<span class="hljs-string">&quot;<span class="hljs-variable">$PATH</span>:<span class="hljs-variable">$HOME</span>/.foundry/bin&quot;</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">PORT=8545 DETACH=1 bash replay.sh          <span class="hljs-comment"># head matches HEAD (0xe58f65a7…)</span></span></span></code></pre>
+      
+    </figure><p>Output ends with <code>replay: OK -- head matches HEAD; the chain is byte-identical to the archive</code>.</p>
+<h2 id="1-find-the-case39s-ledger-relay-trail"><a class="wu-anchor" href="#1-find-the-case39s-ledger-relay-trail" aria-hidden="true">#</a>1. Find the case&#39;s Ledger (relay trail)</h2>
+<p>Each <code>Relay(bytes4 caseTag, address next)</code> creation carries an immutable case tag. Decoding the
+26 creations (<code>rlp</code> + <code>eth_account</code>) and walking the hops whose tag is <code>0xca5ef11e</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">n 66 relay 65dbce10… -&gt; 0x68fb8760b1353f7349c431442d6e97ab61685ee7   (ledger)
+n 72 relay 137b850d… -&gt; 0x65dbce10…
+n 79 relay cc0805b8… -&gt; 0x137b850d…
+n 85 relay caec063a… -&gt; 0xcc0805b8…</code></pre>
+      
+    </figure><p>The terminal (non-relay) address is the Ledger: <strong><code>0x68fb8760b1353f7349c431442d6e97ab61685ee7</code></strong>.</p>
+<h2 id="2-casereference-field-1"><a class="wu-anchor" href="#2-casereference-field-1" aria-hidden="true">#</a>2. <code>caseReference()</code> - field 1</h2>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">cast call 0x68fb8760b1353f7349c431442d6e97ab61685ee7 <span class="hljs-string">&quot;caseReference()(bytes32)&quot;</span> --rpc-url http://127.0.0.1:8545</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># 0x7072756e65645f73746f72616765000000000000000000000000000000000000</span></span></span></code></pre>
+      
+    </figure><p><code>0x7072756e65645f73746f72616765…</code> = ASCII <strong><code>pruned_storage</code></strong>.</p>
+<h2 id="3-the-working-record-field-2-the-crux"><a class="wu-anchor" href="#3-the-working-record-field-2-the-crux" aria-hidden="true">#</a>3. The working record - field 2  (the crux)</h2>
+<p><code>configure(bytes32)</code> sets <code>record</code> (slot 0) but is <code>onlyOperator</code>. Decoding every call to the
+Ledger <strong>and checking each receipt</strong>:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">n123 configure status=true   OK      record = &quot;calldata&quot;   sender 0xf22107…  (operator)
+n156 configure status=false  REVERT  record = &quot;settled&quot;    sender 0x123332…  (not operator)
+n140 configure status=false  REVERT  record = &quot;drafted&quot;    sender 0x123332…  (sibling's decoy)</code></pre>
+      
+    </figure><p><code>settled</code>/<code>drafted</code> are <strong>traps</strong> - they look like the final working record but the caller was
+not the operator, the call reverted, and the value was never stored. Historical storage confirms
+it:</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">cast storage 0x68fb8760…  0 --block 123 --rpc-url http://127.0.0.1:8545  <span class="hljs-comment"># 0x63616c6c64617461… = &quot;calldata&quot;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">cast storage 0x68fb8760…  0 --block 163 --rpc-url http://127.0.0.1:8545  <span class="hljs-comment"># 0x97c61d8b… (random, set by operator)</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">cast storage 0x68fb8760…  0 --block 325 --rpc-url http://127.0.0.1:8545  <span class="hljs-comment"># 0x00…00  (pruned)</span></span></span></code></pre>
+      
+    </figure><p>The only <em>stored</em> ASCII record - and the one live at <code>seal()</code> (tx#136) - is <strong><code>calldata</code></strong>.</p>
+<h2 id="4-the-archive-entry-field-3"><a class="wu-anchor" href="#4-the-archive-entry-field-3" aria-hidden="true">#</a>4. The archive entry - field 3</h2>
+<p><code>seal(maskedEntry)</code> stores
+<code>entry = maskedEntry ^ keccak(SEAL_DOMAIN ‖ address(this) ‖ record)</code> at
+<code>slot = keccak(ARCHIVE_DOMAIN ‖ record) − 1</code> (stored <strong>unmasked</strong>). With
+<code>record = &quot;calldata&quot;</code> (32-byte, zero padded):</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">cast storage 0x68fb8760b1353f7349c431442d6e97ab61685ee7 \</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  0x7fecf3326bbe68a7d2e335f9cc6846a837d09eae111b401eaef20dadbac9ce59 --rpc-url http://127.0.0.1:8545</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># 0x6e65766572000000000000000000000000000000000000000000000000000000   -&gt; &quot;never&quot;</span></span></span></code></pre>
+      
+    </figure><p>and off-chain, from the seal calldata <code>0xee03bc41…</code>:
+<code>entry = maskedEntry ^ keccak(keccak(&quot;hictf.pruned-ledger.seal&quot;) ‖ ledger ‖ calldata32)</code>
+= <code>0x6e65766572…</code> = <strong><code>never</code></strong> - byte-for-byte equal to the on-chain slot. ✔</p>
+<h2 id="5-the-note-field-4"><a class="wu-anchor" href="#5-the-note-field-4" aria-hidden="true">#</a>5. The note - field 4</h2>
+<p><code>_note(caller) = _maskedNote ^ keccak(NOTE_DOMAIN ‖ address(this) ‖ caller)</code>, filed for one
+caller only. <code>maskedNote</code> (ctor arg) = <code>0xa147d1efc85c723feead12eb8a48e766e083186ab46823065042d324299e5469</code>.
+Brute-forcing the caller space (all genesis allocs + all recovered senders):</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">caller 0x123332679fb9643cb4302de5dc8f7efba76d060f -&gt; note = &quot;forgets&quot;   (unique printable hit)</code></pre>
+      
+    </figure><p>Live confirmation - call <code>unlock()</code> with a <strong>wrong</strong> guess as that caller; the revert string is
+built from <code>_note(msg.sender)</code>:</p>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">cast call 0x68fb8760b1353f7349c431442d6e97ab61685ee7 <span class="hljs-string">&quot;unlock(bytes32)&quot;</span> \</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  0x6261640000000000000000000000000000000000000000000000000000000000 \</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  --from 0x123332679fb9643cb4302de5dc8f7efba76d060f --rpc-url http://127.0.0.1:8545</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-comment"># Error: execution reverted: wrong guess, the stored value is: forgets</span></span></span></code></pre>
+      
+    </figure><h2 id="6-assemble-the-case-file"><a class="wu-anchor" href="#6-assemble-the-case-file" aria-hidden="true">#</a>6. Assemble the case file</h2>
+<p>The <code>Ledger</code> docstring defines a case file as exactly four fields, in this order:
+<em>case reference, working record, archive entry, note</em>.</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">hiCTF{pruned_storage_calldata_never_forgets}</code></pre>
+      
+    </figure><p>One-shot reproducible proof script: <code>work/solve.py</code> (<code>.venv/bin/python work/solve.py</code>).</p>
+<hr>
+<h3 id="alternate-reading-documented-not-used-as-the-answer"><a class="wu-anchor" href="#alternate-reading-documented-not-used-as-the-answer" aria-hidden="true">#</a>Alternate reading (documented, not used as the answer)</h3>
+<p>If a grader treats only the <em>recovered hidden content</em> (unmasked note + pre-prune storage) plus
+the label as the flag - i.e. omits the working record - the string would be
+<code>hiCTF{pruned_storage_never_forgets}</code>. The four-field form above is the literal
+&quot;reconstruct the pruned case file&quot; output (the contract&#39;s own definition) and is the one
+presented as the flag.</p>
+<h3 id="why-the-earlier-brute-force-found-nothing"><a class="wu-anchor" href="#why-the-earlier-brute-force-found-nothing" aria-hidden="true">#</a>Why the earlier brute-force found nothing</h3>
+<p><code>unlockHash</code> / the random <code>configure</code> values are <em>not</em> hashes of dictionary words (checked:
+14.3M rockyou candidates × <code>keccak(w)</code>/<code>keccak(w32)</code> → 0 hits). They are opaque noise/commitments;
+the flag never depended on cracking them.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#0-replay-the-archive">0. Replay the archive</a></li><li><a href="#1-find-the-case39s-ledger-relay-trail">1. Find the case&#39;s Ledger (relay trail)</a></li><li><a href="#2-casereference-field-1">2. caseReference() - field 1</a></li><li><a href="#3-the-working-record-field-2-the-crux">3. The working record - field 2  (the crux)</a></li><li><a href="#4-the-archive-entry-field-3">4. The archive entry - field 3</a></li><li><a href="#5-the-note-field-4">5. The note - field 4</a></li><li><a href="#6-assemble-the-case-file">6. Assemble the case file</a><ol class="wu-toc-sub"><li><a href="#alternate-reading-documented-not-used-as-the-answer">Alternate reading (documented, not used as the answer)</a></li><li><a href="#why-the-earlier-brute-force-found-nothing">Why the earlier brute-force found nothing</a></li></ol></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="hollow-reserve.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Hollow Reserve</span></a>
+    <a class="wu-pager-link wu-pager-next wu-pager-index" href="../events/hicybercon-ctf-2026.html"><span class="wu-pager-dir">Competition</span><span class="wu-pager-name">HICyberCon CTF 2026</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

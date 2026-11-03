@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Whispers in the Margin · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The DOCX ends in paragraphs of nothing but spaces and tabs. Reading each as a 12-bit row, with space as 0 and tab as 1, gives a key that opens the second layer in the JPEG." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>whispers-in-the-margin</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Whispers in the Margin <span class="page-sub">Whitespace bit rows in a DOCX</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{573g4n0gr4phy_!5_fun}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> stego (document + image) · <strong>Artifacts:</strong> <code>extracted/chall/Those numbers are process counts.docx</code>, <code>extracted/chall/chall.jpg</code></p>
+<h2 id="hint"><a class="wu-anchor" href="#hint" aria-hidden="true">#</a>Hint</h2>
+<blockquote>
+<p>&quot;…Inspect the provided documents closely - what appears empty might hold the key to unravelling the final secret.&quot;</p>
+</blockquote>
+<h2 id="solve-two-layers-where-the-joke-is-actually-the-key"><a class="wu-anchor" href="#solve-two-layers-where-the-joke-is-actually-the-key" aria-hidden="true">#</a>Solve - two layers, where the &quot;joke&quot; is actually the key</h2>
+<ol>
+<li><strong>DOCX whitespace stego.</strong> The last paragraphs of the .docx contain nothing but
+runs of spaces and tabs. Each such paragraph is a 12-column bit row: space = <code>0</code>,
+tab = <code>1</code>; read each row as a 12-bit value and take <code>chr(value)</code>:</li>
+</ol>
+<figure class="wu-code" data-lines="11">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> zipfile, re</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">z = zipfile.ZipFile(<span class="hljs-string">&#x27;Those numbers are process counts.docx&#x27;</span>)</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">d = z.read(<span class="hljs-string">&#x27;word/document.xml&#x27;</span>).decode()</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">msg = <span class="hljs-string">&#x27;&#x27;</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"><span class="hljs-keyword">for</span> p <span class="hljs-keyword">in</span> re.findall(<span class="hljs-string">r&#x27;&lt;w:p [^&gt;]*&gt;.*?&lt;/w:p&gt;&#x27;</span>, d, re.S):</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">    s = <span class="hljs-string">&#x27;&#x27;</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    <span class="hljs-keyword">for</span> m <span class="hljs-keyword">in</span> re.finditer(<span class="hljs-string">r&#x27;&lt;w:tab/&gt;|&lt;w:t xml:space=&quot;preserve&quot;&gt;([ ]*)&lt;/w:t&gt;&#x27;</span>, p):</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">        s += <span class="hljs-string">&#x27;1&#x27;</span> <span class="hljs-keyword">if</span> m.group(<span class="hljs-number">0</span>).startswith(<span class="hljs-string">&#x27;&lt;w:tab&#x27;</span>) <span class="hljs-keyword">else</span> <span class="hljs-string">&#x27;0&#x27;</span>*<span class="hljs-built_in">len</span>(m.group(<span class="hljs-number">1</span>) <span class="hljs-keyword">or</span> <span class="hljs-string">&#x27;&#x27;</span>)</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    <span class="hljs-keyword">if</span> <span class="hljs-built_in">len</span>(s) == <span class="hljs-number">12</span> <span class="hljs-keyword">and</span> s != <span class="hljs-string">&#x27;1&#x27;</span>*<span class="hljs-number">1</span> <span class="hljs-keyword">and</span> <span class="hljs-string">&#x27;1&#x27;</span> <span class="hljs-keyword">in</span> s <span class="hljs-keyword">and</span> s.count(<span class="hljs-string">&#x27;0&#x27;</span>) != <span class="hljs-number">12</span>:</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">        msg += <span class="hljs-built_in">chr</span>(<span class="hljs-built_in">int</span>(s, <span class="hljs-number">2</span>))</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc"><span class="hljs-built_in">print</span>(<span class="hljs-built_in">repr</span>(msg))     <span class="hljs-comment"># &#x27;haha! u got me, now what?&#x27;</span></span></span></code></pre>
+      
+    </figure><ol start="2">
+<li><strong>That sentence is the passphrase</strong>, not a taunt. The companion <code>chall.jpg</code>
+(5182x3455) hides a steghide payload under exactly that string:</li>
+</ol>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">steghide extract -sf chall.jpg -p <span class="hljs-string">&#x27;haha! u got me, now what?&#x27;</span> -xf out.txt</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-built_in">cat</span> out.txt</span></span></code></pre>
+      
+    </figure><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">hiCTF{573g4n0gr4phy_!5_fun}</code></pre>
+      
+    </figure><p>Pitfall worth recording: the whitespace block must be decoded for <strong>all</strong> the
+tail paragraphs - skipping the first content row of the block yields
+<code>aha! u got me, now what?</code> (one <code>h</code> short) and steghide then rejects the passphrase.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#hint">Hint</a></li><li><a href="#solve-two-layers-where-the-joke-is-actually-the-key">Solve - two layers, where the &quot;joke&quot; is actually the key</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="zanzibar-whisper.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Zanzibar Whisper</span></a>
+    <a class="wu-pager-link wu-pager-next" href="paper-trail.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Paper Trail</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

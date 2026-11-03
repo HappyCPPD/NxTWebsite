@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Entitlement · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A section-less self-loader decrypts its real image into a memfd and hides the serial check in a private VM whose bytecode key is a hash of the handler code, so a debugger corrupts it. Solving the serial and the activation code makes the binary print the flag after a long modular-squaring delay." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>entitlement</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Entitlement <span class="page-sub">Self-loading ELF with a bytecode VM</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{&gt;o&lt;_C0ngrats_Her3_1s_Y0ur_HI4_Subscript1on_^_^}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hiCTF{&gt;o&lt;_C0ngrats_Her3_1s_Y0ur_HI4_Subscript1on_^_^}</code></p>
+<p>Verified: the string the binary emits is the 64-byte buffer the program itself builds, and its
+byte-sum equals the program&#39;s own acceptance constant <code>0x133d</code> (sum = 4925 = 0x133d).</p>
+<p>Reproduction (the program deliberately burns ~500 million modular-square iterations before
+printing, so it takes ~15 - 20 minutes on one core):</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">printf</span> <span class="hljs-string">&#x27;8f7db18bd70e193b\n2977e17b118de75b3b4e921a4\n&#x27;</span> | ./Entitlement</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-comment"># Serial &gt; ... Activation code &gt; ... Correct! The flag is hiCTF{...}</span></span></span></code></pre>
+      
+    </figure><p>Two inputs are required:</p>
+<table>
+<thead>
+<tr>
+<th>stage</th>
+<th>input</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Serial (16 hex chars)</td>
+<td><code>8f7db18bd70e193b</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Activation code (25 hex chars)</td>
+<td><code>2977e17b118de75b3b4e921a4</code></td>
+</tr>
+</tbody></table>
+<h2 id="binary-structure"><a class="wu-anchor" href="#binary-structure" aria-hidden="true">#</a>Binary structure</h2>
+<p><code>Entitlement</code> is a 15048-byte ELF64 with <strong>no section headers</strong>. It is a self-loader: the entry
+stub (<code>0x40abd8</code>) decrypts a live image into <code>0x400000–0x408000</code> (via a <code>memfd</code>), sets
+<code>PR_SET_DUMPABLE=0</code> and reads <code>/proc/self/status:TracerPid</code> as anti-debug. The cleared live image
+was recovered to <code>work/live.bin</code>; every real function lives in <code>0x401000–0x405000</code>.</p>
+<h3 id="stage-1-serial-bit-serial-vm"><a class="wu-anchor" href="#stage-1-serial-bit-serial-vm" aria-hidden="true">#</a>Stage 1 - Serial (bit-serial VM)</h3>
+<p><code>main</code> @ <code>0x401110</code> reads <code>%63s</code>, requires length 16, hex-decodes it to 64-bit <code>r8</code>, then runs a
+private bytecode VM.</p>
+<ul>
+<li><p><code>0x404330</code> first <strong>decrypts the VM program in place</strong> at <code>0x407080</code> (0x18c bytes). The key stream
+is a KDF (<code>0x4042c0</code>) seeded by a 64-bit hash of the VM handler code bytes <code>0x404560–0x404702</code>.
+Anti-debug (<code>0x403830</code>) XOR-corrupts that seed if a tracer is present - this is why &quot;the key
+doesn&#39;t work&quot; under gdb: the bytecode is never correctly decrypted. It also sets the guard byte
+at <code>0x40721c</code>, which makes repeat calls skip re-decryption.</p>
+</li>
+<li><p>VM (<code>0x404560</code>): dispatch table @ <code>0x405060</code>, 8 registers, 4-byte instructions
+<code>[opcode, dst, src1, src2]</code>, opcodes 0 - 16 (LOAD_CONST/LOAD_INPUT/COPY/XOR/NOT/ROL/ROR/SHL/SHR/
+ADD/SUB/BRANCH_NZ/JMP/LOOKUP/RET), constant table @ <code>0x405240</code>.</p>
+</li>
+<li><p>The decrypted program computes, over <strong>GF(2^64)</strong> with reduction polynomial
+<code>P = 0x2b395c2099596d9f</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">out = (serial XOR 0xd1705c3b2e33689b)^13  XOR  0xba6b1f3cb925c25a</code></pre>
+      
+    </figure><p>and <code>main</code> requires <code>out == 0x30cefbec2e4bc466</code>.</p>
+</li>
+<li><p>Since <code>gcd(13, 2^64-1) = 1</code>, the map is a bijection. With <code>d = 13^-1 mod (2^64-1)</code>:</p>
+<p><code>serial = ((0x30cefbec2e4bc466 XOR 0xba6b1f3cb925c25a)^d XOR 0xd1705c3b2e33689b) = 0x8f7db18bd70e193b</code></p>
+</li>
+</ul>
+<h3 id="stage-2-activation-code-anomalous-curve-ecdlp"><a class="wu-anchor" href="#stage-2-activation-code-anomalous-curve-ecdlp" aria-hidden="true">#</a>Stage 2 - Activation code (anomalous-curve ECDLP)</h3>
+<p>The 25 hex characters are read as a <strong>100-bit integer <code>k</code></strong>, then the program performs a
+double-and-add scalar multiplication of a base point by <code>k</code> on an elliptic curve over
+<code>F_M</code>, <code>M = 0x8c817b4a4c0f170cd5aab18cf</code> (prime, 100 bits). String <code>Serial &gt; </code> etc. live at
+<code>0x4050xx</code>; the group operation is <code>0x403ad0</code> which uses the modular inverse routine <code>0x403900</code>
+(exponent <code>M-2</code>, i.e. Fermat). The base point constants are @ <code>0x405670</code> / <code>0x405680</code>.</p>
+<p>Empirically (emulating <code>main</code> under Unicorn and reading the accumulator for <code>k = 1,2,3,4</code>) the
+result is <code>k*P</code> with</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">P = (0xc217d88d4bf005f2022d4e0f, 0x30999f70fb48e2b703431f4d0)
+E: y^2 = x^3 + a*x + b  mod M
+a = 0x65561c079c3bb669feb4d54d9
+b = 0x3905920c79c2f7ace28164fb6</code></pre>
+      
+    </figure><p>The required result is</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">Q = (0x622d01f78ebad9c83dd402304, 0x387932a13c1ef33f165880b6)</code></pre>
+      
+    </figure><p><code>#E(F_M) = 695750960437370813140792187087 = M</code>, i.e. <strong>trace 1 → the curve is anomalous</strong>, so
+Smart&#39;s attack (p-adic elliptic logarithm) solves the discrete log in milliseconds:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">k = 205340998046118030005408178596 = 0x2977e17b118de75b3b4e921a4</code></pre>
+      
+    </figure><h3 id="flag-derivation-with-the-intentional-work-factor"><a class="wu-anchor" href="#flag-derivation-with-the-intentional-work-factor" aria-hidden="true">#</a>Flag derivation (with the intentional work factor)</h3>
+<p>After both checks pass, the flag buffer is <code>table64[i] XOR buf2[i]</code> where <code>table64</code> is the 64-byte
+constant @ <code>0x405200</code> and <code>buf2</code> is a SHA-256-based expansion of the activation data. Before that,
+<code>0x4037b0</code> runs a <strong>deliberate 0xc350 × 0x2710 = 500,000,000-iteration</strong> big-integer
+square/reduce loop (a proof-of-work / anti-reversing delay). The loop genuinely feeds the digest,
+so it must actually run; it is why the program &quot;hangs&quot; for ~15 - 20 min before printing. The final
+check is that the byte-sum of the produced 64-byte buffer equals <code>0x133d</code>, and on success it prints
+<code>Correct! The flag is %s\n</code>.</p>
+<h2 id="verification"><a class="wu-anchor" href="#verification" aria-hidden="true">#</a>Verification</h2>
+<ul>
+<li>Stage-1 serial: <code>(serial^C11)^13 ^ C13 == 0x30cefbec2e4bc466</code> ✔</li>
+<li>Stage-2: <code>k*P == Q</code> on E/F_M ✔ (Smart&#39;s attack)</li>
+<li>End-to-end: <code>./Entitlement</code> prints the flag, and its byte-sum equals the program&#39;s own <code>0x133d</code>
+gate ✔</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#binary-structure">Binary structure</a><ol class="wu-toc-sub"><li><a href="#stage-1-serial-bit-serial-vm">Stage 1 - Serial (bit-serial VM)</a></li><li><a href="#stage-2-activation-code-anomalous-curve-ecdlp">Stage 2 - Activation code (anomalous-curve ECDLP)</a></li><li><a href="#flag-derivation-with-the-intentional-work-factor">Flag derivation (with the intentional work factor)</a></li></ol></li><li><a href="#verification">Verification</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="cold-circuit.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Cold Circuit</span></a>
+    <a class="wu-pager-link wu-pager-next" href="snapfile.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Snapfile</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Night Batch · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A stripped GnuCOBOL binary checks an 18-digit account key through a ladder of 23 digit conditions. The 835-digit constant is just ln(2) as filler, and solving the conditions gives the one key that prints the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>night-batch</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Night Batch <span class="page-sub">GnuCOBOL account key</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{c0b0l_p4ck3d_d3c1mal_n1ghtly_b4tch!}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> rev / COBOL · <strong>Artifact:</strong> <code>extracted/night-batch</code> (Linux x86-64 ELF, stripped, GnuCOBOL runtime)</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">hiCTF{c0b0l_p4ck3d_d3c1mal_n1ghtly_b4tch!}</code></pre>
+      
+    </figure><p>Account key: <code>481702596318740925</code> (18 digits). Verified: <code>./night-batch 481702596318740925</code> prints the
+flag; the neighbouring keys and the other congruent candidate are rejected (&quot;account rejected&quot;).</p>
+<h2 id="what-it-is"><a class="wu-anchor" href="#what-it-is" aria-hidden="true">#</a>What it is</h2>
+<p>A GnuCOBOL binary (<code>core.libcob</code> module descriptors, <code>cob_move_display_to_edited</code>, <code>EC-*</code> codes).
+Usage <code>./night-batch &lt;account-key&gt;</code>. The author obfuscated <em>their own</em> literals with <strong>XOR 0x5A</strong>
+(<code>account rejected</code> exists only as <code>d[0x4d0a0] ^ 0x5A</code>); everything else in the file is plaintext
+libcob runtime text. The 835-digit decimal constant next to &quot;end of program, please press a key to
+exit&quot; is not a modulus - it is the decimal expansion of <strong>ln(2)</strong> (filler/decoy; all its slices and
+reversals are rejected as keys).</p>
+<h2 id="validation-part-1-23-digit-conditions-this-is-what-needed-solving"><a class="wu-anchor" href="#validation-part-1-23-digit-conditions-this-is-what-needed-solving" aria-hidden="true">#</a>Validation, part 1 - 23 digit conditions (this is what needed solving)</h2>
+<p>The key must be exactly 18 characters (<code>if (DAT_00460130 == 0x12)</code>), read into the COBOL field at
+<code>0x460140</code> (space-padded). The COBOL program then runs a nested ladder of 23 conditions; each ends
+with <code>FUN_00413920(&amp;DAT_0045e360, N)</code> which returns 0 iff the computed value equals <code>N</code>. Call sites:
+<code>0x400d93, 0x400e88, 0x40105c, 0x401132, 0x401291, 0x401405, 0x40152d, 0x401706, 0x4017d1, 0x40189b, 0x401965, 0x401a2b, 0x401af0, 0x401c89, 0x401d8a, 0x401e50, 0x401f9a, 0x4020a1, 0x4021eb, 0x4022bb, 0x402357, 0x40241d, 0x4025b6</code>. Targets in order:
+<code>8, 3, 1, 7, 7, 7, 9, 2, 7, 6, 2, 3, 2, 2, 5, 5, 1, 9, 4, 4, 4, 0, 94</code>.</p>
+<p>Empirically (see method below) 21 of the 23 conditions are <strong>linear combinations of the 18 digits
+taken mod 10</strong> (the last one mod 100, target 94 - a weighted digit sum), and two of them (the 1st
+and the 21st) contain a <strong>product</strong> of two digits. Examples of the reconstructed conditions
+(d = the key&#39;s digit array, 0-based):</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">c1 :  d1*d10                        ≡ 8
+c2 :  d8 + d4 + d3                  ≡ 3
+...
+c23:  9*d16 + 2*d15 + 5*d10 + 5*d6 + 4*d3  ≡ 94   (mod 100)</code></pre>
+      
+    </figure><p>The 17-entry pointer table at <code>0x44cf00</code> resolves to <code>0x460100 + {0a,01,03,08,04,06,05,02,11,07, 09,0b,0c,0d,0f,10,0e}</code> - a permutation of the key&#39;s digit offsets (the derived field holds each digit
+as <code>digit&lt;&lt;4 | 0xF</code>); the numeric literal descriptors are <code>0x44cdb0=2, 0x44cdd0=3, 0x44ce10=1, 0x44cdf0=10, 0x44cd30=100, 0x44cd50=9, 0x44cd70=5, 0x44cd90=4</code>. With the two product conditions
+included the system has exactly one solution.</p>
+<h2 id="validation-part-2-the-42-byte-reveal-proven-byte-for-byte"><a class="wu-anchor" href="#validation-part-2-the-42-byte-reveal-proven-byte-for-byte" aria-hidden="true">#</a>Validation, part 2 - the 42-byte reveal (proven byte-for-byte)</h2>
+<p>Once all 23 conditions pass, control reaches <code>0x400b86 → FUN_00402f40</code>, which:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">seed      = SHA-256(key18)                       # 0x402f79 (rdi=key, esi=0x12)
+for c = 0,1,…:  ks = SHA-256(seed ‖ BE32(c))     # BE because of `bswap eax` at 0x402fb2
+out[i]    = TABLE[0x44d0c0 + i] XOR ks[i]        # 42 bytes
+success  ⟺ SHA-256(out) == 2c146846b66a3fbd181654efa527e4886dbc8ff6323aeadbb0a680efaef6a08f
+on success: fwrite(out, 1, 42, stdout) + '\n'    # 0x4030c4</code></pre>
+      
+    </figure><p><code>0x4027e0</code> is plain SHA-256 (0x80 padding, 64-byte blocks, 64-bit length).</p>
+<h2 id="how-it-was-solved"><a class="wu-anchor" href="#how-it-was-solved" aria-hidden="true">#</a>How it was solved</h2>
+<ol>
+<li><code>FUN_00413920</code> converts the computed field (<code>FUN_0040fe00</code>) and compares to <code>N</code>. Patching it to
+always report &quot;equal&quot; (<code>0x4139a3: jl → NOP NOP</code>, <code>0x4139a5: setg al → xor eax,eax</code>) makes the
+ladder run all 23 conditions, so the reveal path becomes reachable <em>and</em> observable.</li>
+<li>With a gdb breakpoint at <code>0x41399e</code> (right after the numeric conversion) the probe prints
+<code>(COND, N)</code> for each condition - i.e. the <em>computed value</em>, not just pass/fail.</li>
+<li>Probe with the all-zero key (all CONDs 0) and with each single-digit perturbation <code>d_j = 1</code>:
+the difference matrix is exactly each condition&#39;s coefficient on digit <code>j</code>. Confirmed the model
+by predicting a random key&#39;s values: <strong>all conditions matched once taken mod 10</strong> (and mod 100
+for the last), apart from the two product-type conditions.</li>
+<li>Solve the 22 congruences (18 unknowns in 0..9) with <button type="button" class="wu-gloss" data-def="An SMT solver: give it symbolic variables and constraints and it finds a satisfying assignment or proves none exists.">z3</button>, enumerate the few solutions, and test each
+by simply running the binary - the first congruent candidate <code>431702596318740925</code> is rejected
+(fails a product condition), the second <code>481702596318740925</code> prints the flag.</li>
+</ol>
+<p>Runnable artifacts: <code>nb_probe2</code> (patched <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> binary, created from <code>night-batch</code>), the gdb probe
+harness, and the coefficient/solve scripts recorded in the ledger. The original <code>night-batch</code> is
+untouched.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#flag">Flag</a></li><li><a href="#what-it-is">What it is</a></li><li><a href="#validation-part-1-23-digit-conditions-this-is-what-needed-solving">Validation, part 1 - 23 digit conditions (this is what needed solving)</a></li><li><a href="#validation-part-2-the-42-byte-reveal-proven-byte-for-byte">Validation, part 2 - the 42-byte reveal (proven byte-for-byte)</a></li><li><a href="#how-it-was-solved">How it was solved</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="last-execution.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Last Execution</span></a>
+    <a class="wu-pager-link wu-pager-next" href="obfuscated-flow.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Obfuscated Flow</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

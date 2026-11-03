@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TESSERA · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The attacker's whole PowerShell script sits in the ScriptBlock log as mixed-endian UTF-16, which ASCII scans miss. Its three labelled parts map onto the riddle's ALPC port, Session 0 profile and reparse-point clues." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>tessera</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>TESSERA <span class="page-sub">UTF-16 ScriptBlock logs and NTFS metadata</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{alpc_p0rt_c0lloquy_s35s10n_z3r0_syst3npr0f1l3_r3p4r53_buff3r_vort3x}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hiCTF{alpc_p0rt_c0lloquy_s35s10n_z3r0_syst3npr0f1l3_r3p4r53_buff3r_vort3x}</code></p>
+<p>Artifact: <code>evidence/</code> - an <strong>extracted Windows file tree</strong> (not a raw image), with the
+materialised NTFS metadata as plain files under <code>[SYSTEM]/</code> (<code>$MFT</code> 306 MB,
+<code>$LogFile</code> 64 MB, <code>$Bitmap</code> 2.5 MB). No TSK/volume offset needed.</p>
+<p>Riddle mapping (as resolved):</p>
+<ul>
+<li><em>&quot;Sub-rosa whispers transversed the local interstice through an unmapped portico&quot;</em> → <strong>ALPC port</strong> colloquy (<code>alpc_p0rt_c0lloquy</code>).</li>
+<li><em>&quot;ephemeral colloquy where disparate entities conjoined in silence&quot;</em> → <strong>Session 0 / SYSTEM</strong> profile (<code>s35s10n_z3r0_syst3npr0f1l3</code>).</li>
+<li><em>&quot;prime fracture unbinds the isolated, sightless sanctum, whose lingering phantom subsequently redirects reality itself&quot;</em> → a <strong>$REPARSE_POINT</strong> buffer injected into a phantom directory (<code>r3p4r53_buff3r_vort3x</code>).</li>
+</ul>
+<p>The three parts were <strong>self-describing</strong> - each carries a leet ordinal label
+(<code>1ist</code> / <code>s32nd</code> / <code>3hird</code>) that is an ordering tag, <strong>not</strong> flag bytes.</p>
+<hr>
+<h2 id="channel-12-powershell-scriptblock-logging-the-whole-attacker-script"><a class="wu-anchor" href="#channel-12-powershell-scriptblock-logging-the-whole-attacker-script" aria-hidden="true">#</a>Channel 1+2: PowerShell ScriptBlock logging (the whole attacker script)</h2>
+<p><code>Windows/System32/winevt/Logs/Microsoft-Windows-PowerShell%4Operational.evtx</code></p>
+<p>The evtx stores the full attacker script as <strong>UTF-16</strong> XML text, so <code>grep -rlia hiCTF</code>
+and every ASCII scan miss it (<code>h\0i\0C\0T\0F\0{</code>). The file also mixes UTF-16LE and
+UTF-16BE chunks, so a plain <code>decode(&#39;utf-16le&#39;)</code> misses half. Endianness-agnostic
+recovery:</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">d = <span class="hljs-built_in">open</span>(evtx,<span class="hljs-string">&#x27;rb&#x27;</span>).read()</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">s = d.replace(<span class="hljs-string">b&#x27;\x00&#x27;</span>, <span class="hljs-string">b&#x27;&#x27;</span>).decode(<span class="hljs-string">&#x27;latin-1&#x27;</span>)   <span class="hljs-comment"># strips NULs -&gt; ASCII of BOTH endiannesses</span></span></span></code></pre>
+      
+    </figure><p>Extracted script literals (exact, from the artifact bytes):</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">FlagPart1    = &quot;1ist-----hiCTF{alpc_p0rt_c0lloquy_&quot;
+FlagPart2    = &quot;--s32nd--s35s10n_z3r0_syst3npr0f1l3_&quot;
+Flag3_Raw    = &quot;iiiiiiiiiii-3hird---r3p4r53_buff3r_vort3x}&quot;
+SecretKey    = &quot;T3ss3r4_K3y_8819472MasterSecret!&quot;
+IV_HEX       = &quot;101112131415161718191a1b1c1d1e1f&quot;
+TargetDir    = &quot;C:\ProgramData\Microsoft\Diagnosis\ETLLocalStore&quot;
+Schema       = &quot;NTFS_REPARSE_STREAM_LOCATOR&quot;
+EntropyStr   = &quot;TesseraEntropy_99&quot;</code></pre>
+      
+    </figure><p>Intermediate token values after stripping the ordinal labels:</p>
+<table>
+<thead>
+<tr>
+<th>part</th>
+<th>label (discard)</th>
+<th>payload kept</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><code>1ist-----</code></td>
+<td><code>hiCTF{alpc_p0rt_c0lloquy_</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>--s32nd--</code></td>
+<td><code>s35s10n_z3r0_syst3npr0f1l3_</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>iiiiiiiiiii-3hird---</code></td>
+<td><code>r3p4r53_buff3r_vort3x}</code></td>
+</tr>
+</tbody></table>
+<p>Concatenation: <code>hiCTF{alpc_p0rt_c0lloquy_</code> + <code>s35s10n_z3r0_syst3npr0f1l3_</code> + <code>r3p4r53_buff3r_vort3x}</code>.</p>
+<hr>
+<h2 id="channel-1-independent-corroboration-xor-0x5a-etl-payload"><a class="wu-anchor" href="#channel-1-independent-corroboration-xor-0x5a-etl-payload" aria-hidden="true">#</a>Channel 1 (independent corroboration): XOR 0x5A ETL payload</h2>
+<p><code>Windows/System32/LogFiles/WMI/AuditDiagTrace.etl</code> (16384 bytes) stores a <code>HEX=&lt;...&gt;</code>
+string (UTF-16). Decode hex and XOR each byte with <code>0x5A</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">HEX= 6B33292E77777777773233190E1C213B362A39052A6A282E05396A...  ^0x5A
+ -&gt;  1ist-----hiCTF{alpc_p0rt_c0lloquy_||TargetService:DiagTrackSvcAux</code></pre>
+      
+    </figure><p>Independent confirmation of part 1 (the log literal is authoritative).</p>
+<h2 id="channel-2-corroboration-registry-configured-service"><a class="wu-anchor" href="#channel-2-corroboration-registry-configured-service" aria-hidden="true">#</a>Channel 2 (corroboration): registry-configured service</h2>
+<p><code>config/SYSTEM</code> → <code>\ControlSet001\Services\DiagTrackSvcAux\Parameters</code>:
+<code>ServiceVault</code> → <code>…\systemprofile\…\Caches\cpinforev.dat</code>, <code>EntropyToken</code> =
+base64 of <code>TesseraEntropy_99</code>. The vault is a DPAPI (LocalMachine) blob whose
+plaintext is a decoy (the script stringifies a Hashtable).</p>
+<h2 id="channel-3-independent-verification-custom-reparse-point-via-raw-mft"><a class="wu-anchor" href="#channel-3-independent-verification-custom-reparse-point-via-raw-mft" aria-hidden="true">#</a>Channel 3 (independent verification): custom $REPARSE_POINT via raw $MFT</h2>
+<p>Parsing <code>[SYSTEM]/$MFT</code> (1024-byte records, attr walk from <code>+0x14</code>) found exactly
+<strong>one</strong> record with a non-stock reparse tag:</p>
+<ul>
+<li><strong>MFT record 101281</strong>, attr type <code>0xC0</code>, tag <code>0xA0000028</code>, dataLen <code>0x30</code> (48)</li>
+<li>Reparse buffer: <code>280000a0 30000000</code> (8-byte header <code>[tag][dataLen][reserved]</code>) + 48-byte AES-CBC ciphertext</li>
+<li>Ciphertext: <code>f4efda2cbfa8208e5b387ec8d2870200c8a8acd0feb6dd72c4e250bbd653b323e5c391e6e0b6983a4935c3b319267c14</code></li>
+</ul>
+<p><code>AES-256-CBC(key = &quot;T3ss3r4_K3y_8819472MasterSecret!&quot;, IV = 10..1f).decrypt(ct)</code>
+yields <code>…d---r3p4r53_bu583r_vort3x}</code> + PKCS7 padding <code>06 06 06 06 06 06</code> - the first
+16-byte block is <strong>tampered</strong> (CT bytes 14 - 15 differ).</p>
+<p>Tamper resolution: re-encrypting the log literal
+<code>iiiiiiiiiii-3hird---r3p4r53_buff3r_vort3x}</code> (42 bytes + 6 PKCS7 = 48) matches the
+stored ciphertext in <strong>46/48</strong> bytes (diff only at CT 14,15), while the &quot;tampered&quot;
+<code>bu583r</code> variant differs in 34 bytes. ⇒ authored plaintext is <code>…r3p4r53_buff3r_vort3x}</code>;
+the <code>5</code>/<code>8</code> seen in raw decryption are the tampered-block artifact.</p>
+<hr>
+<h2 id="negative-channels-checked-not-the-payload"><a class="wu-anchor" href="#negative-channels-checked-not-the-payload" aria-hidden="true">#</a>Negative channels (checked, not the payload)</h2>
+<ul>
+<li>MFT runlist lengths / LCNs / LCN-deltas across all in-use records - nothing (this is the extracted-tree variant; the runlist-length channel is empty).</li>
+<li><code>$Bitmap</code> free/used run-lengths, value ±1 - nothing in this variant.</li>
+<li>All 420 reparse attrs are stock MS FT tags except record 101281 (the payload).</li>
+<li><code>$Extend/$Deleted</code> entries (<code>00030000000183DD36C63374</code>, <code>000500000001827466C51742</code>, <code>0003000000000E7B64B4269A</code>) are real delete-pending NTFS metadata (<code>prefix + hex(FRN)</code>), not planted.</li>
+</ul>
+<h2 id="deliverables"><a class="wu-anchor" href="#deliverables" aria-hidden="true">#</a>Deliverables</h2>
+<ul>
+<li><code>FLAG.txt</code> - the final flag.</li>
+<li><code>WRITEUP.md</code> - this file.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#channel-12-powershell-scriptblock-logging-the-whole-attacker-script">Channel 1+2: PowerShell ScriptBlock logging (the whole attacker script)</a></li><li><a href="#channel-1-independent-corroboration-xor-0x5a-etl-payload">Channel 1 (independent corroboration): XOR 0x5A ETL payload</a></li><li><a href="#channel-2-corroboration-registry-configured-service">Channel 2 (corroboration): registry-configured service</a></li><li><a href="#channel-3-independent-verification-custom-reparse-point-via-raw-mft">Channel 3 (independent verification): custom $REPARSE_POINT via raw $MFT</a></li><li><a href="#negative-channels-checked-not-the-payload">Negative channels (checked, not the payload)</a></li><li><a href="#deliverables">Deliverables</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="resurrection.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">RESURRECTION (Operation Eclipse Void)</span></a>
+    <a class="wu-pager-link wu-pager-next" href="tasmota-vault.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Tasmota Vault</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

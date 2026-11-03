@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>C3 Vault · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The eFuse dump holds the flash encryption key, and the decrypted NVS gives the device ID, generation and current vault seed. Rebuilding the HMAC challenge-response from the firmware lets us authenticate to the live vault as the gateway." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>c3-vault</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>C3 Vault <span class="page-sub">ESP32-C3 flash and NVS decryption</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{efus3_cl34r_jt4g_0p3n_nv5_017026ab04}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> hardware / reverse · <strong>Endpoint:</strong> <code>c3-vault-*.chall.hiddeninvestigations.net:1337</code>
+(TLS, banner <code>C3VAULT/2</code>, commands <code>help status auth &lt;64 hex&gt; quit</code>).</p>
+<blockquote>
+<p>Retired ESP32-C3 gateway with access to a remote vault. Recover its enrollment
+credentials and convince the live service that you are the gateway. Flag <code>hiCTF{}</code>.</p>
+</blockquote>
+<p><strong>RESULT:</strong> <code>hiCTF{efus3_cl34r_jt4g_0p3n_nv5_017026ab04}</code> (live auth, <code>VAULT OPENED</code>).</p>
+<h2 id="1-flash-decryption"><a class="wu-anchor" href="#1-flash-decryption" aria-hidden="true">#</a>1. Flash decryption</h2>
+<p>4 MiB <code>extracted/flash_image.bin</code> is AES-128-XTS flash-encrypted with the key from eFuse
+BLOCK4 (<code>extracted/efuse_read.bin[0x70:0x90]</code>, also shipped as <code>key.bin</code>). Decrypt with the
+canonical tool (a hand-rolled XTS fails because the C3 tweak is <code>(addr &amp; ~0x7F)</code> LE over
+128-byte blocks, not <code>addr/16</code>):</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">espsecure.py decrypt-flash-data -k key.bin -o flash_plain.bin -a 0 -x extracted/flash_image.bin</code></pre>
+      
+    </figure><p>Partition table at 0x8000: <code>nvs</code> @0x9000 (0x6000), <code>nvs_keys</code> @0xF000 (0x1000), <code>factory</code> @0x10000.</p>
+<h2 id="2-nvs-decryption"><a class="wu-anchor" href="#2-nvs-decryption" aria-hidden="true">#</a>2. NVS decryption</h2>
+<p>NVS is NVS-XTS encrypted (page headers plaintext, 32-byte entries XTS&#39;d). Key set =
+<code>nvs_keys[0xF000:0xF040]</code> (<code>eky||tky</code>, AES-256-XTS); tweak = 16 bytes whose first 4 are the
+entry&#39;s partition-relative byte offset (LE); scheme per ESP-IDF v5.3.1
+<code>components/nvs_flash/src/nvs_encrypted_partition.cpp</code>. Recovered entries:</p>
+<table>
+<thead>
+<tr>
+<th>ns</th>
+<th>key</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>gateway</code></td>
+<td><code>device_id</code></td>
+<td><code>ee0315f3953aad298d7f3f43973ad618</code> (16 B)</td>
+</tr>
+<tr>
+<td><code>gateway</code></td>
+<td><code>generation</code></td>
+<td><code>7</code> (u32)</td>
+</tr>
+<tr>
+<td><code>vault_v2</code></td>
+<td><code>seed</code></td>
+<td><code>826e4e9e65c0ce89f413b7c291bb7e84185c64d4ec8769805227253b985083c5</code> (32 B)</td>
+</tr>
+<tr>
+<td><code>vault_v1</code></td>
+<td><code>seed</code></td>
+<td><code>d857200f87a1728b5220a4d77c31d7d9ee9bf8992ad16dbb398d05844676aa4f</code> (stale/decoy)</td>
+</tr>
+</tbody></table>
+<p><code>device_id</code> matches the live service&#39;s <code>DEVICE</code> banner exactly - NVS decryption confirmed.</p>
+<h2 id="3-protocol-from-the-decrypted-firmware-project-c3-vault-device-idf-v531"><a class="wu-anchor" href="#3-protocol-from-the-decrypted-firmware-project-c3-vault-device-idf-v531" aria-hidden="true">#</a>3. Protocol (from the decrypted firmware, project <code>c3_vault_device</code>, IDF v5.3.1)</h2>
+<p>The device console reads a 64-hex challenge and prints <code>RESPONSE &lt;hex&gt;</code>; the host verifier
+accepts the same value. Message/label layout recovered from <code>vault.c</code> (<code>app_build_response</code>
+@ <code>0x42004888</code>, <code>derive_device_key</code> @ <code>~0x42004a84</code>):</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">key  = HMAC_SHA256(seed_v2, &quot;c3-vault/device-key/v2\0&quot; || device_id || generation_LE4)   # 43-byte info
+resp = HMAC_SHA256(key,     &quot;C3VAULT-AUTH-V2\0&quot;        || challenge  || device_id)       # 64-byte msg</code></pre>
+      
+    </figure><h3 id="kdf-identification-correction-of-the-earlier-non-standard-kdf-claim"><a class="wu-anchor" href="#kdf-identification-correction-of-the-earlier-non-standard-kdf-claim" aria-hidden="true">#</a>KDF identification (correction of the earlier &quot;non-standard KDF&quot; claim)</h3>
+<p>The KDF wrapper <code>0x4200c0c4</code> is textbook mbedtls HMAC: <code>md_setup(ctx,info,hmac=1)</code> →
+<code>mbedtls_md_hmac_starts(ctx, key, keylen)</code> → <code>mbedtls_md_update(ctx, data, datalen)</code> →
+<code>mbedtls_md_finish(ctx, out)</code>; i.e. <code>F(key, data) = HMAC_hash(key, data)</code>. The <code>info</code> (type 9)
+struct is at <code>0x3c02818c</code>: <code>digest_size=0x20</code> (32), <code>block_size=0x40</code> (64) → <strong>SHA-256</strong>
+(the banner also says SHA-256). A hand-rolled XTS/emulation was unnecessary.</p>
+<blockquote>
+<p>A previous session concluded &quot;F is not plain HMAC&quot; and tried to run the firmware&#39;s own code
+under Unicorn. That conclusion was an artifact: the emulator produced values matching <em>no</em>
+standard construction for any test vector, because mbedtls on the C3 dispatches into ROM SHA
+routines that the emulator had stubbed to NOPs. Do not trust <code>c3_solve.py</code>&#39;s output.</p>
+</blockquote>
+<h2 id="4-solver"><a class="wu-anchor" href="#4-solver" aria-hidden="true">#</a>4. Solver</h2>
+<p><code>c3_solve.py</code> (plain-Python HMAC; no emulation, no <code>segs.json</code> needed) connects, parses the
+fresh <code>CHALLENGE</code>, computes <code>key</code> then <code>resp</code> with <code>hmac</code>/<code>hashlib</code>, sends <code>auth &lt;resp&gt;</code>, and
+prints the verifier reply.</p>
+<p><code>./c3_solve.py &lt;host&gt; [port]</code></p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-flash-decryption">1. Flash decryption</a></li><li><a href="#2-nvs-decryption">2. NVS decryption</a></li><li><a href="#3-protocol-from-the-decrypted-firmware-project-c3-vault-device-idf-v531">3. Protocol (from the decrypted firmware, project c3_vault_device, IDF v5.3.1)</a><ol class="wu-toc-sub"><li><a href="#kdf-identification-correction-of-the-earlier-non-standard-kdf-claim">KDF identification (correction of the earlier &quot;non-standard KDF&quot; claim)</a></li></ol></li><li><a href="#4-solver">4. Solver</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="the-collectors-trail.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">The Collector's Trail</span></a>
+    <a class="wu-pager-link wu-pager-next" href="cold-chain.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Cold Chain</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

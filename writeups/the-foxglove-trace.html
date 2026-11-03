@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Foxglove Trace · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The tracker script is gone, but its notes, config and one good run log pin down the rules: keep rows with step_delta of at least 41 and weight each AP's signal. Rescoring the scan export puts FoxgloveCoffee_Guest on top." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>the-foxglove-trace</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>The Foxglove Trace <span class="page-sub">Rebuilding a lost Wi-Fi tracker's scoring</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-osint">osint</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{FoxgloveCoffee_Guest}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> offline data analysis · <strong>Artifacts:</strong> <code>notes.txt</code>, <code>aps.conf</code>, <code>run.log</code>, <code>scan_export.csv</code></p>
+<h2 id="the-scoring-rule-reconstructed-from-the-files"><a class="wu-anchor" href="#the-scoring-rule-reconstructed-from-the-files" aria-hidden="true">#</a>The scoring rule (reconstructed from the files)</h2>
+<p><code>notes.txt</code> states the idea; <code>run.log</code> is the single good run of the (now lost) <code>tracker.py</code>
+and leaks the one number that was deliberately left out of the notes:</p>
+<ul>
+<li><strong>&quot;moving&quot; filter</strong> - from <code>run.log</code> for CafeDelMundo: <code>step_delta=40 -&gt; stationary, dropped</code>
+but <code>step_delta=41 -&gt; moving, kept</code>. Cutoff: <strong>keep only rows with <code>step_delta &gt;= 41</code></strong>.</li>
+<li><strong>per-AP score</strong> - sum over kept rows of <code>signal * weight</code>, where weight comes from <code>aps.conf</code>:
+<code>FoxgloveCoffee_Guest=3</code>, <code>HomePlex_5G=2</code>, <code>CafeDelMundo=2</code>, <code>NETGEAR-8841=1</code>.
+(Check: CafeDelMundo kept rows 58+60+64=182, x2 = <strong>364</strong>, exactly the <code>subtotal = 364</code>
+in <code>run.log</code>; HomePlex_5G kept row 87, x2 = <strong>174</strong> = the logged <code>subtotal = 174</code>.)</li>
+<li>Only APs listed in <code>aps.conf</code> count; everything else in the export is ignored.</li>
+</ul>
+<h2 id="solve"><a class="wu-anchor" href="#solve" aria-hidden="true">#</a>Solve</h2>
+<figure class="wu-code" data-lines="10">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 - &lt;&lt;<span class="hljs-string">&#x27;EOF&#x27;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">import csv</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">W = {<span class="hljs-string">&#x27;FoxgloveCoffee_Guest&#x27;</span>:3,<span class="hljs-string">&#x27;HomePlex_5G&#x27;</span>:2,<span class="hljs-string">&#x27;CafeDelMundo&#x27;</span>:2,<span class="hljs-string">&#x27;NETGEAR-8841&#x27;</span>:1}</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">sc = {k:0 <span class="hljs-keyword">for</span> k <span class="hljs-keyword">in</span> W}</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc"><span class="hljs-keyword">for</span> r <span class="hljs-keyword">in</span> csv.DictReader(open(<span class="hljs-string">&#x27;scan_export.csv&#x27;</span>)):</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">    <span class="hljs-keyword">if</span> r[<span class="hljs-string">&#x27;ap_name&#x27;</span>] <span class="hljs-keyword">in</span> W and int(r[<span class="hljs-string">&#x27;step_delta&#x27;</span>]) &gt;= 41:</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">        sc[r[<span class="hljs-string">&#x27;ap_name&#x27;</span>]] += int(r[<span class="hljs-string">&#x27;signal&#x27;</span>]) * W[r[<span class="hljs-string">&#x27;ap_name&#x27;</span>]]</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"><span class="hljs-built_in">print</span>(sorted(sc.items(), key=lambda x: -x[1]))</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">EOF</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-comment"># [(&#x27;FoxgloveCoffee_Guest&#x27;, 1044), (&#x27;CafeDelMundo&#x27;, 364), (&#x27;NETGEAR-8841&#x27;, 240), (&#x27;HomePlex_5G&#x27;, 174)]</span></span></span></code></pre>
+      
+    </figure><p>The traps work exactly as advertised: <code>HomePlex_5G</code> is the <strong>loudest</strong> AP (signal 87-92) and
+also the <strong>most frequent</strong> (10 rows), but you are almost never moving there (1 kept row),
+so it finishes last. <code>FoxgloveCoffee_Guest</code> - the place the person keeps returning to -
+wins by a wide margin.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">hiCTF{FoxgloveCoffee_Guest}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#the-scoring-rule-reconstructed-from-the-files">The scoring rule (reconstructed from the files)</a></li><li><a href="#solve">Solve</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="shadow-identity.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Shadow Identity</span></a>
+    <a class="wu-pager-link wu-pager-next" href="labyrinth.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Labyrinth</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

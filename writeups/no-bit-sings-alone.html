@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>No Bit Sings Alone · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The spectrogram gives an AES-GCM nonce and ciphertext. Guide tones set the step size for Hamming(31,26) matrix embedding in the left channel's LSBs, and an inverse NTT over GF(257) turns the recovered values into the AES key." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>no-bit-sings-alone</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>No Bit Sings Alone <span class="page-sub">Spectrogram, matrix embedding, inverse NTT</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{m4th3m4t!c5_g4v3_m3_4_l0t_Of_p4!n_8d52ae513}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<blockquote>
+<p>A suspicious audio file. Nothing more.
+Or maybe that is exactly what it wants you to think.
+Listen carefully. Look deeper.</p>
+</blockquote>
+<p><strong>Flag:</strong> <code>hiCTF{m4th3m4t!c5_g4v3_m3_4_l0t_Of_p4!n_8d52ae513}</code></p>
+<p>Solver: <a href="solve.py"><code>solve.py</code></a> (<code>python3 solve.py suspicious.wav</code>; add <code>--banner</code> to dump the spectrogram text).</p>
+<hr>
+<h2 id="tldr"><a class="wu-anchor" href="#tldr" aria-hidden="true">#</a>TL;DR</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>What&#39;s there</th>
+<th>How to undo it</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1. Spectrogram banner (0.7 - 5.4 s, both channels)</td>
+<td><code>AES256GCM</code>, the nonce <code>N</code>, and the ciphertext <code>C0..C5</code></td>
+<td>Read the 5×7 pixel font (OCR by bitmap, not by eye)</td>
+</tr>
+<tr>
+<td>2. Guide tones (R channel, blocks 585 - 642)</td>
+<td>One pure tone per 4096-sample block, at FFT bin <code>k</code> (always odd)</td>
+<td><code>k</code> is the step size: select <code>L[j·k mod 4096]</code></td>
+</tr>
+<tr>
+<td>3. Matrix embedding (L channel LSBs)</td>
+<td>Hamming(31,26) syndrome, columns rotated by <code>k</code></td>
+<td>5 bits per block → 290 bits</td>
+</tr>
+<tr>
+<td>4. Finite-field transform</td>
+<td>32 values in GF(257), 9 bits each</td>
+<td>Inverse NTT (length 32, ω = 240) → 32-byte AES key</td>
+</tr>
+<tr>
+<td>5. Crypto</td>
+<td>AES-256-GCM</td>
+<td>CTR-decrypt → length-prefixed flag</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="1-stuff-you-can-see-the-spectrogram-banner"><a class="wu-anchor" href="#1-stuff-you-can-see-the-spectrogram-banner" aria-hidden="true">#</a>1. Stuff you can see: the spectrogram banner</h2>
+<p>The file is a 59.8 s, 16-bit stereo WAV at 44.1 kHz. It contains only <code>fmt </code> and <code>data</code> chunks, so there&#39;s no metadata. A spectrogram shows a block of text between 7 and 18 kHz in the first ~5 s:</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">AES256GCM
+N=99CB9C49E4C83527CE6F89D9
+C0=8A845BA500DE25B749F1FF63CCFF
+C1=9D2D9FD8D2614E19BCA42CC7E438
+C2=B31407AE896311C3AADCF9327610
+C3=478444A09EF6FE3650DF7EBEC3B7
+C4=1FF18CF0EB728DBFA791B7485D76
+C5=7172AE849328715A10B5</code></pre>
+      
+    </figure><p><strong>Don&#39;t read it by eye.</strong> The font is a blocky 5×7 font, and <code>8 / B / 9 / 0 / D</code> look nearly identical in a blurry spectrogram. One wrong nibble breaks the decryption. It&#39;s better to recover the font grid exactly:</p>
+<ul>
+<li><strong>Rows:</strong> the horizontal strokes are pure tones on a regular ladder, <code>f = 18002 − R·177.44 Hz</code> for R = 0…62. That&#39;s 8 text lines × (7 pixel rows + 1 blank row).</li>
+<li><strong>Columns:</strong> sweeping the analysis-window offset and measuring contrast shows a period of exactly <strong>1024 samples</strong> per pixel column, so a character is 6 columns = 6144 samples. (Guessing the pitch as ~0.1367 s from the picture drifts by half a character across a line.)</li>
+<li>For each (row, column) cell, take the magnitude of a single DFT bin at the row frequency over that 1024-sample window. Then threshold.</li>
+</ul>
+<p>The result is a perfectly clean bitmap. Only 20 distinct glyphs appear, so each one can be labelled once without ambiguity:</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">#   #        ###   ###   #### ####   ###   ####    #   ###  #####
+##  # ##### #   # #   # #     #   # #   # #       ##  #   # #
+# # #       #   # #   # #     #   # #   # #      # #  #   # #
+#  ##        ####  #### #     ####   #### #     #  #   #### ####
+#   # #####     #     # #     #   #     # #     #####     # #
+#   #           #     # #     #   #     # #        #      # #
+#   #        ###   ###   #### ####   ###   ####    #   ###  #####
+  N     =     9     9     C     B     9     C     4     9     E</code></pre>
+      
+    </figure><p>(8 is rounded on both halves, and 9 is the same shape with the lower-left stroke missing. B has a straight left side with square corners on the left. D is B without the middle bar, and 0 is rounded with a diagonal slash.)</p>
+<p>So we have AES-256-GCM, a 12-byte nonce and 80 bytes of ciphertext. The thing we&#39;re missing is the key.</p>
+<h2 id="2-the-guide-tones-in-the-right-channel"><a class="wu-anchor" href="#2-the-guide-tones-in-the-right-channel" aria-hidden="true">#</a>2. The guide: tones in the right channel</h2>
+<p>The hint says the channels have different roles, and that signals in the &quot;observable&quot; channel guide the search in the other one.</p>
+<p>Near the end (≈54.3 - 59.7 s), the right channel has a staircase of high-pitched tones (14 - 19.4 kHz). Cutting R into 4096-sample blocks <em>aligned to sample 0</em> and taking a plain rectangular-window FFT shows that blocks <strong>585 - 642 (58 blocks)</strong> each hold a tone that falls <em>exactly</em> on one bin. Practically all of the high-band energy is in a single bin, and the neighbouring bins are ~0:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">m=585 k=1781   m=586 k=1583   m=587 k=1463   m=588 k=1625   ...   m=642 k=1483</code></pre>
+      
+    </figure><p>Every <code>k</code> is <strong>odd</strong>, so <code>gcd(k, 4096) = 1</code> and <code>j·k mod 4096</code> visits every position in the block exactly once. In other words, k is a step size, as the hint suggests (&quot;modular arithmetic, repeated steps, positions wrapping around within a block&quot;).</p>
+<h2 id="3-the-hidden-layer-matrix-embedding-in-the-left-channel"><a class="wu-anchor" href="#3-the-hidden-layer-matrix-embedding-in-the-left-channel" aria-hidden="true">#</a>3. The hidden layer: matrix embedding in the left channel</h2>
+<p>Reading the LSBs at those positions directly gives noise. The hint points to <em>parity relationships as in error-correcting codes</em>. This is <strong>matrix embedding</strong> (a.k.a. syndrome coding), where a group of <code>n = 2^p − 1</code> cover bits carries <code>p</code> message bits as the Hamming-code syndrome:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">syndrome = XOR of column_index(i) over all i where bit_i = 1</code></pre>
+      
+    </figure><p>The number of parameters is small, but every variant we tested produced a plausible-looking bitstream, so we needed a test that tells the right one apart. Layer 4 provides it: if the payload is 32 elements of <strong>GF(257)</strong> stored in 9 bits each, then <em>every</em> 9-bit chunk must be ≤ 256. For random bits, all 32 chunks pass with probability ≈ 0.5³² ≈ 2⁻³². Brute-forcing p ∈ [2,8], the start index, the sign handling and several &quot;per-block arrangement&quot; rules against that test gives exactly one family of hits:</p>
+<ul>
+<li><strong>p = 5</strong>, i.e. Hamming(31,26): 31 samples per block → 5 bits per block, 58 × 5 = <strong>290 bits</strong></li>
+<li>samples <code>L[block + (j·k) mod 4096]</code> for <strong>j = 1…31</strong></li>
+<li>the cover bit is <code>sample &amp; 1</code> (two&#39;s-complement LSB)</li>
+<li><strong>column index of the i-th selected bit = ((i − k) mod 31) + 1</strong>. The tone frequency rotates the parity-check matrix from block to block (&quot;the frequency information … also influences how those parity relationships are arranged&quot;)</li>
+<li>syndrome bits MSB-first</li>
+</ul>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">syn = <span class="hljs-number">0</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">31</span>):</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">    <span class="hljs-keyword">if</span> L[base + ((i + <span class="hljs-number">1</span>) * k) % <span class="hljs-number">4096</span>] &amp; <span class="hljs-number">1</span>:</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">        syn ^= ((i - k) % <span class="hljs-number">31</span>) + <span class="hljs-number">1</span></span></span></code></pre>
+      
+    </figure><p>290 bits = 32 × 9 + 2 padding zeros. All 32 values land in [0, 256]:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">205 208 154 114 115 240 123 108 245 172  73 192 256 177  62 202
+153   7  77 138 175   0   4  68 208  32  76 169 103  36 147 216</code></pre>
+      
+    </figure><p>Note the <code>256</code>: it can&#39;t be a byte, which confirms we&#39;re working in GF(257).</p>
+<h2 id="4-the-frequency-like-transform-inverse-ntt-over-gf257"><a class="wu-anchor" href="#4-the-frequency-like-transform-inverse-ntt-over-gf257" aria-hidden="true">#</a>4. The &quot;frequency-like&quot; transform: inverse NTT over GF(257)</h2>
+<p>A &quot;reversible, frequency-like mathematical transformation&quot; over a finite field is a <strong>Number Theoretic Transform</strong>. 257 is prime and 32 | 256, so GF(257) has 16 primitive 32nd roots of unity. Applying the inverse NTT with each candidate root (and with or without the 1/n scaling) gives candidate keys.</p>
+<p>The GCM tag never verified with any split we tried (see the notes below). So instead of checking the tag, we decrypted each candidate in <strong>CTR mode</strong>, which is what GCM does underneath (keystream counter starts at 2), and looked for the flag format. Exactly one candidate decrypts to readable text:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-text">ω = 240, scaled by 32⁻¹ mod 257
+key = 8da8dca0aa79a8a2b1e1aef181e98e63fcca7da26d49d6dbffdb461e3ecd544d</code></pre>
+      
+    </figure><figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">inverse_ntt</span>(<span class="hljs-params">vals, w=<span class="hljs-number">240</span>, p=<span class="hljs-number">257</span></span>):</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">    n = <span class="hljs-built_in">len</span>(vals); n_inv = <span class="hljs-built_in">pow</span>(n, p - <span class="hljs-number">2</span>, p)</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">    <span class="hljs-keyword">return</span> [<span class="hljs-built_in">sum</span>(v * <span class="hljs-built_in">pow</span>(w, i * j, p) <span class="hljs-keyword">for</span> j, v <span class="hljs-keyword">in</span> <span class="hljs-built_in">enumerate</span>(vals)) * n_inv % p</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">            <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(n)]</span></span></code></pre>
+      
+    </figure><h2 id="5-decryption"><a class="wu-anchor" href="#5-decryption" aria-hidden="true">#</a>5. Decryption</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">AES-CTR(key, nonce || 00000002)  -&gt;  00 32 &quot;hiCTF{m4th3m4t!c5_g4v3_m3_4_l0t_Of_p4!n_8d52ae513}&quot; ...</code></pre>
+      
+    </figure><p>The plaintext starts with a 2-byte big-endian length (0x0032 = 50), followed by the 50-byte flag.</p>
+<p><strong>Flag:</strong> <code>hiCTF{m4th3m4t!c5_g4v3_m3_4_l0t_Of_p4!n_8d52ae513}</code></p>
+<hr>
+<h2 id="notes-gotchas"><a class="wu-anchor" href="#notes-gotchas" aria-hidden="true">#</a>Notes / gotchas</h2>
+<ul>
+<li><strong>Block alignment matters.</strong> The tone blocks are aligned to multiples of 4096 from sample 0. Use a rectangular window so that an exact-bin tone shows up as a single spike. The Hann-windowed STFT views used for exploring smear it over 3 bins.</li>
+<li><strong>The ≤ 256 test was the key move.</strong> It separates the extraction layer (code parameters, column arrangement) from the transform and crypto layers, so you can brute-force each one on its own instead of searching the product of all of them against the AES tag.</li>
+<li><strong>The GCM tag never verified</strong> for any split of the 80 bytes we tried, with or without <code>AES256GCM</code> as AAD. The flag decrypts cleanly anyway (CTR mode doesn&#39;t need the tag). So either the trailing bytes were drawn in a different layout, or one of them is a misread nibble. It doesn&#39;t affect the flag.</li>
+<li>Text appears in both channels and the tones are in R only, so &quot;the observable channel&quot; is R, and the payload is in L&#39;s LSBs.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#tldr">TL;DR</a></li><li><a href="#1-stuff-you-can-see-the-spectrogram-banner">1. Stuff you can see: the spectrogram banner</a></li><li><a href="#2-the-guide-tones-in-the-right-channel">2. The guide: tones in the right channel</a></li><li><a href="#3-the-hidden-layer-matrix-embedding-in-the-left-channel">3. The hidden layer: matrix embedding in the left channel</a></li><li><a href="#4-the-frequency-like-transform-inverse-ntt-over-gf257">4. The &quot;frequency-like&quot; transform: inverse NTT over GF(257)</a></li><li><a href="#5-decryption">5. Decryption</a></li><li><a href="#notes-gotchas">Notes / gotchas</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="hall-of-mirrors.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Hall of Mirrors</span></a>
+    <a class="wu-pager-link wu-pager-next" href="dead-air.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Dead Air</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

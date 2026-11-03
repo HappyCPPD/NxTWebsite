@@ -173,17 +173,26 @@ const catLabel = {
 /* Inner <span>s for a result scoreline. `placeClass` adds the .is-place hook
  * used by the homepage / member-page styling; the writeups index leaves it off
  * to match the pre-existing markup. */
-function scorelineSpans(ev, placeClass) {
+function scorelineSpans(ev, placeClass, member) {
   const r = ev.result;
   const s = [];
-  s.push(`<span${placeClass ? ' class="is-place"' : ''}><b>${esc(r.placement)}</b> ${esc(r.league || r.field || '')}</span>`);
+  s.push(`<span${placeClass ? ' class="is-place"' : ''}><b>${esc(placementFor(ev, member))}</b> ${esc(r.league || r.field || '')}</span>`);
   if (r.weight != null) s.push(`<span><b>${r.weight}</b> CTFtime weight</span>`);
   if (r.points != null) s.push(`<span><b>${r.points}</b> points</span>`);
   s.push(`<span><b>${r.solves}</b> solves</span>`);
   const suffix = ev.attribution || ev.org;
-  s.push(`<span><b>${esc(ev.team)}</b>${suffix ? ` &middot; ${esc(suffix)}` : ''}</span>`);
+  /* Solo events where each member placed separately list every member's placing. */
+  const team = ev.placements && !member
+    ? Object.entries(ev.placements).map(([slug, place]) => `<b>${esc(handleOf(slug))}</b> ${esc(place)}`).join(', ')
+    : `<b>${esc(ev.team)}</b>`;
+  s.push(`<span>${team}${suffix ? ` &middot; ${esc(suffix)}` : ''}</span>`);
   return s.join('\n      ');
 }
+
+/* `placements` maps member slug -> placing for solo events entered separately;
+ * `result.placement` stays the headline (best) placing. */
+const placementFor = (ev, member) => (member && ev.placements?.[member.slug]) || ev.result.placement;
+const handleOf = (slug) => cfg.members.find((m) => m.slug === slug)?.handle || slug;
 
 /* ---------- home page: sections generated between marker comments ---------- */
 const ARROW = '<svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg>';
@@ -242,7 +251,7 @@ function teamCards() {
         .sort((a, b) => Date.parse(b.result.date) - Date.parse(a.result.date));
       const ctfs = joined.length
         ? `<ul class="member-ctfs">
-${joined.map((ev) => `              <li><a href="events/${esc(ev.id)}.html"><span class="member-ctf-name" title="${esc(ev.event)}">${esc(ev.event)}</span><span class="member-ctf-place">${esc(ev.result.placement)}</span></a></li>`).join('\n')}
+${joined.map((ev) => `              <li><a href="events/${esc(ev.id)}.html"><span class="member-ctf-name" title="${esc(ev.event)}">${esc(ev.event)}</span><span class="member-ctf-place">${esc(placementFor(ev, m))}</span></a></li>`).join('\n')}
             </ul>`
         : '<p class="member-ctfs-empty">No CTFs yet.</p>';
       return `      <li class="member-card">
@@ -485,7 +494,7 @@ ${html}
 }
 
 /* ---------- member pages ---------- */
-function memberEventBlock(ev) {
+function memberEventBlock(ev, m) {
   const hasWhen = ev.challenges.some((c) => c.solved);
   const rows = ev.challenges
     .map((c) => `          <tr>
@@ -512,7 +521,7 @@ function memberEventBlock(ev) {
       </div>
       <div class="mp-event-summary">
         <div class="results-scoreline">
-      ${scorelineSpans(ev, true)}
+      ${scorelineSpans(ev, true, m)}
         </div>
         ${cert}
       </div>
@@ -545,7 +554,7 @@ function buildMembers() {
       ? `<p class="mp-links"><a href="${esc(m.linkedin)}" target="_blank" rel="noopener noreferrer">LinkedIn <svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M200,64V168a8,8,0,0,1-16,0V83.31L69.66,197.66a8,8,0,0,1-11.32-11.32L172.69,72H88a8,8,0,0,1,0-16H192A8,8,0,0,1,200,64Z"/></svg></a></p>`
       : '';
     const eventsHtml = events.length
-      ? events.map(memberEventBlock).join('\n\n')
+      ? events.map((ev) => memberEventBlock(ev, m)).join('\n\n')
       : '    <p class="mp-empty">No solo events logged yet.</p>';
 
     const header = pageHeader({

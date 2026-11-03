@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dead Air · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="One stereo channel is Morse giving the key NIGHTJAR, and the other draws a 7z password in its spectrogram. The logbook glyphs map through the code pad to ciphertext, and Vigenere over a 37-symbol alphabet decodes the message." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>dead-air</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Dead Air <span class="page-sub">Morse, spectrogram glyphs and Vigenere</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{s1l3nc3_w4s_th3_m3ss4g3_6r3v}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Station KESTREL. Flag format <code>hiCTF{}</code>.</p>
+<h2 id="artifacts"><a class="wu-anchor" href="#artifacts" aria-hidden="true">#</a>Artifacts</h2>
+<p><code>dead-air.zip</code> -&gt;</p>
+<ul>
+<li><code>kestrel_last_recording.wav</code> - stereo 16-bit PCM, 44100 Hz, 47.24 s</li>
+<li><code>kestrel_logbook.7z</code> - password protected</li>
+</ul>
+<h2 id="chain"><a class="wu-anchor" href="#chain" aria-hidden="true">#</a>Chain</h2>
+<ol>
+<li><p><strong>WAV is two operators on two stereo channels.</strong></p>
+<ul>
+<li><strong>Ch0</strong> (~700 Hz carrier, on/off keyed) = the operator who &quot;spoke out loud&quot;.
+OOK envelope -&gt; Morse:
+<code>KESTREL STATION OFF AIR KEY IS NIGHTJAR LISTEN WITH YOUR EYES</code><ul>
+<li>key = <strong>NIGHTJAR</strong></li>
+<li>&quot;listen with your eyes&quot; = look at the spectrogram</li>
+</ul>
+</li>
+<li><strong>Ch1</strong> = the operator who &quot;never made a sound you could hear&quot;.
+Full-band spectrogram draws large glyphs at 5-8 kHz:
+<code>KSTR-7742-VXQ</code></li>
+</ul>
+</li>
+<li><p><strong>7z password</strong> = <code>KSTR-7742-VXQ</code>. Extracts:</p>
+<ul>
+<li><code>logbook_page.png</code> - 28 coded glyphs (01..28)</li>
+<li><code>operator_codepad.png</code> - code pad mapping glyph -&gt; char for the
+alphabet <code>ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_</code> (37 symbols, index 0..36)</li>
+</ul>
+</li>
+<li><p><strong>Glyph decoding.</strong> Each cell encodes its symbol in TWO redundant ways:
+the black stroke + start-dot shape, and a faint 3x3 dot constellation.
+Both agree. Template-matching each logbook glyph (rotation/flip invariant)
+to the pad glyphs yields ciphertext:
+<code>59R_6L3Q9BYGBQ3QZAYZMP3QIZ92</code></p>
+</li>
+<li><p><strong>Vigenère</strong> over the same 37-symbol alphabet, key <code>NIGHTJAR</code>:
+P = (C - K) mod 37
+-&gt; <code>S1L3NC3_W4S_TH3_M3SS4G3_6R3V</code>
+= &quot;SILENCE WAS THE MESSAGE&quot; (+ a trailing fragment <code>6R3V</code>).</p>
+</li>
+</ol>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<p><code>hiCTF{s1l3nc3_w4s_th3_m3ss4g3_6r3v}</code> (ACCEPTED - the decode lowercased; the uppercase form was rejected)</p>
+<p>Note: the trailing <code>6R3V</code> decodes deterministically (glyphs 25-28 = I,Z,9,2,
+each verified against the pad at high confidence and via their unique dot
+constellations reached only by the Z/3,I/G disambiguation that keeps the first
+23 chars perfectly clean). Every alternative disambiguation corrupts earlier
+words (S1L3NCZ / THZ / W4SBTH3), so this reading is the only consistent one.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#artifacts">Artifacts</a></li><li><a href="#chain">Chain</a></li><li><a href="#flag">Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="no-bit-sings-alone.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">No Bit Sings Alone</span></a>
+    <a class="wu-pager-link wu-pager-next" href="resurrection.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">RESURRECTION (Operation Eclipse Void)</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

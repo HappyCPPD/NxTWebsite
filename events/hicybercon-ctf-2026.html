@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HICyberCon CTF 2026 writeups · NXT_CTFS</title>
+<meta name="description" content="NXT_CTFS writeups for HICyberCon CTF 2026: 54 challenges." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <span>hicybercon-ctf-2026</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>HICyberCon CTF 2026</h1>
+      <div class="page-meta"><span>1 November 2026</span></div>
+      
+      <div class="results-scoreline">
+      <span class="is-place"><b>57th</b> of 1,119</span>
+      <span><b>3,780</b> points</span>
+      <span><b>62</b> solves</span>
+      <span><b>NxT, NxD</b></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="wu-filters" role="group" aria-label="Filter HICyberCon CTF 2026 writeups">
+      <div class="wu-filter-row">
+        <span class="wu-filter-label" id="fCatLabel">Category</span>
+        <div class="wu-filter-chips" role="group" aria-labelledby="fCatLabel">
+          <button type="button" class="chip" data-cat="all" aria-pressed="true">All</button>
+          <button type="button" class="chip chip-dot wu-cat-web" data-cat="web" aria-pressed="false">web</button>
+          <button type="button" class="chip chip-dot wu-cat-pwn" data-cat="pwn" aria-pressed="false">pwn</button>
+          <button type="button" class="chip chip-dot wu-cat-rev" data-cat="rev" aria-pressed="false">rev</button>
+          <button type="button" class="chip chip-dot wu-cat-crypto" data-cat="crypto" aria-pressed="false">crypto</button>
+          <button type="button" class="chip chip-dot wu-cat-forensics" data-cat="forensics" aria-pressed="false">forensics</button>
+          <button type="button" class="chip chip-dot wu-cat-osint" data-cat="osint" aria-pressed="false">osint</button>
+          <button type="button" class="chip chip-dot wu-cat-misc" data-cat="misc" aria-pressed="false">misc</button>
+        </div>
+      </div>
+      <p class="wu-count" id="wuCount" aria-live="polite">54 writeups</p>
+    </div>
+
+  <ul class="wu-list-rows" id="wuRows">
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="../writeups/ouroboros-hicybercon.html">
+            <span class="wu-row-title"><span class="wu-row-name">Ouroboros</span><span class="wu-row-sub">Prototype pollution to a new Function gadget</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-blurb">A deep-merge drops keys named __proto__ but not a nested constructor.prototype, so Object.prototype.formula can be polluted. The preview handler reads formula off a fresh object and runs it through new Function, giving code execution that echoes the flag file back.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="../writeups/overgrowth.html">
+            <span class="wu-row-title"><span class="wu-row-name">Overgrowth</span><span class="wu-row-sub">GraphQL alias batching against an OTP</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-blurb">Introspection is off, but error messages leak the whole schema. The rate limit counts HTTP requests, not operations, so one request packed with aliased resetPassword calls brute-forces the reset OTP and takes over the admin account.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="../writeups/orphaned-context.html">
+            <span class="wu-row-title"><span class="wu-row-name">Orphaned Context</span><span class="wu-row-sub">Sealed incident record left readable</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-blurb">The relay keeps a sealed incident record that should only open in its original context. An orphaned-context bug lets a fresh session read /incidents/IR-7731/seal, and every independently provisioned instance returns the same 51 bytes.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="pwn">
+          <a class="wu-row-link" href="../writeups/titan-relay.html">
+            <span class="wu-row-title"><span class="wu-row-name">Titan Relay</span><span class="wu-row-sub">Rust VM capsule to a privileged handler</span></span>
+            <span class="wu-cat wu-cat-pwn">pwn</span>
+            <span class="wu-row-blurb">A Rust console app runs uploaded capsules as bytecode, after XOR-decrypting them with a position key. A guarded leak plus a signed-index out-of-bounds write reaches a privileged handler that reads /flag.txt through Wine's Z: drive.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="pwn">
+          <a class="wu-row-link" href="../writeups/project-mangoo.html">
+            <span class="wu-row-title"><span class="wu-row-name">Project Mangoo</span><span class="wu-row-sub">Keyless handshake, OOB read, stack pivot</span></span>
+            <span class="wu-cat wu-cat-pwn">pwn</span>
+            <span class="wu-row-blurb">The handshake token is a fixed transform of the challenge with no key involved. Query Channel only bounds the index from above, so negative indices leak memory, and the leaked pointers set up a pivot that reaches the flag without gadgets or shellcode.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="pwn">
+          <a class="wu-row-link" href="../writeups/letmeout.html">
+            <span class="wu-row-title"><span class="wu-row-name">LetMeOut</span><span class="wu-row-sub">Jinja2 sandbox escape via NFKC</span></span>
+            <span class="wu-cat wu-cat-pwn">pwn</span>
+            <span class="wu-row-blurb">The jail allows one template of at most 170 ASCII characters with three distinct letters. The sandbox checks the raw attribute name but fetches the NFKC-normalised one, so a filter-made Tag string smuggles blocked attributes past the guard.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="pwn">
+          <a class="wu-row-link" href="../writeups/apex-engine.html">
+            <span class="wu-row-title"><span class="wu-row-name">Apex Engine</span><span class="wu-row-sub">Two TOCTOU races in threaded workers</span></span>
+            <span class="wu-cat wu-cat-pwn">pwn</span>
+            <span class="wu-row-blurb">Escrow transfers check the balance, sleep 25 ms, then deduct, so two full-balance orders underflow it into a huge number and buy VIP. Inside the vault, the file filter runs before a second 25 ms sleep, so swapping the shared path to flag.txt mid-stream prints the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/cold-circuit.html">
+            <span class="wu-row-title"><span class="wu-row-name">Cold Circuit</span><span class="wu-row-sub">Invertible 20-round SPN</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">The checker hex-decodes 16 bytes and runs them through 20 rounds of key add, S-box and permutation. Two anti-tamper gates can never fire, and every round inverts cleanly, so walking the target backwards gives n0_jtag_needed!!.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/entitlement.html">
+            <span class="wu-row-title"><span class="wu-row-name">Entitlement</span><span class="wu-row-sub">Self-loading ELF with a bytecode VM</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">A section-less self-loader decrypts its real image into a memfd and hides the serial check in a private VM whose bytecode key is a hash of the handler code, so a debugger corrupts it. Solving the serial and the activation code makes the binary print the flag after a long modular-squaring delay.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/snapfile.html">
+            <span class="wu-row-title"><span class="wu-row-name">Snapfile</span><span class="wu-row-sub">Rebuilding a file format from a Crystal binary</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">No sample .snap ships with snaptool, so the 104-byte header has to be rebuilt from the validator alone: big-endian section offsets, fixed tags and a custom 64-bit checksum. A file that passes makes the tool print its embedded label, which is the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/the-inner-engine.html">
+            <span class="wu-row-title"><span class="wu-row-name">The Inner Engine</span><span class="wu-row-sub">Nim binary with a bytecode VM</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">A stripped Nim binary XOR-hides its strings and checks a 24-byte activation key inside a custom bytecode VM. Tracing the dispatch chain and unwinding the VM program recovers the key L1c#N0d3_7mQ9f3a2b8c6d1e, which prints the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/last-execution.html">
+            <span class="wu-row-title"><span class="wu-row-name">Last Execution</span><span class="wu-row-sub">Emulating a fictional core with a trapped manual</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">A cold image of an EXE-9 core ships with an operator manual that lies in three places. Recovering each page rotation empirically, correcting the manual and emulating the chained HALTs reproduces the run, and the console's register dump hides one flipped bit.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/night-batch.html">
+            <span class="wu-row-title"><span class="wu-row-name">Night Batch</span><span class="wu-row-sub">GnuCOBOL account key</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">A stripped GnuCOBOL binary checks an 18-digit account key through a ladder of 23 digit conditions. The 835-digit constant is just ln(2) as filler, and solving the conditions gives the one key that prints the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/obfuscated-flow.html">
+            <span class="wu-row-title"><span class="wu-row-name">Obfuscated Flow</span><span class="wu-row-sub">Flattened state machine, word by word</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">The passkey check is a control-flow-flattened state machine where each state is derived from 4-byte words of the input. Solving the state transitions one word at a time rebuilds the 47-character passkey, which is also the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/cold-beacon.html">
+            <span class="wu-row-title"><span class="wu-row-name">Cold Beacon</span><span class="wu-row-sub">Nim key validator solved with z3</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">A Nim implant checks a 24-byte key against 23 table-driven XOR, sum and product constraints plus three extra relations. Every constraint is byte-local, so z3 solves it straight to C0ldB34c0n::unl0ck::7a3f, which unseals the config.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/epsilon-drift.html">
+            <span class="wu-row-title"><span class="wu-row-name">Epsilon Drift</span><span class="wu-row-sub">IEEE-754 bit fields and a signed zero</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">A gfortran binary takes four doubles as hex and checks their mantissa slices and exponents against paired linear equations, which pin them to 1.1, 2.2 and 3.3000000000000003. The last double has to be a negative zero, which passes the compare but flips the output.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/cipher.html">
+            <span class="wu-row-title"><span class="wu-row-name">Cipher</span><span class="wu-row-sub">Android vault with a seeded passphrase</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">The APK's vault unlocks with a PBKDF2 passphrase that is not stored anywhere. An unused legacy package generates it from a 256-word lexicon and a seed in a small window, so walking that window and checking the HMAC anchor finds the passphrase and decrypts the records.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/vaultkeeper.html">
+            <span class="wu-row-title"><span class="wu-row-name">VaultKeeper</span><span class="wu-row-sub">Android native seal chain past the decoys</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">The APK is packed with fake flags, a honeypot getFlag export and UI gates that don't matter. The real flag is computed inside the native nv_final routine, and reproducing its seal and unseal chain offline gives the 51-byte string.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/wardens-maze.html">
+            <span class="wu-row-title"><span class="wu-row-name">Warden's Maze</span><span class="wu-row-sub">Seed-derived prize token in a Rust maze</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">The vault in the middle of the maze is meant to be reached through a render-code indexing bug. Strings show the prize token is derived from a seed rather than random, which explains how the token is built, while the live instance mints the real one on a genuine win.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/rocinate.html">
+            <span class="wu-row-title"><span class="wu-row-name">Rocinate</span><span class="wu-row-sub">LCG orbit and exponent relations</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">Each public value is an LCG term times the flag raised to a known exponent. Recovering the LCG seed turns them into pure powers of the flag mod N, and since the exponents have gcd 1, an extended-Euclid combination of them gives the flag itself.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/cairn.html">
+            <span class="wu-row-title"><span class="wu-row-name">Cairn</span><span class="wu-row-sub">A 2^20-step isogeny walk, done fast</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">The key comes from a deterministic isogeny walk of 2^20 sequential steps over GF(p^2), with no shortcuts. Generic root finding would take days, so each step uses one exponentiation to p and a few gcds, bringing the whole walk down to under three hours on one core.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/chronogrind.html">
+            <span class="wu-row-title"><span class="wu-row-name">ChronoGrind</span><span class="wu-row-sub">Nine billion sequential squarings</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">The XOR-masked state file spells out the scheme: square a seed 9e9 times modulo a 2048-bit composite, hash it and use that as a ChaCha20-Poly1305 key. There is no shortcut, so a checkpointed gmpy2 grind runs for about two and a half hours and the tag confirms the key.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/log-jam.html">
+            <span class="wu-row-title"><span class="wu-row-name">Log Jam</span><span class="wu-row-sub">70-bit discrete log</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">The Diffie-Hellman group is only a 71-bit prime with a 70-bit subgroup, small enough for PARI's rho-based znlog. The recovered exponent hashes to the AES-GCM key, and the tag verifies on decryption.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/just-give-me-the-flag-man.html">
+            <span class="wu-row-title"><span class="wu-row-name">Just Give Me The Flag Man</span><span class="wu-row-sub">Encoding chain with an Atbash hex alphabet</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">The note is 52 two-character tokens whose letters u to z stand in for hex digits in mirrored order. Reversing the string, Atbashing the letters and hex-decoding starts a chain of base decodes that ends at the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/cipher-cascade.html">
+            <span class="wu-row-title"><span class="wu-row-name">Cipher Cascade</span><span class="wu-row-sub">Reverse, Base64, hex, ROT13</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">The hint gives the outer layers in order. Reversing the string, Base64-decoding and hex-decoding leaves ROT13 text, and one more rotation gives the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/broken-signals.html">
+            <span class="wu-row-title"><span class="wu-row-name">Broken Signals</span><span class="wu-row-sub">Zeroed PNG signature</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The file is a PNG whose first four signature bytes have been zeroed, while the chunks and CRCs are intact. Restoring \x89PNG makes it open, and the image shows the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/ghost-in-the-wire.html">
+            <span class="wu-row-title"><span class="wu-row-name">Ghost in the Wire</span><span class="wu-row-sub">One byte per ICMP echo</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">Echo requests from 10.13.37.1 each carry a single byte of exfiltrated data. Filtering on that source and joining the payloads gives the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/memory-liar.html">
+            <span class="wu-row-title"><span class="wu-row-name">Memory Liar</span><span class="wu-row-sub">DKOM-hidden process in a memory image</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The clean audit log and process list in the dump are bait. Grepping every .exe name in the raw image turns up winxnet.exe, which a DKOM rootkit had unlinked from the active process list, and its structure holds the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/ghost-in-ram.html">
+            <span class="wu-row-title"><span class="wu-row-name">Ghost in RAM</span><span class="wu-row-sub">XOR-hidden flag in a 2 GB QEMU core</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The image is a full QEMU guest core dump. The consecutive-byte XOR signature of hiCTF{ is the same for every key, so one pass finds every single-byte XOR candidate, and past two bait flags the real one sits under key 0x5a.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/forgotten-secrets.html">
+            <span class="wu-row-title"><span class="wu-row-name">Forgotten Secrets</span><span class="wu-row-sub">Single-byte XOR under decoy strings</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The 256 KiB dump is full of decoy strings and fake credentials. Brute-forcing all 256 single-byte XOR keys finds the flag under key 0x42.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/echoes-of-a-forgotten-canvas.html">
+            <span class="wu-row-title"><span class="wu-row-name">Echoes of a Forgotten Canvas</span><span class="wu-row-sub">Four nested stego layers</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The PNG decodes to 500 more rows than its header claims, with half the flag in the alpha channel. A ZIP after IEND, a steghide payload keyed by the poem and an over-tall JPEG scan give up the rest.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/roof-of-africa.html">
+            <span class="wu-row-title"><span class="wu-row-name">Roof of Africa</span><span class="wu-row-sub">steghide keyed by Kilimanjaro</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The hint points to the mountain's most famous number. Kilimanjaro's height, 5895, is the steghide passphrase.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/zanzibar-whisper.html">
+            <span class="wu-row-title"><span class="wu-row-name">Zanzibar Whisper</span><span class="wu-row-sub">steghide with an empty passphrase</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The JPEG carries a steghide payload with no passphrase at all, so extracting with an empty password gives the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/whispers-in-the-margin.html">
+            <span class="wu-row-title"><span class="wu-row-name">Whispers in the Margin</span><span class="wu-row-sub">Whitespace bit rows in a DOCX</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The DOCX ends in paragraphs of nothing but spaces and tabs. Reading each as a 12-bit row, with space as 0 and tab as 1, gives a key that opens the second layer in the JPEG.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/paper-trail.html">
+            <span class="wu-row-title"><span class="wu-row-name">Paper Trail</span><span class="wu-row-sub">AES hidden in invisible TJ kerning</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">Comparing the PDF with its archived original shows four new invisible-text streams whose only content is integer kerning values. The long runs are AES-128-CBC ciphertext, and the key and IV are the two halves of the trailer /ID that the author changed.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/hall-of-mirrors.html">
+            <span class="wu-row-title"><span class="wu-row-name">Hall of Mirrors</span><span class="wu-row-sub">Audio stego, a tiny VM and a nonce lattice</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A spectrogram in a 26-minute WAV draws a SplitMix64 key that selects the stego bits. The payload is a small VM program whose output leaks biased ECDSA nonces, and a hidden-number lattice recovers the private key that decrypts the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/no-bit-sings-alone.html">
+            <span class="wu-row-title"><span class="wu-row-name">No Bit Sings Alone</span><span class="wu-row-sub">Spectrogram, matrix embedding, inverse NTT</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The spectrogram gives an AES-GCM nonce and ciphertext. Guide tones set the step size for Hamming(31,26) matrix embedding in the left channel's LSBs, and an inverse NTT over GF(257) turns the recovered values into the AES key.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/dead-air.html">
+            <span class="wu-row-title"><span class="wu-row-name">Dead Air</span><span class="wu-row-sub">Morse, spectrogram glyphs and Vigenere</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">One stereo channel is Morse giving the key NIGHTJAR, and the other draws a 7z password in its spectrogram. The logbook glyphs map through the code pad to ciphertext, and Vigenere over a 37-symbol alphabet decodes the message.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/resurrection.html">
+            <span class="wu-row-title"><span class="wu-row-name">RESURRECTION (Operation Eclipse Void)</span><span class="wu-row-sub">Five NTFS recovery phases</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A scorched 1 GiB NTFS image hides five payload segments behind five different recovery techniques. Each segment carries an ordinal label that is only an ordering tag, so stripping the labels and joining the payloads gives the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/tessera.html">
+            <span class="wu-row-title"><span class="wu-row-name">TESSERA</span><span class="wu-row-sub">UTF-16 ScriptBlock logs and NTFS metadata</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">The attacker's whole PowerShell script sits in the ScriptBlock log as mixed-endian UTF-16, which ASCII scans miss. Its three labelled parts map onto the riddle's ALPC port, Session 0 profile and reparse-point clues.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/tasmota-vault.html">
+            <span class="wu-row-title"><span class="wu-row-name">Tasmota Vault</span><span class="wu-row-sub">Berry bytecode, LittleFS and MQTT</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">An ESP32 Tasmota flash image holds a LittleFS vault and a custom Berry agent. Decoding the agent's unseal routine from bytecode and replaying its KDF and AEAD with the epoch and nonce from the MQTT capture opens the sealed record.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/the-miner-that-mined-the-victim.html">
+            <span class="wu-row-title"><span class="wu-row-name">The Miner That Mined The Victim</span><span class="wu-row-sub">14-question Windows incident triage</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">A cracked crypto miner from LimeWire encrypts files and disables Defender. Answering all 14 questions takes the event logs, Sysmon, the Recycle Bin $I files and resident MFT data.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="osint">
+          <a class="wu-row-link" href="../writeups/low-tide-ledger.html">
+            <span class="wu-row-title"><span class="wu-row-name">Low Tide Ledger</span><span class="wu-row-sub">Pinning an apartment from a recovered call</span></span>
+            <span class="wu-cat wu-cat-osint">osint</span>
+            <span class="wu-row-blurb">Riddles about reclaimed land, an Atlantic view and a fixed UTC+1 clock lead to Eko Atlantic in Lagos. The agency comes from the original business name on an old 360 degree tour of the Eko Pearl Towers pin.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="osint">
+          <a class="wu-row-link" href="../writeups/shadow-identity.html">
+            <span class="wu-row-title"><span class="wu-row-name">Shadow Identity</span><span class="wu-row-sub">Naming the face on a pageant poster</span></span>
+            <span class="wu-cat wu-cat-osint">osint</span>
+            <span class="wu-row-blurb">The poster is clean of metadata and hidden data, so it comes down to the face. Reverse searching a crop of it with the Miss Grand Tanzania caption finds the real person behind the AI-styled poster.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="osint">
+          <a class="wu-row-link" href="../writeups/the-foxglove-trace.html">
+            <span class="wu-row-title"><span class="wu-row-name">The Foxglove Trace</span><span class="wu-row-sub">Rebuilding a lost Wi-Fi tracker's scoring</span></span>
+            <span class="wu-cat wu-cat-osint">osint</span>
+            <span class="wu-row-blurb">The tracker script is gone, but its notes, config and one good run log pin down the rules: keep rows with step_delta of at least 41 and weight each AP's signal. Rescoring the scan export puts FoxgloveCoffee_Guest on top.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/labyrinth.html">
+            <span class="wu-row-title"><span class="wu-row-name">Labyrinth</span><span class="wu-row-sub">Learning a binary protocol from its errors</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">The service speaks an undocumented framed protocol, and its own error messages give away the magic, length limit and opcodes. After the nonce probe and transform challenge, the maze gate wants the shortest path back as raw bytes.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/the-collectors-trail.html">
+            <span class="wu-row-title"><span class="wu-row-name">The Collector's Trail</span><span class="wu-row-sub">Six paintings, six stego fragments</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">Each of six museum images hides a sealed fragment in a different way. Ordering them by the artists' birth years and running them through HKDF opens the cabinet, whose stego PNG points at a GitHub release holding the final key.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/c3-vault.html">
+            <span class="wu-row-title"><span class="wu-row-name">C3 Vault</span><span class="wu-row-sub">ESP32-C3 flash and NVS decryption</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">The eFuse dump holds the flash encryption key, and the decrypted NVS gives the device ID, generation and current vault seed. Rebuilding the HMAC challenge-response from the firmware lets us authenticate to the live vault as the gateway.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/cold-chain.html">
+            <span class="wu-row-title"><span class="wu-row-name">Cold Chain</span><span class="wu-row-sub">Fixing a refrigeration controller that fights back</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">A forced-defrost schedule keeps six cases warm, and a macro re-enables it every 90 seconds. Authenticating with the leaked fleet key, killing the macro first and then the schedule, and holding the cases cold for 60 seconds returns the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/ground-station.html">
+            <span class="wu-row-title"><span class="wu-row-name">Ground Station</span><span class="wu-row-sub">Firmware challenge-response, then a fix that sticks</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">Reversing gsc-fw.bin gives the access routine, verified against the image signature it prints. Feeding the session nonce as the key authenticates as engineer, and the fueling fix then has to be persisted past the watchdog.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/standing-order.html">
+            <span class="wu-row-title"><span class="wu-row-name">Standing Order</span><span class="wu-row-sub">Reentrancy across two redemption paths</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">The same committee signature is valid on both voucher paths, and disburse() pays out before marking the voucher used. A contract that re-enters disburse() from receive() drains the reserve 1 ether at a time.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/quiet-upgrade.html">
+            <span class="wu-row-title"><span class="wu-row-name">Quiet Upgrade</span><span class="wu-row-sub">Proxy storage slot collision</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">The proxy keeps its admin in slot 0, and the implementation's open registerBranch() writes slot 0 through delegatecall. Taking admin that way and upgrading to a malicious implementation lets us release the treasury's reserve.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/hollow-reserve.html">
+            <span class="wu-row-title"><span class="wu-row-name">Hollow Reserve</span><span class="wu-row-sub">Flash loan against a spot-price oracle</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">The credit facility prices collateral off a thin AMM pool's spot price. A flash loan skews the pool, the inflated price lets us borrow far past fair value, and the vault drops below 10 percent of its reserve.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/pruned-ledger.html">
+            <span class="wu-row-title"><span class="wu-row-name">Pruned Ledger</span><span class="wu-row-sub">Rebuilding a case file from a replayed chain</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">Replaying the archived transactions rebuilds the pruned chain. The four case-file fields come from contract code, the only non-reverted configure() calldata, a derived storage slot and a revert that leaks the unmasked note.</span>
+          </a>
+        </li>
+  </ul>
+  <p class="wu-empty" id="wuEmpty" hidden>No writeups in this category.</p>
+  <p class="wu-note"><a href="../writeups.html">All competitions</a></p>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

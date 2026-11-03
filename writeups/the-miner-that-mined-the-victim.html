@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Miner That Mined The Victim · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A cracked crypto miner from LimeWire encrypts files and disables Defender. Answering all 14 questions takes the event logs, Sysmon, the Recycle Bin $I files and resident MFT data." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>the-miner-that-mined-the-victim</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>The Miner That Mined The Victim <span class="page-sub">14-question Windows incident triage</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{c4r3ful_4b0ut_cr4ck3d_t001s_69246bf057}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hiCTF{c4r3ful_4b0ut_cr4ck3d_t001s_69246bf057}</code></p>
+<h2 id="answers-14-questions"><a class="wu-anchor" href="#answers-14-questions" aria-hidden="true">#</a>Answers (14 questions)</h2>
+<ol>
+<li><strong>OS Version:</strong> Microsoft Windows NT 10.0.26200.0</li>
+<li><strong>Timezone:</strong> UTC-7, 420</li>
+<li><strong>Download URL:</strong> <a href="https://limewire.com/d/Ak55K#Yrx3FgK3du">https://limewire.com/d/Ak55K#Yrx3FgK3du</a></li>
+<li><strong>Download ID:</strong> 42d377fe-8948-4a32-809f-69a51e6dbcfa</li>
+<li><strong>Miner execution time:</strong> 2026-05-13 14:25:36 UTC</li>
+<li><strong>First encrypted file &amp; PID:</strong> 2026-05-13 14:26:55 UTC, 1</li>
+<li><strong>Crypto DLL + timestamp:</strong> C:\Program Files\dotnet\shared\Microsoft.NETCore.App\9.0.16\System.Security.Cryptography.dll, 2026-05-13 14:26:58 UTC</li>
+<li><strong>Defender disable registry:</strong> HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\DisableAntiSpyware</li>
+<li><strong>MITRE ATT&amp;CK technique:</strong> T1685 (ATT&amp;CK v19 renaming of T1562.001)</li>
+<li><strong>Important text:</strong> hiCTF{finally_u_proved_ur_worthiness} (hidden in MFT resident data in C:\Sysmon)</li>
+<li><strong>Deleted folder:</strong> C:\Users\milon1\Downloads\miner, 2026-05-13 14:27:47 UTC (from Recycle Bin $I file)</li>
+<li><strong>Byte size:</strong> 179623 (from $I file metadata)</li>
+<li><strong>bar.txt plaintext:</strong> I will always be there for you bro! (hidden in MFT resident data)</li>
+<li><strong>Shred pattern:</strong> help (0x706c6568 <button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button> from Sysmon Event ID 23)</li>
+</ol>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#answers-14-questions">Answers (14 questions)</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="tasmota-vault.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Tasmota Vault</span></a>
+    <a class="wu-pager-link wu-pager-next" href="low-tide-ledger.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Low Tide Ledger</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

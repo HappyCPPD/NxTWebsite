@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rocinate · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Each public value is an LCG term times the flag raised to a known exponent. Recovering the LCG seed turns them into pure powers of the flag mod N, and since the exponents have gcd 1, an extended-Euclid combination of them gives the flag itself." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>rocinate</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Rocinate <span class="page-sub">LCG orbit and exponent relations</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{lmaoooo_w0t???y0u_d1d_17_??435p37++}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hiCTF{lmaoooo_w0t???y0u_d1d_17_??435p37++}</code></p>
+<hr>
+<h2 id="1-challenge"><a class="wu-anchor" href="#1-challenge" aria-hidden="true">#</a>1. Challenge</h2>
+<p><code>extracted/chall.py</code> (also <code>extracted/chall.txt</code> = <code>print(a, b, N, Zs, Cs, Ts)</code>):</p>
+<figure class="wu-code" data-lines="18">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">flag = <span class="hljs-string">&#x27;hiCTF{***}&#x27;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">lcg</span>(<span class="hljs-params">a, b, x, N</span>): <span class="hljs-keyword">return</span> (a*x + b) % N</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">gen_params</span>(<span class="hljs-params">sz, n, s</span>):</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">    p, q = getPrime(sz), getPrime(sz)</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">    N = p * q</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    r = random.randint(<span class="hljs-number">1</span>, N); Rs = [r]              <span class="hljs-comment"># r0  -- FIRST random call</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">    e = random.randint(<span class="hljs-number">1</span>, N)                        <span class="hljs-comment"># e   -- SECOND</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    a, b = random.randint(<span class="hljs-number">1</span>, N), random.randint(<span class="hljs-number">1</span>, N)   <span class="hljs-comment"># a, b</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">    <span class="hljs-keyword">for</span> _ <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(n - <span class="hljs-number">1</span>):</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">        Rs.append(lcg(a, b, Rs[-<span class="hljs-number">1</span>], N))</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">    Cs = [random.randint(<span class="hljs-number">1</span>, N) <span class="hljs-keyword">for</span> _ <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(n)]</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">    Zs = [ri*<span class="hljs-built_in">pow</span>(s, ci, N) <span class="hljs-keyword">for</span> ri, ci <span class="hljs-keyword">in</span> <span class="hljs-built_in">zip</span>(Rs, Cs)]   <span class="hljs-comment"># <span class="hljs-doctag">NOTE:</span> no final % N</span></span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc">    Ts = [<span class="hljs-built_in">pow</span>(ri, e, N) <span class="hljs-keyword">for</span> ri <span class="hljs-keyword">in</span> Rs]</span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc">    <span class="hljs-keyword">return</span> a, b, e, N, Zs, Cs, Rs, Ts</span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="17"><span class="wu-ln">17</span><span class="wu-lc">a, b, e, N, Zs, Cs, Rs, Ts = gen_params(<span class="hljs-number">1024</span>, <span class="hljs-number">100</span>, bytes_to_long(flag.encode()))</span></span>
+<span class="wu-line" data-line="18"><span class="wu-ln">18</span><span class="wu-lc"><span class="hljs-built_in">print</span>(a, b, N, Zs, Cs, Ts)</span></span></code></pre>
+      
+    </figure><p>We are given <code>a, b, N, Zs, Cs, Ts</code> (space-separated; <code>parse.py</code> → <code>data.json</code>).
+<code>zs[i] = r[i]·s^{Cs[i]}</code>, <code>Ts[i] = r[i]^e</code>, and <code>r[i]</code> is the LCG orbit of the secret <code>r0</code>.
+<code>r0</code>, <code>e</code>, <code>s</code> are unknown.</p>
+<p>Plan: recover <code>r0</code> from the Mersenne-Twister stream used by <code>random</code>, then
+<code>r[i] = LCG^i(r0)</code>, so <code>A_i := Zs[i]/r[i] = s^{Cs[i]} (mod N)</code>; since the published
+<code>Cs[i]</code> are the exponents and <code>gcd(Cs)=1</code>, a single extended-Euclid combination gives <code>s</code> exactly.</p>
+<h2 id="2-mersenne-twister-recovery-the-hard-part"><a class="wu-anchor" href="#2-mersenne-twister-recovery-the-hard-part" aria-hidden="true">#</a>2. Mersenne-Twister recovery (the hard part)</h2>
+<p><code>Zs[i] ~4090 bits</code>, <code>N</code> is 2047-bit, so <code>a,b,Cs[i]</code> are 2047-bit <code>random.randint(1,N)</code> values.
+Three traps:</p>
+<ol>
+<li><strong><code>randint(1,N)</code> is not a bare <code>getrandbits(2047)</code>.</strong> It is <code>1 + _randbelow(N)</code>, i.e.
+<code>g = getrandbits(2047); while g &gt;= N: g = getrandbits(2047)</code>. With <code>2^2047/N ≈ 1.28</code>
+the rejection probability is ≈ 0.219, so consecutive published draws are <strong>not</strong>
+contiguous in the MT word stream (whole 64-word rejected attempts are missing).</li>
+<li><strong><code>getrandbits(2047)</code> = 64 genrand words, LSB-first, and the 64th word is <code>&gt;&gt;1</code></strong> -
+its low bit is <em>lost</em>. So each draw exposes 64 words but the LSB of every <code>word[63]</code>
+is unobservable from the value.</li>
+<li><strong>The twist is not injective</strong>: CPython&#39;s in-place twist never uses <code>state[0]</code>, so a
+32-bit word is lost per inverse step - naive &quot;untemper + inverse-twist all the way
+back&quot; drifts. This is why earlier attempts failed.</li>
+</ol>
+<p>Working method (<code>solver.py</code>):</p>
+<ul>
+<li><strong>Find a contiguous run.</strong> Build the per-draw 64-word decomposition of
+<code>D = [a, b] + Cs</code>; a run <code>D[j..j+L-1]</code> is contiguous iff untempering its first 624 words
+and twisting reproduces the following words. The data yields runs of length 11 at
+<code>j = 20, 22</code> and of length 10 at <code>j = 17..26</code>.</li>
+<li><strong>Fix the lost LSBs.</strong> Untemper the window (624 words) with the lost bits set to 0; the
+true state differs only by <code>U1 = untemper(1)</code> at the 9 truncated word positions
+(temper/untemper are GF(2)-linear). Brute-force the 2^9 choices, and keep the combo
+whose forward-generated MT stream reproduces <strong>all</strong> subsequent published <code>Cs</code>
+(rejection-aware). Exactly one combo passes (for the winning run: <code>j=17, combo=471</code>).</li>
+<li><strong>Walk backwards to the start.</strong> For the anchor at absolute position <code>A = 64·T</code>
+(<code>T</code> = number of attempts before the anchor), untwist <code>K = ceil(A/624)</code> times; if the
+residual &quot;free-word&quot; corruption lands at negative positions the state is exact on
+<code>&gt;=0</code>. Enumerate <code>T</code> and the two leading draws; <code>r0</code> is the first accepted block
+(value <code>&lt; N</code>), <code>e</code> the second. Decisive check: <code>pow(r0, e, N) == Ts[0]</code>.</li>
+</ul>
+<p>Run: <code>.venv/bin/python solver.py data.json</code></p>
+<figure class="wu-code wu-code-output" data-lines="9">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">runs: [(20,11),(22,11),(17,10),(18,10),...,(26,10)]
+run j=20 L=11: 1 LSB combos pass ([186])
+run j=22 L=11: 1 LSB combos pass ([302])
+run j=17 L=10: 1 LSB combos pass ([471])
+MATCH j= 17 T= 28 combo= 471 g= 1
+r0 = 1235310913929046981501713248276380234...   (full value in final.py)
+e  = 1179908898524522142711694858107463158...
+s  = 57093359257736829004393844467680814825456194741017928601536104291193196400193820508821249982710098813
+flag = b'hiCTF{lmaoooo_w0t???y0u_d1d_17_??435p37++}'</code></pre>
+      
+    </figure><h2 id="3-the-exponent-trick"><a class="wu-anchor" href="#3-the-exponent-trick" aria-hidden="true">#</a>3. The exponent trick</h2>
+<p>With <code>r0</code> known, <code>Rs</code> follow from the published LCG. Then for every <code>i</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">A_i = Zs[i] · r[i]^{-1} mod N = s^{Cs[i]} mod N</code></pre>
+      
+    </figure><p>Run the iterative extended Euclidean algorithm over the published exponents <code>Cs[0..99]</code>
+to get Bezout coefficients with <code>Σ k_i·Cs[i] = g = gcd(Cs)</code>. Here <code>g = 1</code>, so</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">s = Π A_i^{k_i} mod N   (modular exponentiation handles negative k_i via inverses)</code></pre>
+      
+    </figure><p><code>s</code> is a ~27-byte integer → <code>long_to_bytes(s) = b&#39;hiCTF{...}&#39;</code>.</p>
+<h2 id="4-proof-re-encryption-finalpy"><a class="wu-anchor" href="#4-proof-re-encryption-finalpy" aria-hidden="true">#</a>4. Proof (re-encryption) - <code>final.py</code></h2>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">MT stream forward from anchor reproduces 85/85 published draws (Cs[15..99] and later) exactly
+backward walk (untwist x3, T=28) recovers r0 and e; e is the 2nd stream draw, consistent
+Zs reproduced: 100/100
+Ts reproduced: 100/100
+Zs[i]/r[i] == s**Cs[i] for all i: True
+flag = b'hiCTF{lmaoooo_w0t???y0u_d1d_17_??435p37++}'
+VERIFIED</code></pre>
+      
+    </figure><p>That is: the reconstructed <button type="button" class="wu-gloss" data-def="The standard Mersenne Twister PRNG: a 624-word state and a fixed output transform, fully predictable once enough output is seen.">MT19937</button> stream reproduces every published <code>Cs</code> value; the
+recovered <code>r0,e</code> re-encrypt to all 100 published <code>Ts</code>; and the recovered <code>s</code> re-encrypts
+all 100 published <code>Zs</code> <strong>exactly</strong> (<code>Zs[i] = r[i]·pow(s,Cs[i],N)</code>, no final reduction).</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-challenge">1. Challenge</a></li><li><a href="#2-mersenne-twister-recovery-the-hard-part">2. Mersenne-Twister recovery (the hard part)</a></li><li><a href="#3-the-exponent-trick">3. The exponent trick</a></li><li><a href="#4-proof-re-encryption-finalpy">4. Proof (re-encryption) - final.py</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="wardens-maze.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Warden's Maze</span></a>
+    <a class="wu-pager-link wu-pager-next" href="cairn.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Cairn</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Collector's Trail · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Each of six museum images hides a sealed fragment in a different way. Ordering them by the artists' birth years and running them through HKDF opens the cabinet, whose stego PNG points at a GitHub release holding the final key." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>the-collectors-trail</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>The Collector's Trail <span class="page-sub">Six paintings, six stego fragments</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{marble_sparrow_9eb44602eedb764aac082a3816b7d7cb}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Flag format <code>hiCTF{}</code>.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<p><code>hiCTF{marble_sparrow_9eb44602eedb764aac082a3816b7d7cb}</code></p>
+<h2 id="overview"><a class="wu-anchor" href="#overview" aria-hidden="true">#</a>Overview</h2>
+<p><code>the-collectors-trail.zip</code> contains <code>image_vault.zip</code> (6 museum images + a
+catalogue colophon) and <code>sealed_cabinet.zip</code> (AES-encrypted, password unknown).
+Each of the 6 images hides one <strong>fragment</strong> <code>xxxxxxxxxxxxxxxx-cccc</code> (8 raw bytes</p>
+<ul>
+<li>SHA-256 first-2-bytes seal). Fragments and museum catalogue locators are ordered
+by the artists&#39; birth years, then fed into HKDF to derive the cabinet password.
+The cabinet yields <code>stego.png</code>, whose HMAC-selected LSB payload points at a GitHub
+release; the annotated tag note supplies a serial used to AES-256-GCM decrypt the flag.</li>
+</ul>
+<h2 id="step-1-identify-the-six-works"><a class="wu-anchor" href="#step-1-identify-the-six-works" aria-hidden="true">#</a>Step 1 - identify the six works</h2>
+<table>
+<thead>
+<tr>
+<th>Record dir</th>
+<th>Painting</th>
+<th>Artist</th>
+<th>Born</th>
+<th>Museum record</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>record-7f2a</td>
+<td>Girl with a Pearl Earring</td>
+<td>Vermeer</td>
+<td>1632</td>
+<td>mauritshuis.nl/670</td>
+</tr>
+<tr>
+<td>record-b19d</td>
+<td>The Third of May 1808</td>
+<td>Goya</td>
+<td>1746</td>
+<td>museodelprado.es/P000749</td>
+</tr>
+<tr>
+<td>record-31c8</td>
+<td>The Starry Night</td>
+<td>Van Gogh</td>
+<td>1853</td>
+<td>moma.org/472.1941</td>
+</tr>
+<tr>
+<td>record-d604</td>
+<td>The Kiss</td>
+<td>Klimt</td>
+<td>1862</td>
+<td>belvedere.at/912</td>
+</tr>
+<tr>
+<td>record-5a73</td>
+<td>The Scream (1893)</td>
+<td>Munch</td>
+<td>1863</td>
+<td>nasjonalmuseet.no/NG.M.00939</td>
+</tr>
+<tr>
+<td>record-e2f1</td>
+<td>Death and the Maiden</td>
+<td>Schiele</td>
+<td>1890</td>
+<td>belvedere.at/3171</td>
+</tr>
+</tbody></table>
+<p>Order earliest-first: Vermeer, Goya, Van Gogh, Klimt, Munch, Schiele.</p>
+<h2 id="step-2-mine-the-six-fragments-each-hidden-differently"><a class="wu-anchor" href="#step-2-mine-the-six-fragments-each-hidden-differently" aria-hidden="true">#</a>Step 2 - mine the six fragments (each hidden differently)</h2>
+<table>
+<thead>
+<tr>
+<th>Record</th>
+<th>Hint (conservation.txt)</th>
+<th>Technique</th>
+<th>Fragment</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>7f2a (Vermeer)</td>
+<td>&quot;entries preserved inside the object&#39;s own structure&quot;</td>
+<td>non-standard PNG chunk <code>coLl</code> (21 bytes)</td>
+<td><code>be5f329a4841bece-ee99</code></td>
+</tr>
+<tr>
+<td>b19d (Goya)</td>
+<td>&quot;what remains beyond the final mark&quot;</td>
+<td>base64 appended after <code>IEND</code></td>
+<td><code>b086be35786cac71-8ab3</code></td>
+</tr>
+<tr>
+<td>31c8 (Van Gogh)</td>
+<td>&quot;absence from view does not mean absence of information / what survives when opacity disappears&quot;</td>
+<td>text drawn in the <strong>transparent (alpha=0) border</strong> - read the RGB there</td>
+<td><code>c1d322deee71edf2-cfb8</code></td>
+</tr>
+<tr>
+<td>d604 (Klimt)</td>
+<td>&quot;asks for an identity, not merely a number&quot;</td>
+<td><code>steghide</code>, passphrase = canonical locator <code>belvedere.at/912</code></td>
+<td><code>07961017e80fb1e3-b14e</code></td>
+</tr>
+<tr>
+<td>5a73 (Munch)</td>
+<td>&quot;repeated interval through the blue, count begins at zero, every seventh position&quot;</td>
+<td>LSB of <strong>blue</strong> channel, <code>pixels[0::7]</code></td>
+<td><code>7141415e3a146329-c2dc</code></td>
+</tr>
+<tr>
+<td>e2f1 (Schiele)</td>
+<td>&quot;before each row can be seen it must be reconstructed / what precedes the row&#39;s pixel data&quot;</td>
+<td>strip PNG <strong>filter bytes</strong>: <code>filter==2</code> → bit, MSB-first</td>
+<td><code>74718896e450c77c-e551</code></td>
+</tr>
+</tbody></table>
+<p>All six pass the seal check: <code>sha256(first16hex)[:4] == check</code>.</p>
+<h2 id="step-3-master-key-hkdf-sha256"><a class="wu-anchor" href="#step-3-master-key-hkdf-sha256" aria-hidden="true">#</a>Step 3 - master key (HKDF-SHA256)</h2>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">IKM  = concat of the 6 fragments' 8 raw bytes (artist-birth order)
+salt = &quot;collector-v2:ossuary&quot;
+info = &quot;master&quot;
+L    = 32
+master = bbb26315a1493bc6e013364b1ccf78ecb7bcc2a3aeb3972f2885f9b2b444b9bf</code></pre>
+      
+    </figure><h2 id="step-4-catalogue-salt-cabinet-password"><a class="wu-anchor" href="#step-4-catalogue-salt-cabinet-password" aria-hidden="true">#</a>Step 4 - catalogue salt + cabinet password</h2>
+<p>Canonical locators (domain lowercased, scheme/<code>www.</code> stripped, <code>/&lt;accession&gt;</code>,
+exact punctuation), joined with <code>\n</code> in birth order:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">mauritshuis.nl/670
+museodelprado.es/P000749
+moma.org/472.1941
+belvedere.at/912
+nasjonalmuseet.no/NG.M.00939
+belvedere.at/3171</code></pre>
+      
+    </figure><p><code>catalogue_digest = sha256(that text)</code> (raw 32 bytes).</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">cabinet_pw = HKDF-SHA256(IKM=master, salt=catalogue_digest, info=&quot;zip&quot;, L=16).hex()
+           = 77dad76b506abec33742bc43b14710e4</code></pre>
+      
+    </figure><p><code>7z x -p77dad76b506abec33742bc43b14710e4 sealed_cabinet.zip</code> → <code>readme.txt</code>, <code>stego.png</code>.</p>
+<h2 id="step-5-stegopng-hmac-indexed-lsb"><a class="wu-anchor" href="#step-5-stegopng-hmac-indexed-lsb" aria-hidden="true">#</a>Step 5 - stego.png (HMAC-indexed LSB)</h2>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">image_key = HKDF-SHA256(IKM=master, salt=&lt;empty&gt;, info=&quot;stego&quot;, L=32)
+for counter i = 0,1,2,...:
+    pos = int.from_bytes(HMAC-SHA256(image_key, i.to_bytes(8,&quot;big&quot;))[:8], &quot;big&quot;) % (W*H*3)
+    if pos not seen: record LSB of RGB byte at pos (row-major R,G,B)
+assemble bits MSB-first -&gt; [len u32 BE][payload][crc32 u32 BE]</code></pre>
+      
+    </figure><p>Payload (CRC verified):</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">A sealed cabinet remembers its keeper.
+GitHub: broski-creator/velarium-ossuary-ledger-7f3c2a
+Release tag: v1.0   Asset name: flag.enc   (asset is in the Release, not the tree)
+SHA-256: cf9932777723fb3b768006dc21bb832baf3cfa6ffba59c8d84f43f095e3e4bb4
+the serial is in the tag's note
+Final: flag_key = HKDF(master, salt=bytes.fromhex(serial), info=b&quot;flag&quot;, L=32);
+       AES-256-GCM decrypt nonce(12)||ct||tag(16), AAD=b&quot;collector-v2&quot;.</code></pre>
+      
+    </figure><h2 id="step-6-release-serial-flag"><a class="wu-anchor" href="#step-6-release-serial-flag" aria-hidden="true">#</a>Step 6 - release, serial, flag</h2>
+<p>Download asset <code>flag.enc</code> (82 bytes, SHA-256 matches). The <strong>annotated</strong> tag
+<code>v1.0</code> note contains <code>Serial: 1ec5d6c0778858ef9bd8e651ef1efeae</code>.</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">flag_key = HKDF-SHA256(master, salt=bytes.fromhex(serial), info=&quot;flag&quot;, L=32)
+plaintext = AESGCM(flag_key).decrypt(nonce, ct+tag, AAD=b&quot;collector-v2&quot;)
+          = hiCTF{marble_sparrow_9eb44602eedb764aac082a3816b7d7cb}</code></pre>
+      
+    </figure><h2 id="notes"><a class="wu-anchor" href="#notes" aria-hidden="true">#</a>Notes</h2>
+<ul>
+<li>The seam to watch: the Klimt image is a JPEG so <code>steghide</code> (not pixel LSB) applies;
+the passphrase is the full canonical locator, not just <code>912</code>.</li>
+<li><code>record-e2f1</code>&#39;s data lives in the PNG <em>filter byte stream</em> (<code>filter==2</code>), not the
+pixel LSBs - a naive LSB scan finds nothing.</li>
+<li>Two Belvedere works (Kiss <code>912</code>, Death and the Maiden <code>3171</code>) share a domain, so
+birth-year ordering is the only thing that disambiguates them in the digest.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#flag">Flag</a></li><li><a href="#overview">Overview</a></li><li><a href="#step-1-identify-the-six-works">Step 1 - identify the six works</a></li><li><a href="#step-2-mine-the-six-fragments-each-hidden-differently">Step 2 - mine the six fragments (each hidden differently)</a></li><li><a href="#step-3-master-key-hkdf-sha256">Step 3 - master key (HKDF-SHA256)</a></li><li><a href="#step-4-catalogue-salt-cabinet-password">Step 4 - catalogue salt + cabinet password</a></li><li><a href="#step-5-stegopng-hmac-indexed-lsb">Step 5 - stego.png (HMAC-indexed LSB)</a></li><li><a href="#step-6-release-serial-flag">Step 6 - release, serial, flag</a></li><li><a href="#notes">Notes</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="labyrinth.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Labyrinth</span></a>
+    <a class="wu-pager-link wu-pager-next" href="c3-vault.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">C3 Vault</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

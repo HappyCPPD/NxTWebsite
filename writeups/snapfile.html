@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Snapfile · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="No sample .snap ships with snaptool, so the 104-byte header has to be rebuilt from the validator alone: big-endian section offsets, fixed tags and a custom 64-bit checksum. A file that passes makes the tool print its embedded label, which is the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>snapfile</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Snapfile <span class="page-sub">Rebuilding a file format from a Crystal binary</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{r3c0nstruct3d_th3_sn4pf1l3_by73_by_by73}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hiCTF{r3c0nstruct3d_th3_sn4pf1l3_by73_by_by73}</code></p>
+<h2 id="summary"><a class="wu-anchor" href="#summary" aria-hidden="true">#</a>Summary</h2>
+<p><code>snaptool</code> (stripped Crystal x86-64 ELF) validates a 104-byte (0x68) <code>.snap</code>
+header, verifies a custom 64-bit checksum, and - on success - prints the
+snapshot&#39;s embedded label, which is the flag. No sample <code>.snap</code> ships with the
+challenge, so the format had to be reconstructed from the binary alone.</p>
+<p>The whole validator lives inside the (inlined) user <code>main</code> at <code>0x400d50</code>
+(entry <code>0x42e8e0</code> → <code>0x43a749</code> → user main). The interesting block is
+<code>0x402c26</code> - <code>0x4032b8</code>. Any failing check jumps to <code>0x4035e4</code>, which prints
+<code>invalid snapfile</code> and exits 1.</p>
+<h2 id="snap-file-layout-104-bytes"><a class="wu-anchor" href="#snap-file-layout-104-bytes" aria-hidden="true">#</a><code>.snap</code> file layout (104 bytes)</h2>
+<table>
+<thead>
+<tr>
+<th align="right">Offset</th>
+<th align="right">Size</th>
+<th>Meaning</th>
+<th>Required value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">0x00</td>
+<td align="right">4</td>
+<td>magic</td>
+<td><code>SNAP</code> (<code>53 4E 41 50</code>)</td>
+</tr>
+<tr>
+<td align="right">0x04</td>
+<td align="right">2</td>
+<td>version, <strong>big-endian</strong> u16 (read as <code>rol ax,8</code>)</td>
+<td><code>0x0002</code></td>
+</tr>
+<tr>
+<td align="right">0x06</td>
+<td align="right">1</td>
+<td>format flags</td>
+<td><code>0x03</code></td>
+</tr>
+<tr>
+<td align="right">0x07</td>
+<td align="right">1</td>
+<td>reserved</td>
+<td><code>0x00</code></td>
+</tr>
+<tr>
+<td align="right">0x08</td>
+<td align="right">8</td>
+<td>format tag, ASCII</td>
+<td><code>SNAP-LNG</code></td>
+</tr>
+<tr>
+<td align="right">0x10</td>
+<td align="right">4</td>
+<td><strong>BE</strong> u32 section A offset</td>
+<td><code>0x28</code></td>
+</tr>
+<tr>
+<td align="right">0x14</td>
+<td align="right">4</td>
+<td><strong>BE</strong> u32 section A length</td>
+<td><code>0x10</code> (16)</td>
+</tr>
+<tr>
+<td align="right">0x18</td>
+<td align="right">4</td>
+<td><strong>BE</strong> u32 section B offset</td>
+<td><code>0x38</code></td>
+</tr>
+<tr>
+<td align="right">0x1c</td>
+<td align="right">4</td>
+<td><strong>BE</strong> u32 section B length</td>
+<td><code>0x20</code> (32)</td>
+</tr>
+<tr>
+<td align="right">0x20</td>
+<td align="right">4</td>
+<td><strong>BE</strong> u32 section C offset</td>
+<td><code>0x58</code></td>
+</tr>
+<tr>
+<td align="right">0x24</td>
+<td align="right">4</td>
+<td><strong>BE</strong> u32 section C length</td>
+<td><code>0x08</code> (8)</td>
+</tr>
+<tr>
+<td align="right">0x28</td>
+<td align="right">16</td>
+<td>section A payload</td>
+<td>(free)</td>
+</tr>
+<tr>
+<td align="right">0x38</td>
+<td align="right">32</td>
+<td>section B payload</td>
+<td>(free)</td>
+</tr>
+<tr>
+<td align="right">0x58</td>
+<td align="right">8</td>
+<td>section C payload</td>
+<td>(free)</td>
+</tr>
+<tr>
+<td align="right">0x60</td>
+<td align="right">8</td>
+<td><strong>checksum</strong>, big-endian u64</td>
+<td>computed</td>
+</tr>
+</tbody></table>
+<p>Structural consistency checks enforced by the binary:</p>
+<ul>
+<li>total length <code>== 0x68</code></li>
+<li><code>A.off + A.len == B.off</code> (0x28+0x10 = 0x38)</li>
+<li><code>B.off + B.len == C.off</code> (0x38+0x20 = 0x58)</li>
+<li><code>C.off + C.len == 0x60</code> (0x58+0x08 = 0x60)</li>
+<li>the six u32 fields at 0x10/0x14/0x18/0x1c/0x20/0x24 are read through a
+big-endian accessor <code>FUN_00438800(buf,len,offset)</code> (with bounds/overflow
+guards).</li>
+</ul>
+<h3 id="checksum-algorithm-0x402dbb-0x402e4b"><a class="wu-anchor" href="#checksum-algorithm-0x402dbb-0x402e4b" aria-hidden="true">#</a>Checksum algorithm (<code>0x402dbb</code> - <code>0x402e4b</code>)</h3>
+<p>A 64-bit rolling hash over header bytes <strong>0x08..0x5F</strong> (88 bytes), FNV-ish with
+a xor-shift finalizer:</p>
+<figure class="wu-code" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">MASK = (<span class="hljs-number">1</span> &lt;&lt; <span class="hljs-number">64</span>) - <span class="hljs-number">1</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">h = <span class="hljs-number">0x1357bdf02468ace1</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">0x08</span>, <span class="hljs-number">0x60</span>):          <span class="hljs-comment"># 88 bytes</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">    h = ((h + header[i]) * <span class="hljs-number">0xd1b54a32d192ed03</span>) &amp; MASK</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">    h ^= h &gt;&gt; <span class="hljs-number">29</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc"><span class="hljs-comment"># stored field = little-endian-friendly: written BIG-ENDIAN at 0x60</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">checksum = (h ^ <span class="hljs-number">0x58</span>) &amp; MASK</span></span></code></pre>
+      
+    </figure><p>The final check is <code>(BE_u64(header[0x60:0x68]) ^ hash) == 0x58</code>, i.e. the
+8-byte field is <code>hash ^ 0x58</code> stored big-endian.</p>
+<h3 id="label-flag-decoding"><a class="wu-anchor" href="#label-flag-decoding" aria-hidden="true">#</a>Label / flag decoding</h3>
+<p>On success the tool runs a second stage (<code>0x402e66</code> - <code>0x4032b8</code>):</p>
+<ol>
+<li><code>FUN_00438890(0x28, …, buf)</code> computes <code>SHA256(header[0x00:0x28])</code>.</li>
+<li>A 46-byte label is reconstructed in a fresh buffer:
+<code>label[i] = key[i] ^ ciphertext[i]</code> (<code>xorps</code>/<code>xorpd</code> bulk-copy loop at
+<code>0x403200</code>), where the two operand tables are Crystal globals materialised at
+startup (pointers in <code>.bss</code> at <code>0x48eb90</code> / ciphertext buffer).</li>
+<li>The decoded label is re-hashed with SHA256 and compared (<code>bcmp</code> at
+<code>0x403290</code>) against an embedded constant; then a single
+<code>write(1, label, 47)</code> (<code>0x4032b3</code> → <code>0x433d40</code>) prints it.</li>
+</ol>
+<p>The label is a fixed constant (it does <strong>not</strong> depend on the section payloads),
+verified by running with all-zero sections and with random sections - both
+produce the same flag. The header SHA-256 is used only inside this stage.</p>
+<h2 id="reconstructing-a-valid-file"><a class="wu-anchor" href="#reconstructing-a-valid-file" aria-hidden="true">#</a>Reconstructing a valid file</h2>
+<p><code>mk.py</code> in this folder builds a byte-exact valid <code>.snap</code> (<code>solution.snap</code>):</p>
+<figure class="wu-code" data-lines="14">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> struct</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">MASK=(<span class="hljs-number">1</span>&lt;&lt;<span class="hljs-number">64</span>)-<span class="hljs-number">1</span>; MULT=<span class="hljs-number">0xd1b54a32d192ed03</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">checksum</span>(<span class="hljs-params">hdr</span>):</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">    h=<span class="hljs-number">0x1357bdf02468ace1</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">    <span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">8</span>,<span class="hljs-number">0x60</span>):</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">        h=((hdr[i]+h)*MULT)&amp;MASK; h^=h&gt;&gt;<span class="hljs-number">0x1d</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    <span class="hljs-keyword">return</span> (h^<span class="hljs-number">0x58</span>)&amp;MASK</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">h=<span class="hljs-built_in">bytearray</span>(<span class="hljs-number">0x68</span>)</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">h[<span class="hljs-number">0</span>:<span class="hljs-number">4</span>]=<span class="hljs-string">b&#x27;SNAP&#x27;</span>; h[<span class="hljs-number">4</span>:<span class="hljs-number">6</span>]=struct.pack(<span class="hljs-string">&#x27;&gt;H&#x27;</span>,<span class="hljs-number">2</span>); h[<span class="hljs-number">6</span>]=<span class="hljs-number">3</span>; h[<span class="hljs-number">7</span>]=<span class="hljs-number">0</span></span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">h[<span class="hljs-number">8</span>:<span class="hljs-number">16</span>]=<span class="hljs-string">b&#x27;SNAP-LNG&#x27;</span></span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc"><span class="hljs-keyword">for</span> off,val <span class="hljs-keyword">in</span> [(<span class="hljs-number">0x10</span>,<span class="hljs-number">0x28</span>),(<span class="hljs-number">0x14</span>,<span class="hljs-number">0x10</span>),(<span class="hljs-number">0x18</span>,<span class="hljs-number">0x38</span>),(<span class="hljs-number">0x1c</span>,<span class="hljs-number">0x20</span>),(<span class="hljs-number">0x20</span>,<span class="hljs-number">0x58</span>),(<span class="hljs-number">0x24</span>,<span class="hljs-number">0x08</span>)]:</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">    struct.pack_into(<span class="hljs-string">&#x27;&gt;I&#x27;</span>,h,off,val)</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">struct.pack_into(<span class="hljs-string">&#x27;&gt;Q&#x27;</span>,h,<span class="hljs-number">0x60</span>,checksum(h))</span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc"><span class="hljs-built_in">open</span>(<span class="hljs-string">&#x27;solution.snap&#x27;</span>,<span class="hljs-string">&#x27;wb&#x27;</span>).write(h)</span></span></code></pre>
+      
+    </figure><h2 id="proof-of-success"><a class="wu-anchor" href="#proof-of-success" aria-hidden="true">#</a>Proof of success</h2>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">$ ./snaptool solution.snap
+hiCTF{r3c0nstruct3d_th3_sn4pf1l3_by73_by_by73}
+exit=0</code></pre>
+      
+    </figure><p>Hex dump of <code>solution.snap</code> (104 bytes):</p>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">00000000: 534e 4150 0002 0300 534e 4150 2d4c 4e47  SNAP....SNAP-LNG
+00000010: 0000 0028 0000 0010 0000 0038 0000 0020  ...(.......8...
+00000020: 0000 0058 0000 0008 0000 0000 0000 0000  ...X............
+00000030: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+00000040: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+00000050: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+00000060: fd47 ab98 9124 f3f2                      .G...$..</code></pre>
+      
+    </figure><p>Negative control: a truncated/bad file yields <code>invalid snapfile</code> with exit 1.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#summary">Summary</a></li><li><a href="#snap-file-layout-104-bytes">.snap file layout (104 bytes)</a><ol class="wu-toc-sub"><li><a href="#checksum-algorithm-0x402dbb-0x402e4b">Checksum algorithm (0x402dbb - 0x402e4b)</a></li><li><a href="#label-flag-decoding">Label / flag decoding</a></li></ol></li><li><a href="#reconstructing-a-valid-file">Reconstructing a valid file</a></li><li><a href="#proof-of-success">Proof of success</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="entitlement.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Entitlement</span></a>
+    <a class="wu-pager-link wu-pager-next" href="the-inner-engine.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">The Inner Engine</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

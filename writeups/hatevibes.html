@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HateVibes · October 2026 MetaCTF Flash CTF writeup · NXT_CTFS</title>
+<meta name="description" content="A diplomatic-statement Word document runs a macro that enables VBOM access and rebuilds a payload from document variables. That drops an encoded HTA, and decoding it reveals the final beacon carrying the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/metactf-2026-10.html">metactf-2026-10</a> <span aria-hidden="true">/</span> <span>hatevibes</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>HateVibes <span class="page-sub">Four-stage maldoc to a beacon</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-forensics">forensics</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">MetaCTF{East_or_West_h0m3_1S_b3st}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<p><code>hatevibe.zip</code> contains <code>Joint-Declaration-C5+GER_final.doc</code> - an OOXML Word document
+dressed up as a diplomatic engagement statement. Unzip it (<code>unzip -o file.doc -d ex/</code>)
+and the macro project is visible at <code>ex/word/vbaProject.bin</code>.</p>
+<h2 id="2-stage-1-the-macro-vbaprojectbin"><a class="wu-anchor" href="#2-stage-1-the-macro-vbaprojectbin" aria-hidden="true">#</a>2. Stage 1 - the macro (<code>vbaProject.bin</code>)</h2>
+<p>The <code>AutoExec</code> routine is <code>documeNt_opEn</code> (mis-cased to dodge naive string scans). On open
+it:</p>
+<ol>
+<li>Writes <code>HKCU\Software\Microsoft\Office\&lt;ver&gt;\Word\Security\AccessVBOM = 1</code>
+(grants programmatic access to the VBA project object model).</li>
+<li>Unprotects the document with the hardcoded password <code>oikmseM#*inmowefj8349an3</code>.</li>
+<li>Burns time to outlast sandboxes: <code>While Now &lt; sss + TimeValue(&quot;20:20:20&quot;) ...</code>.</li>
+<li>Copies the document&#39;s Variables into a throwaway doc, injects <code>block1</code> / <code>block2</code> / <code>s2</code>
+as new VBA, saves it to <code>%LOCALAPPDATA%\Temp\&lt;name&gt;.doc</code> and re-opens it (<code>rundoc</code>).</li>
+</ol>
+<p><code>strings -n 6 vbaProject.bin</code> confirms <code>documeNt_opEn</code>, <code>oikmseM#*inmowefj8349an3</code>, <code>20:20:20</code>.</p>
+<h2 id="3-stage-2-payload-hidden-in-document-variables"><a class="wu-anchor" href="#3-stage-2-payload-hidden-in-document-variables" aria-hidden="true">#</a>3. Stage 2 - payload hidden in document variables</h2>
+<p><code>word/settings.xml</code> holds <strong>69</strong> <code>&lt;w:docVar&gt;</code> entries (numeric prefix 1001..1025 plus a
+random suffix; sort by the numeric prefix). Each <code>w:val</code> is a hex chunk; concatenated and
+hex-decoded they form an <strong>HTA</strong> (Application ID <code>setuptools</code>):</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">NAME=&quot;setuptools&quot; WINDOWSTATE=&quot;minimize&quot; ... &lt;span id=codeblock&gt;load&lt;/span&gt;&lt;script Language=...</code></pre>
+      
+    </figure><p><code>block1</code> VBA writes those variables out as <code>Chr(&amp;Hxx)</code> pairs to
+<code>%LOCALAPPDATA%\Settings\locale</code>. <code>block2</code> VBA registers a hidden scheduled task
+<code>\Settings\ServiceDispatch</code> (<code>repeat PT4M</code>) that runs <code>mshta.exe</code> on that <code>locale</code> file.
+<code>s2</code> chains the two (<code>AddFromString(block1)</code>, <code>AddFromString(block2)</code>, <code>goods : baads</code>).</p>
+<h2 id="4-stage-3-the-hta-vbscriptencode"><a class="wu-anchor" href="#4-stage-3-the-hta-vbscriptencode" aria-hidden="true">#</a>4. Stage 3 - the HTA (<code>VBScript.Encode</code>)</h2>
+<p>The HTA body is <code>VBScript.Encode</code>d (<code>encoded.vbe</code>). Decode it (Didier Stevens&#39; decoder,
+ported to Python 3 - read the file as <strong>latin-1</strong>). The decoded script&#39;s <code>temp()</code> rebuilds
+a hex blob and XORs it with the literal key <code>dGgzLXMzY3IzdC1rZXk=</code> into
+<code>codeblock.InnerHTML</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">vb</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-vb">str = &quot;&quot;
+For j = 0 To Len(text)-1
+  str = str &amp; Chr(Asc(Mid(text,j+1,1)) Xor Asc(Mid(&quot;dGgzLXMzY3IzdC1rZXk=&quot;,(j Mod Len(&quot;dGgzLXMzY3IzdC1rZXk=&quot;)+1),1)))
+Next
+codeblock.InnerHTML = str</code></pre>
+      
+    </figure><h2 id="5-stage-4-the-final-beacon-the-flag"><a class="wu-anchor" href="#5-stage-4-the-final-beacon-the-flag" aria-hidden="true">#</a>5. Stage 4 - the final beacon (the flag)</h2>
+<p>The deobfuscated VBScript beacons out: <strong>HTTP PUT JSON</strong> to
+<code>https://metactf.com/setup.php</code>, <code>User-Agent = &quot;&lt;ComputerName&gt; &lt;UserName&gt;&quot;</code>, expecting a
+response prefixed <code>sd5ddf3e3fg4gfds</code> and decoding it with the same <code>temp()</code> routine.
+Additional endpoints referenced: <code>/upset.php</code>, <code>/local.php</code>.</p>
+<p>The flag is hardcoded in that stage:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">asxcaw = &quot;MetaCTF{East_or_West_h0m3_1S_b3st}&quot;</code></pre>
+      
+    </figure><h2 id="6-iocs"><a class="wu-anchor" href="#6-iocs" aria-hidden="true">#</a>6. IOCs</h2>
+<ul>
+<li><code>%LOCALAPPDATA%\Settings\locale</code> (dropped HTA)</li>
+<li>Scheduled task <code>\Settings\ServiceDispatch</code> (<code>PT4M</code>, runs <code>mshta.exe</code>)</li>
+<li><code>mshta.exe</code> HTTP PUT to <code>metactf.com/setup.php</code> | <code>/upset.php</code> | <code>/local.php</code></li>
+<li>Response magic tag <code>sd5ddf3e3fg4gfds</code></li>
+<li>Document protection password <code>oikmseM#*inmowefj8349an3</code></li>
+</ul>
+<h2 id="7-flag"><a class="wu-anchor" href="#7-flag" aria-hidden="true">#</a>7. Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">MetaCTF{East_or_West_h0m3_1S_b3st}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-stage-1-the-macro-vbaprojectbin">2. Stage 1 - the macro (vbaProject.bin)</a></li><li><a href="#3-stage-2-payload-hidden-in-document-variables">3. Stage 2 - payload hidden in document variables</a></li><li><a href="#4-stage-3-the-hta-vbscriptencode">4. Stage 3 - the HTA (VBScript.Encode)</a></li><li><a href="#5-stage-4-the-final-beacon-the-flag">5. Stage 4 - the final beacon (the flag)</a></li><li><a href="#6-iocs">6. IOCs</a></li><li><a href="#7-flag">7. Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="gifted.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">GIFTed</span></a>
+    <a class="wu-pager-link wu-pager-next" href="passwordlesschecks.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">PasswordlessChecks</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

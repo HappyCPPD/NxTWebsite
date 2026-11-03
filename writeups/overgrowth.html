@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Overgrowth · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Introspection is off, but error messages leak the whole schema. The rate limit counts HTTP requests, not operations, so one request packed with aliased resetPassword calls brute-forces the reset OTP and takes over the admin account." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>overgrowth</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Overgrowth <span class="page-sub">GraphQL alias batching against an OTP</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-web">web</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{graphql_al1as_batch1ng_brute_f0rces_the_0tp_598998a3d9}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<blockquote>
+<p><code>hiCTF{graphql_al1as_batch1ng_brute_f0rces_the_0tp_598998a3d9}</code></p>
+</blockquote>
+<p>Overgrowth was a 500-point web challenge sitting at 0 solves. It&#39;s a tiny &quot;gardening supply&quot; GraphQL API, and the whole thing hinges on one idea the flag basically spells out for you once you&#39;ve got it. Here&#39;s how I got there, including the two or three times I talked myself into the wrong answer first.</p>
+<h2 id="the-app"><a class="wu-anchor" href="#the-app" aria-hidden="true">#</a>The app</h2>
+<p>The front page is a static shop. The only interesting surface is <code>/graphql</code>, served by Ariadne (Python) on gunicorn behind nginx. Introspection is disabled, so you can&#39;t just dump the schema.</p>
+<p>You can still recover the schema from error messages. GraphQL tells you when a field doesn&#39;t exist (<code>Cannot query field &#39;x&#39;</code>), often with a <code>Did you mean &#39;y&#39;?</code>, and it tells you the types and required arguments when you call something wrong. Field-guessing against that <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> gave me the complete schema:</p>
+<figure class="wu-code wu-code-output" data-lines="8">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">Query:    flag            # gated: &quot;authentication required: log in first&quot;
+          me: User
+          user(username: String!): User     # unauthenticated — this is the IDOR
+          products: [Product!]!
+Mutation: login(username, password): AuthPayload
+          requestPasswordReset(username: String!): Boolean!
+          resetPassword(username: String!, token: String!, newPassword: String!): Boolean!
+User:     id, username, email, role, apiKey</code></pre>
+      
+    </figure><h2 id="the-idor-and-the-decoy"><a class="wu-anchor" href="#the-idor-and-the-decoy" aria-hidden="true">#</a>The IDOR and the decoy</h2>
+<p><code>user(username:)</code> isn&#39;t auth-gated, so you can read any account unauthenticated:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">graphql</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-graphql">{ user(username:&quot;admin&quot;){ id email role apiKey } }</code></pre>
+      
+    </figure><p>Three users exist: <code>admin</code> (role admin), <code>gardener</code>, and <code>sprout</code>. Admin&#39;s <code>apiKey</code> comes back as:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">hiCTF{n0t_the_flag_keep_diggin_this_is_just_an_apikey}</code></pre>
+      
+    </figure><p>That&#39;s a decoy, and it&#39;s a good one. It&#39;s shaped exactly like the real flag and it burns a lot of time. A previous attempt at this challenge got stuck right here, treating the apiKey as the prize and then trying to make it authenticate as a header, a password, a bearer token, everything. It doesn&#39;t do any of that. The taunt is the hint - you have to actually <em>become</em> admin and read the <code>flag</code> field, which only the &quot;head gardener&quot; (admin) is allowed to select.</p>
+<h2 id="getting-in"><a class="wu-anchor" href="#getting-in" aria-hidden="true">#</a>Getting in</h2>
+<p><code>login</code> needs a password I don&#39;t have, and it isn&#39;t SQL-injectable. The two reset mutations are the way in, and the earlier attempt never found them. The flow is the obvious one:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">graphql</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-graphql">mutation { requestPasswordReset(username:&quot;admin&quot;) }          # arms a token, always returns true
+mutation { resetPassword(username:&quot;admin&quot;, token:&quot;????&quot;, newPassword:&quot;...&quot;) }   # true when the token is right</code></pre>
+      
+    </figure><p><code>requestPasswordReset</code> leaks nothing - no token in the body, no header, no cookie, and it returns <code>true</code> even for users that don&#39;t exist, so you can&#39;t enumerate with it either. The token is generated server-side and you have to guess it.</p>
+<p>I spent far too long assuming the token was a long value I&#39;d have to <em>predict</em> - time-seeded RNG, hashes of the username plus a timestamp, fixed seeds, the apiKey run through every transform I could think of. Thousands of candidates, nothing landed.</p>
+<h2 id="the-rate-limit-and-why-my-brute-failed"><a class="wu-anchor" href="#the-rate-limit-and-why-my-brute-failed" aria-hidden="true">#</a>The rate limit, and why my brute &quot;failed&quot;</h2>
+<p>Eventually I noticed something I should have checked on request one. <code>resetPassword</code> is rate limited:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">&quot;rate limit: too many password reset attempts; slow down&quot;</code></pre>
+      
+    </figure><p>About 15 attempts per ~60 seconds, and it&#39;s global (per-IP, shared across usernames - resetting <code>sprout</code> counts against <code>gardener</code>). <code>requestPasswordReset</code> is <em>not</em> limited.</p>
+<p>This quietly explained everything. My big candidate sweeps weren&#39;t failing because the guesses were wrong - a rate-limited response has no <code>data</code> field, so my code had been scoring every throttled attempt as a miss. Only the first ~15 of each run ever actually hit the resolver. Most of what I thought I&#39;d ruled out had never been tested.</p>
+<p>It also reframed the challenge. You don&#39;t put a rate limit on a 128-bit random token. You rate-limit something <strong>short and guessable</strong>. The token is meant to be brute-forced; the limit is the thing standing in the way.</p>
+<h2 id="the-actual-trick-alias-batching"><a class="wu-anchor" href="#the-actual-trick-alias-batching" aria-hidden="true">#</a>The actual trick - alias batching</h2>
+<p>The rate limiter counts HTTP requests, not resolver calls. GraphQL lets you alias the same field many times in one operation, and every alias runs:</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">graphql</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-graphql">mutation {
+  a0: resetPassword(username:&quot;admin&quot;, token:&quot;0000&quot;, newPassword:&quot;x&quot;)
+  a1: resetPassword(username:&quot;admin&quot;, token:&quot;0001&quot;, newPassword:&quot;x&quot;)
+  a2: resetPassword(username:&quot;admin&quot;, token:&quot;0002&quot;, newPassword:&quot;x&quot;)
+  ...
+}</code></pre>
+      
+    </figure><p>One request, thousands of guesses, one tick on the rate limiter. I confirmed it by firing 75 resets across three batched requests with no throttling at all, then pushed the batch size up. Ten thousand aliases came back in about six seconds, and with a few worker threads I was doing roughly 5,000 reset attempts per second. A full numeric space is minutes, not months.</p>
+<h2 id="bruting-the-otp"><a class="wu-anchor" href="#bruting-the-otp" aria-hidden="true">#</a>Bruting the OTP</h2>
+<p>My first guess was a 6-digit OTP (<code>000000</code> - <code>999999</code>). Clean miss across the whole million - which was useful, because it ruled out <code>randint(100000,999999)</code> and friends. Then I remembered the apiKey format, <code>ak_user_gardener_0001</code>, with its 4-digit zero-padded suffix, and tried a <strong>4-digit</strong> space.</p>
+<p>It hit immediately. Admin&#39;s reset token on that instance was <code>6036</code>, and <code>resetPassword</code> returned <code>true</code>, setting the password to one I chose.</p>
+<h2 id="the-last-gate"><a class="wu-anchor" href="#the-last-gate" aria-hidden="true">#</a>The last gate</h2>
+<p>Logging in returns a token:</p>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;login&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;token&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;75yHePX3jTTZagT-KBas7GcCFtP8gmWK&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;user&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;1&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;admin&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">}</span></span></span></code></pre>
+      
+    </figure><p>No <code>Set-Cookie</code>. That detail matters, and it&#39;s why my earlier attempts to forge a session went nowhere - there&#39;s no cookie to forge, and the token isn&#39;t a JWT. Auth is just the raw token echoed back in the <code>Authorization</code> header:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">Authorization: 75yHePX3jTTZagT-KBas7GcCFtP8gmWK</code></pre>
+      
+    </figure><p>With that header on, <code>{ flag }</code> stops saying &quot;log in first&quot; and hands over:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-9" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-9"><code class="language-text">hiCTF{graphql_al1as_batch1ng_brute_f0rces_the_0tp_598998a3d9}</code></pre>
+      
+    </figure><h2 id="what-tripped-people-up"><a class="wu-anchor" href="#what-tripped-people-up" aria-hidden="true">#</a>What tripped people up</h2>
+<ul>
+<li>The decoy apiKey is designed to eat your time, and it works. Finding admin&#39;s key is not the goal; authenticating as admin is.</li>
+<li>Introspection being off makes the reset mutations easy to miss. You have to go find them by name.</li>
+<li>The rate limit silently poisons naive brute scripts - throttled replies look like clean misses unless you check for the error.</li>
+<li>It&#39;s tempting to treat &quot;predictable token&quot; as &quot;I must reverse the generation algorithm.&quot; Here the move was simpler: notice the limiter is per-request, batch past it, and brute a tiny 4-digit space.</li>
+</ul>
+<h2 id="reproducing-it"><a class="wu-anchor" href="#reproducing-it" aria-hidden="true">#</a>Reproducing it</h2>
+<p><code>brute.py</code> in this folder does the whole chain against a fresh instance - enumerate, arm the reset, batch-brute the 4-digit space, reset admin, log in, and print the flag:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-10" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-10"><code class="language-text">python3 brute.py https://overgrowth-&lt;id&gt;.chall.hiddeninvestigations.net admin 4d</code></pre>
+      
+    </figure><p>The reset token is regenerated per instance, so the specific value (<code>6036</code> here) changes every time; the 4-digit space doesn&#39;t.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#the-app">The app</a></li><li><a href="#the-idor-and-the-decoy">The IDOR and the decoy</a></li><li><a href="#getting-in">Getting in</a></li><li><a href="#the-rate-limit-and-why-my-brute-failed">The rate limit, and why my brute &quot;failed&quot;</a></li><li><a href="#the-actual-trick-alias-batching">The actual trick - alias batching</a></li><li><a href="#bruting-the-otp">Bruting the OTP</a></li><li><a href="#the-last-gate">The last gate</a></li><li><a href="#what-tripped-people-up">What tripped people up</a></li><li><a href="#reproducing-it">Reproducing it</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="ouroboros-hicybercon.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Ouroboros</span></a>
+    <a class="wu-pager-link wu-pager-next" href="orphaned-context.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Orphaned Context</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

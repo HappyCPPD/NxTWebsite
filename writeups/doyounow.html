@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>doyounow · October 2026 MetaCTF Flash CTF writeup · NXT_CTFS</title>
+<meta name="description" content="Every note handler takes an index with no bounds check, but full RELRO makes the GOT read-only. Out-of-range indices reach the writable stdout pointer instead, and a forged FILE with a wide vtable turns the next puts into system(&quot; sh&quot;)." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/metactf-2026-10.html">metactf-2026-10</a> <span aria-hidden="true">/</span> <span>doyounow</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>doyounow <span class="page-sub">Unchecked note index to a forged stdout FILE</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-pwn">pwn</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">SkillBit{simplememoryheresimplememorytheregivesoverflow}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p>Service: TCP (TLS-wrapped) - doyounow @ *.live.sbhost.io:1337</p>
+<h2 id="1-recon"><a class="wu-anchor" href="#1-recon" aria-hidden="true">#</a>1. Recon</h2>
+<p><code>doyounow.zip</code> ships:</p>
+<ul>
+<li><code>chal/chall.c</code> - source</li>
+<li><code>chal/challenge</code> - PIE ELF, dynamically linked (glibc 2.35-0ubuntu3.13 per the image&#39;s libc.so.6)</li>
+<li><code>chal/Dockerfile</code>, <code>entrypoint.sh</code> - socat <code>TCP-LISTEN:8080,fork EXEC:/app/challenge</code></li>
+<li>flag at <code>/app/flag.txt</code> (env <code>FLAG</code>)</li>
+</ul>
+<p>Protections: PIE, NX, full RELRO on the binary (GNU_RELRO covers 0x3d58..0x4000, so <code>.got</code> is read-only).</p>
+<p>Note: the sbhost endpoint speaks TLS, not raw TCP. A plain-TCP connect returns a Go <code>404 page not found</code>; you must connect with TLS (SNI <code>*.live.sbhost.io</code>) to reach the container. In pwntools: <code>remote(host, port, ssl=True)</code>.</p>
+<h2 id="2-program"><a class="wu-anchor" href="#2-program" aria-hidden="true">#</a>2. Program</h2>
+<p>Global <code>struct notes { char *chunk; uint size; } Notes[0x20];</code> at .bss <code>0x4080</code>.
+Menu: 1 add, 2 delete, 3 edit, 4 show, 5 forge.</p>
+<p>Every handler takes an index from <code>read_num()</code> (4-byte read -&gt; <code>atoll</code>) with <strong>no bounds check</strong>:</p>
+<ul>
+<li><code>add_notes()</code>: <code>Notes[index].chunk = malloc(size); Notes[index].size = size;</code></li>
+<li><code>delete_notes()</code>: <code>free(Notes[index].chunk); Notes[index].chunk = 0;</code></li>
+<li><code>edit_notes()</code>: <code>read(STDIN, Notes[index].chunk, Notes[index].size);</code></li>
+<li><code>show_notes()</code>: <code>unsigned index = read_num(); puts(Notes[index].chunk);</code> - truncated to 32-bit unsigned, so <strong>negative indices crash here</strong> (0xFFFFFFEE*16 -&gt; unmapped). Only add/edit/delete reach below the array.</li>
+<li><code>forge_notes()</code>: once-only (<code>COUNTER</code> guard) random <code>memcpy</code> - a decoy.</li>
+</ul>
+<h2 id="3-the-bug-negative-index-into-bss"><a class="wu-anchor" href="#3-the-bug-negative-index-into-bss" aria-hidden="true">#</a>3. The bug - negative index into .bss</h2>
+<p><code>.bss</code> layout (PIE-relative):</p>
+<figure class="wu-code wu-code-output" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">0x4020  stdout:  &lt;+8&gt;                (COPY reloc, points at _IO_2_1_stdout_)
+0x4028  (pad)
+0x4030  stdin
+0x4040  stderr
+0x4060  num[8]
+0x4080  Notes[0x20]      (16 bytes/entry: chunk@+0, size@+8)</code></pre>
+      
+    </figure><p><code>Notes[-6]</code> maps to bss <code>0x4020</code>, i.e. the <strong><code>stdout</code> pointer itself</strong>, and <code>Notes[-6].size</code> to <code>0x4028</code>.</p>
+<p>So:</p>
+<ul>
+<li><code>add_notes(-6, sz)</code> -&gt; <code>stdout = malloc(sz)</code> (and <code>Notes[-6].size = sz</code>)</li>
+<li><code>edit_notes(-6, data)</code> -&gt; writes <code>sz</code> bytes <strong>into that chunk</strong>, i.e. we fully control the process&#39;s <code>stdout</code> FILE.</li>
+</ul>
+<p>Because <code>.got</code> is RELRO-read-only, hijacking <code>stdout</code> (a writable COPY reloc) is the intended primitive.</p>
+<h2 id="4-leaks"><a class="wu-anchor" href="#4-leaks" aria-hidden="true">#</a>4. Leaks</h2>
+<p>libc - unsorted bin reuse:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">add(0,0x500); add(1,0x20)   # guard so the big chunk isn't top-adjacent
+delete(0);   add(2,0x500)   # realloc from unsorted, fd/bk untouched
+show(2) -&gt; fd = main_arena+0x60
+libc_base = leak - 0x21ace0</code></pre>
+      
+    </figure><p>heap - tcache safe-linking:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">add(3,0x400); edit(3,benign); delete(3)   # one entry in tcache[0x410], next=NULL
+add(4,0x400)                              # pops it, leaves the safe-linked fd
+show(4) -&gt; fd = chunk&gt;&gt;12
+T = (leak&lt;&lt;12) | 0x7e0        # low 12 bits are deterministic for this alloc sequence</code></pre>
+      
+    </figure><h2 id="5-fsop-house-of-apple-2"><a class="wu-anchor" href="#5-fsop-house-of-apple-2" aria-hidden="true">#</a>5. FSOP - house of apple 2</h2>
+<p><code>_IO_FILE</code> offsets used (glibc 2.35 x86-64):</p>
+<table>
+<thead>
+<tr>
+<th>field</th>
+<th>off</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>_flags</td>
+<td>0x00</td>
+</tr>
+<tr>
+<td>_IO_write_base / _ptr / _end</td>
+<td>0x20 / 0x28 / 0x30</td>
+</tr>
+<tr>
+<td>_IO_buf_base / _end</td>
+<td>0x38 / 0x40</td>
+</tr>
+<tr>
+<td>_fileno</td>
+<td>0x70</td>
+</tr>
+<tr>
+<td>_vtable_offset</td>
+<td>0x82</td>
+</tr>
+<tr>
+<td>_lock</td>
+<td>0x88</td>
+</tr>
+<tr>
+<td>_wide_data</td>
+<td>0xa0</td>
+</tr>
+<tr>
+<td>_mode</td>
+<td>0xc0</td>
+</tr>
+<tr>
+<td>vtable</td>
+<td>0xd8</td>
+</tr>
+</tbody></table>
+<p>_IO_wide_data: <code>_IO_write_base</code> 0x18, <code>_wide_vtable</code> <strong>0xe0</strong>; <code>_IO_jump_t.__doallocate</code> at +0x68.</p>
+<p>Fake FILE placed in the hijacked chunk <code>T</code>:</p>
+<ul>
+<li><code>T+0x00</code> = <code>&quot; sh\0&quot;</code>  (also <code>_flags</code>; see pitfall below)</li>
+<li><code>T+0xa0</code> = <code>T+0x20</code>   (<code>_wide_data</code> -&gt; into the chunk itself)</li>
+<li><code>T+0xd8</code> = <code>_IO_wfile_jumps</code></li>
+<li><code>T+0x100</code> = <code>T+0x100</code> (<code>_wide_data-&gt;_wide_vtable</code> at <code>wide+0xe0</code>)</li>
+<li><code>T+0x168</code> = <code>system</code>  (<code>_wide_vtable-&gt;__doallocate</code>)</li>
+<li>everything else zero</li>
+</ul>
+<p>Trigger (the program&#39;s own <code>puts</code>):
+<code>puts -&gt; _IO_sputn -&gt; _IO_wfile_xsputn -&gt; _IO_wdefault_xsputn -&gt; _IO_wfile_overflow -&gt; _IO_wdoallocbuf -&gt; _IO_WDOALLOCATE(fp) = wide_vtable-&gt;__doallocate(fp) = system(fp)</code>, and <code>fp</code> bytes start with <code>&quot; sh&quot;</code>.</p>
+<p>Chain: <code>add(3,0x400); edit(3,benign); delete(3); add(4,0x400) [leak]; show(4); delete(4); add(-6,0x400) -&gt; stdout=T; edit(-6, mal)</code> -&gt; shell.</p>
+<h2 id="6-pitfalls-hit-worth-remembering"><a class="wu-anchor" href="#6-pitfalls-hit-worth-remembering" aria-hidden="true">#</a>6. Pitfalls hit (worth remembering)</h2>
+<ol>
+<li><strong>0x18 is <code>_IO_read_base</code>, not write_base.</strong> Using it makes <code>_IO_file_xsputn</code> write through a NULL <code>_IO_write_ptr</code> -&gt; SIGSEGV. Correct: write_base 0x20.</li>
+<li><strong>A freed chunk&#39;s first 16 bytes get clobbered</strong> by the allocator (tcache next/key, or unsorted fd/bk). To survive the intermittent <code>puts(&quot;added!&quot;)</code> right after the hijack, pre-seed the chunk with a benign FILE and use a <strong>tcache-sized</strong> chunk with an <strong>empty bin</strong> so <code>_flags</code> ends up 0.</li>
+<li><strong><code>&quot;sh&quot;</code> as the command sets <code>_IO_UNBUFFERED</code></strong> (flags bit1 = 0x2 on &#39;s&#39;=0x73), sending <code>_IO_wdoallocbuf</code> down the <code>_IO_wdefault_doallocate</code> branch instead of calling our <code>__doallocate</code>. Use <code>&quot; sh&quot;</code> (leading 0x20) -&gt; flags treat it as buffered.</li>
+<li><strong>Fake scratch must be in mapped memory.</strong> libc&#39;s anon RW extension (inside the final LOAD&#39;s <code>p_memsz</code>, base+0x21c000..~0x22b560) is writable and at a known offset; anything past it is unmapped. Here the fake wide_data/vtable are placed <em>inside the hijacked heap chunk</em> to avoid needing scratch in libc at all.</li>
+<li><strong>The endpoint is TLS.</strong> Plain TCP gets a Go 404; use <code>ssl=True</code>.</li>
+</ol>
+<h2 id="7-flag"><a class="wu-anchor" href="#7-flag" aria-hidden="true">#</a>7. Flag</h2>
+<p>SkillBit{simplememoryheresimplememorytheregivesoverflow}</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#1-recon">1. Recon</a></li><li><a href="#2-program">2. Program</a></li><li><a href="#3-the-bug-negative-index-into-bss">3. The bug - negative index into .bss</a></li><li><a href="#4-leaks">4. Leaks</a></li><li><a href="#5-fsop-house-of-apple-2">5. FSOP - house of apple 2</a></li><li><a href="#6-pitfalls-hit-worth-remembering">6. Pitfalls hit (worth remembering)</a></li><li><a href="#7-flag">7. Flag</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev wu-pager-index" href="../events/metactf-2026-10.html"><span class="wu-pager-dir">Competition</span><span class="wu-pager-name">October 2026 MetaCTF Flash CTF</span></a>
+    <a class="wu-pager-link wu-pager-next" href="treat-dispenser.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Treat Dispenser</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

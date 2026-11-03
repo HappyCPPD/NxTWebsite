@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Epsilon Drift · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A gfortran binary takes four doubles as hex and checks their mantissa slices and exponents against paired linear equations, which pin them to 1.1, 2.2 and 3.3000000000000003. The last double has to be a negative zero, which passes the compare but flips the output." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>epsilon-drift</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Epsilon Drift <span class="page-sub">IEEE-754 bit fields and a signed zero</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{1eee754_s1gn3d_z3r0_1u1p_dr1ft_eps!}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Flag:</strong> <code>hiCTF{1eee754_s1gn3d_z3r0_1u1p_dr1ft_eps!}</code></p>
+<h2 id="binary"><a class="wu-anchor" href="#binary" aria-hidden="true">#</a>Binary</h2>
+<ul>
+<li><code>extracted/epsilon-drift</code> - ELF x86-64, statically linked, stripped (1.2 MB).</li>
+<li>Uses the gfortran runtime (Fortran 2003). <code>main</code> = <code>0x401d30</code>; the real body is <code>0x401f10</code>.</li>
+</ul>
+<h2 id="input-handling-0x401f10"><a class="wu-anchor" href="#input-handling-0x401f10" aria-hidden="true">#</a>Input handling (<code>0x401f10</code>)</h2>
+<ol>
+<li><code>command_argument_count</code> is checked; one argument required.</li>
+<li><code>get_command_argument</code> reads argv[1] into a 256-byte buffer.</li>
+<li>Its length must be exactly <code>0x40</code> (64 chars) → a <strong>32-byte</strong> vector, i.e. <strong>4 <button type="button" class="wu-gloss" data-def="The standard binary format for floating-point numbers, used by almost every language's float/double type.">IEEE-754</button> doubles</strong> <code>v0..v3</code> (<button type="button" class="wu-gloss" data-def="A byte order where the least-significant byte is stored first.">little-endian</button>).</li>
+<li>A hex decoder (<code>0x401fad</code>..<code>0x40201e</code>) turns the 64 hex chars into 32 raw bytes and copies them into a malloc&#39;d buffer.</li>
+</ol>
+<h2 id="acceptance-check-0x4020200x4022a1"><a class="wu-anchor" href="#acceptance-check-0x4020200x4022a1" aria-hidden="true">#</a>Acceptance check (<code>0x402020</code>..<code>0x4022a1</code>)</h2>
+<p>The four doubles are split into bit fields:</p>
+<ul>
+<li><code>v3</code> (<code>rsp+0x18</code>) must satisfy <code>ucomisd 0.0</code> (equal, not NaN).</li>
+<li><code>v0</code> bits in <code>rax</code>, <code>v1</code> bits in <code>rdi</code>.</li>
+<li>Mantissas are sliced into four 13-bit groups <code>a</code>(bits0-12), <code>b</code>(bits13-25), <code>c</code>(bits26-38), <code>d</code>(bits39-51); exponents are bits52-62; sign is bit63.</li>
+<li>Every branch ends in <code>sete</code>/<code>and</code>, so <strong>all</strong> of these must hold (mod 8192 / 2048):</li>
+</ul>
+<figure class="wu-code wu-code-output" data-lines="7">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">(1) (a0+a1)  = 0x1334     (2) (a0+2a1) = 0xcce
+(3) (b0+b1)  = 0x1998     (4) (b0+2b1) = 0x664
+(5) (c0+c1)  = 0xccc      (6) (c0+2c1) = 0x1332
+(7) (d0+d1)  = 0x666      (8) (d0+2d1) = 0x999
+(9) (e0+e1)  = 0x7ff      (10)(e0+2e1)= 0x3ff
+(11) sign(v0)=0, sign(v1)=0
+(12) bits(v0+v1) == bits(v2)        ; v2 = v0 + v1  (double add)</code></pre>
+      
+    </figure><p>Subtracting each pair gives a unique solution:
+<code>a0=a1=0x199A</code>, <code>b0=b1=0xCCC</code>, <code>c0=c1=0x666</code>, <code>d0=d1=0x333</code>, <code>e0=1023</code>, <code>e1=1024</code>.</p>
+<p>That is <code>v0 = 1.1</code>, <code>v1 = 2.2</code>, <code>v2 = 3.3000000000000003</code>, matching the hint&#39;s <code>residual 3.300000000000000e+00</code>.</p>
+<h3 id="the-rounding-signed-zero-trick"><a class="wu-anchor" href="#the-rounding-signed-zero-trick" aria-hidden="true">#</a>The &quot;rounding&quot; / signed-zero trick</h3>
+<p>The success branch (<code>0x402291</code>) does <code>movq %xmm1,%rax; test %rax,%rax; mov $1,%eax; cmovs %eax,%esi</code> and then jumps to the printing routine <code>0x402a70</code>, which chooses <strong>accept when <code>esi != 0</code></strong>.
+<code>esi</code> only becomes 1 when the sign flag is set, i.e. when <code>v3</code>&#39;s top bit is 1 - while the earlier <code>ucomisd</code> only demands <code>v3 == 0.0</code>.
+The only value equal to zero with the sign bit set is <strong>negative zero</strong>: <code>v3 = -0.0 = 0x8000000000000000</code>.
+That is the <code>epsilon</code>/<code>rounding</code> drift: <code>+0.0</code> is rejected as &quot;off-spec&quot;, <code>-0.0</code> is accepted.</p>
+<h2 id="flag-generation-0x402a70-accept-path"><a class="wu-anchor" href="#flag-generation-0x402a70-accept-path" aria-hidden="true">#</a>Flag generation (<code>0x402a70</code> accept path)</h2>
+<p>On accept it computes <code>SHA-256(vector)</code>, runs an iterative SHA-256 keystream (counter <code>be32(round)</code> appended), XORs it with a table at <code>0x4e34ff</code>, and after 42 bytes verifies <code>SHA-256(config) == {0x7ee08052b24c8222,0xf7722162aec0b1f9,0x24225a48a6865e8b,0x62cbba471e1887c5}</code>; on match it <code>fwrite</code>s the 42-byte config to stdout. No need to reimplement it - feeding the correct vector does it.</p>
+<h2 id="vector-64-hex-chars"><a class="wu-anchor" href="#vector-64-hex-chars" aria-hidden="true">#</a>Vector (64 hex chars)</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">9a9999999999f13f9a999999999901406766666666660a400000000000000080</code></pre>
+      
+    </figure><ul>
+<li><code>v0 = 1.1</code>  → <code>9a9999999999f13f</code></li>
+<li><code>v1 = 2.2</code>  → <code>9a99999999990140</code></li>
+<li><code>v2 = 3.3000000000000003</code> → <code>6766666666660a40</code></li>
+<li><code>v3 = -0.0</code> → <code>0000000000000080</code></li>
+</ul>
+<h2 id="reproduce"><a class="wu-anchor" href="#reproduce" aria-hidden="true">#</a>Reproduce</h2>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">./extracted/epsilon-drift 9a9999999999f13f9a999999999901406766666666660a400000000000000080
+# hiCTF{1eee754_s1gn3d_z3r0_1u1p_dr1ft_eps!}</code></pre>
+      
+    </figure>
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#binary">Binary</a></li><li><a href="#input-handling-0x401f10">Input handling (0x401f10)</a></li><li><a href="#acceptance-check-0x4020200x4022a1">Acceptance check (0x402020..0x4022a1)</a><ol class="wu-toc-sub"><li><a href="#the-rounding-signed-zero-trick">The &quot;rounding&quot; / signed-zero trick</a></li></ol></li><li><a href="#flag-generation-0x402a70-accept-path">Flag generation (0x402a70 accept path)</a></li><li><a href="#vector-64-hex-chars">Vector (64 hex chars)</a></li><li><a href="#reproduce">Reproduce</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="cold-beacon.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Cold Beacon</span></a>
+    <a class="wu-pager-link wu-pager-next" href="cipher.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Cipher</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>
