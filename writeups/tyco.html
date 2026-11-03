@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tyco · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The flag and the flag plus a known offset are both encrypted under the same N and a 16-bit e. A polynomial gcd of the two degree-56263 relations over Z/N collapses to x - r, and r is the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>tyco</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Tyco <span class="page-sub">Franklin-Reiter related messages</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-crypto">crypto</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{your_ai_slop_bores_me}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> Cryptography · <code>tyco.zip</code> (sha256 <code>f88f50cb…</code>)</p>
+<h2 id="artifact"><a class="wu-anchor" href="#artifact" aria-hidden="true">#</a>Artifact</h2>
+<p><code>chall.txt</code> - a single line: <code>N e d t1 t2</code></p>
+<figure class="wu-code wu-code-output" data-lines="5">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">N  = 6473367999588815881004572026588101750789079445857778536811168773336769104246291698373278825101339166586003503710113510158959567754294313663054146192986157   (512-bit, p·q)
+e  = 56263
+d  = 2035764493091178624712794329705995870572416764083820061256032842991849492659098525475022938791830969705210788470345958581547703841173518982860845498416721
+t1 = 5781684316211813340099872158841814667969949431547126810872317404279855836615577909943707949461944016952363993351117294907803807466967042600735326571642750
+t2 = 5259035151262072090045557031571853293994610739483317199715493584749958652346593143297235904086846475896963065621327693095317182721586618178754533498537529</code></pre>
+      
+    </figure><p>The generator (<code>chall.py</code>) does:</p>
+<figure class="wu-code" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">N = getPrime(<span class="hljs-number">256</span>) * getPrime(<span class="hljs-number">256</span>)</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">e = getPrime(<span class="hljs-number">16</span>)</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">r = bytes_to_long(flag)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">d = random.randrange(<span class="hljs-number">1</span>, N)</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">t1 = <span class="hljs-built_in">pow</span>(r, e, N)</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">t2 = <span class="hljs-built_in">pow</span>(r + d, e, N)</span></span></code></pre>
+      
+    </figure><p>So <code>t1</code> and <code>t2</code> are the <code>e</code>-th powers of two <strong>related</strong> messages (<code>r</code> and
+<code>r + d</code>) with the same <code>e</code> and modulus - textbook Franklin - Reiter.</p>
+<h2 id="method"><a class="wu-anchor" href="#method" aria-hidden="true">#</a>Method</h2>
+<p>Franklin - Reiter related-message attack: over <code>Z/N[x]</code>,</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">gcd(x^e - t1, (x + d)^e - t2) = x - r</code></pre>
+      
+    </figure><p>The gcd of the two degree-<code>e = 56263</code> polynomials collapses to the linear
+factor <code>x - r</code>; the constant term gives <code>r</code>, and <code>r.to_bytes()</code> decodes the
+flag. The Euclidean gcd runs ~35 000 of 56 263 steps (a few minutes).</p>
+<figure class="wu-code" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># solve.py (values as above); the real work is the polynomial gcd</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">r = <span class="hljs-number">10995781022013361699631792555502989853144280540708804918390675039613</span></span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">assert</span> <span class="hljs-built_in">pow</span>(r, e, N) == t1 <span class="hljs-keyword">and</span> <span class="hljs-built_in">pow</span>(r + d, e, N) == t2</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-built_in">print</span>(r.to_bytes((r.bit_length() + <span class="hljs-number">7</span>)//<span class="hljs-number">8</span>, <span class="hljs-string">&#x27;big&#x27;</span>).decode())</span></span></code></pre>
+      
+    </figure><h2 id="repro"><a class="wu-anchor" href="#repro" aria-hidden="true">#</a>Repro</h2>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># PARI/GP with a large stack handles the degree-56k gcd</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">sage/bin/gp -q -f tyco.gp</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-comment"># or: sage -python tyco.py   (PolynomialRing(Zmod(N)) gcd)</span></span></span></code></pre>
+      
+    </figure><p>Output:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-text">hiCTF{your_ai_slop_bores_me}</code></pre>
+      
+    </figure><h2 id="verification"><a class="wu-anchor" href="#verification" aria-hidden="true">#</a>Verification</h2>
+<p>Structural: <code>pow(r, e, N) == t1</code> <strong>and</strong> <code>pow(r + d, e, N) == t2</code> both hold -
+the recovered <code>r</code> is exactly the plaintext the generator used.</p>
+<h2 id="notes"><a class="wu-anchor" href="#notes" aria-hidden="true">#</a>Notes</h2>
+<ul>
+<li>A 16-bit prime <code>e</code> with <code>r</code> tiny in bytes is the whole point: the flag is far
+below <code>N</code>, so <code>r</code> is the small root and FR recovers it directly.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#artifact">Artifact</a></li><li><a href="#method">Method</a></li><li><a href="#repro">Repro</a></li><li><a href="#verification">Verification</a></li><li><a href="#notes">Notes</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="cipher-cascade.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Cipher Cascade</span></a>
+    <a class="wu-pager-link wu-pager-next" href="broken-signals.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Broken Signals</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>HICyberCon CTF 2026 writeups · NXT_CTFS</title>
-<meta name="description" content="NXT_CTFS writeups for HICyberCon CTF 2026: 54 challenges." />
+<meta name="description" content="NXT_CTFS writeups for HICyberCon CTF 2026: 62 challenges." />
 <link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
 <link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
 <link rel="stylesheet" href="../css/base.css?v=158fffd0" />
@@ -79,7 +79,7 @@
           <button type="button" class="chip chip-dot wu-cat-misc" data-cat="misc" aria-pressed="false">misc</button>
         </div>
       </div>
-      <p class="wu-count" id="wuCount" aria-live="polite">54 writeups</p>
+      <p class="wu-count" id="wuCount" aria-live="polite">62 writeups</p>
     </div>
 
   <ul class="wu-list-rows" id="wuRows">
@@ -102,6 +102,27 @@
             <span class="wu-row-title"><span class="wu-row-name">Orphaned Context</span><span class="wu-row-sub">Sealed incident record left readable</span></span>
             <span class="wu-cat wu-cat-web">web</span>
             <span class="wu-row-blurb">The relay keeps a sealed incident record that should only open in its original context. An orphaned-context bug lets a fresh session read /incidents/IR-7731/seal, and every independently provisioned instance returns the same 51 bytes.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="../writeups/whisper.html">
+            <span class="wu-row-title"><span class="wu-row-name">Whisper</span><span class="wu-row-sub">Blind regex exfil, then a forged HMAC</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-blurb">The token endpoint passes raw JSON into a MongoDB lookup, so a $regex on the client secret becomes a blind oracle that leaks report-signer's secret one character at a time. The export endpoint's own error spells out the string to sign, and an HMAC over it returns the report.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="../writeups/stillwell-estates.html">
+            <span class="wu-row-title"><span class="wu-row-name">Stillwell Estates</span><span class="wu-row-sub">Absolute-path read through path.resolve</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-blurb">The import preview reads a listing's document filename and only rejects the literal &quot;..&quot;. path.resolve drops the base directory when the name is absolute, so /proc/self/environ leaks the flag the server deleted from process.env after startup.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="web">
+          <a class="wu-row-link" href="../writeups/file-viewer.html">
+            <span class="wu-row-title"><span class="wu-row-name">File Viewer</span><span class="wu-row-sub">ZIP symlink to arbitrary file read</span></span>
+            <span class="wu-cat wu-cat-web">web</span>
+            <span class="wu-row-blurb">The Zip Checker extracts uploads and serves each member back by URL. A ZIP entry stored as a symlink to /app/flag.txt is followed when served, turning the viewer into an arbitrary file read.</span>
           </a>
         </li>
         <li class="wu-row" data-cat="pwn">
@@ -216,6 +237,13 @@
             <span class="wu-row-blurb">The vault in the middle of the maze is meant to be reached through a render-code indexing bug. Strings show the prize token is derived from a seed rather than random, which explains how the token is built, while the live instance mints the real one on a genuine win.</span>
           </a>
         </li>
+        <li class="wu-row" data-cat="rev">
+          <a class="wu-row-link" href="../writeups/signal-lock.html">
+            <span class="wu-row-title"><span class="wu-row-name">Signal Lock</span><span class="wu-row-sub">Inverting a BEAM token check</span></span>
+            <span class="wu-cat wu-cat-rev">rev</span>
+            <span class="wu-row-blurb">A stripped Erlang BEAM module checks an 8-byte token through a multiply, rotate and add chain modulo 2^64. Disassembling it with beam_disasm and running the chain backwards gives g4m30v3r, and the module itself returns the flag.</span>
+          </a>
+        </li>
         <li class="wu-row" data-cat="crypto">
           <a class="wu-row-link" href="../writeups/rocinate.html">
             <span class="wu-row-title"><span class="wu-row-name">Rocinate</span><span class="wu-row-sub">LCG orbit and exponent relations</span></span>
@@ -256,6 +284,13 @@
             <span class="wu-row-title"><span class="wu-row-name">Cipher Cascade</span><span class="wu-row-sub">Reverse, Base64, hex, ROT13</span></span>
             <span class="wu-cat wu-cat-crypto">crypto</span>
             <span class="wu-row-blurb">The hint gives the outer layers in order. Reversing the string, Base64-decoding and hex-decoding leaves ROT13 text, and one more rotation gives the flag.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="crypto">
+          <a class="wu-row-link" href="../writeups/tyco.html">
+            <span class="wu-row-title"><span class="wu-row-name">Tyco</span><span class="wu-row-sub">Franklin-Reiter related messages</span></span>
+            <span class="wu-cat wu-cat-crypto">crypto</span>
+            <span class="wu-row-blurb">The flag and the flag plus a known offset are both encrypted under the same N and a 16-bit e. A polynomial gcd of the two degree-56263 relations over Z/N collapses to x - r, and r is the flag.</span>
           </a>
         </li>
         <li class="wu-row" data-cat="forensics">
@@ -377,6 +412,13 @@
             <span class="wu-row-blurb">A cracked crypto miner from LimeWire encrypts files and disables Defender. Answering all 14 questions takes the event logs, Sysmon, the Recycle Bin $I files and resident MFT data.</span>
           </a>
         </li>
+        <li class="wu-row" data-cat="forensics">
+          <a class="wu-row-link" href="../writeups/the-quiet-divide.html">
+            <span class="wu-row-title"><span class="wu-row-name">The Quiet Divide</span><span class="wu-row-sub">Escrowed keylogs, QUIC and a sealed case</span></span>
+            <span class="wu-cat wu-cat-forensics">forensics</span>
+            <span class="wu-row-blurb">Two escrow shares in the capture XOR into TLS keylogs that decrypt two QUIC sessions. The vault API also serves its own reference SDK, and following it through evidence hashing, archive decryption and fragment unmasking opens the one committee seal that authenticates.</span>
+          </a>
+        </li>
         <li class="wu-row" data-cat="osint">
           <a class="wu-row-link" href="../writeups/low-tide-ledger.html">
             <span class="wu-row-title"><span class="wu-row-name">Low Tide Ledger</span><span class="wu-row-sub">Pinning an apartment from a recovered call</span></span>
@@ -459,6 +501,20 @@
             <span class="wu-row-title"><span class="wu-row-name">Pruned Ledger</span><span class="wu-row-sub">Rebuilding a case file from a replayed chain</span></span>
             <span class="wu-cat wu-cat-misc">misc</span>
             <span class="wu-row-blurb">Replaying the archived transactions rebuilds the pruned chain. The four case-file fields come from contract code, the only non-reverted configure() calldata, a derived storage slot and a revert that leaks the unmasked note.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/ghostbus.html">
+            <span class="wu-row-title"><span class="wu-row-name">GhostBus</span><span class="wu-row-sub">UART nonce and a word-swapped AES record</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">The secure element hands the same 16-byte nonce to every read on the UART capture. Hashed with a salt from the firmware it gives the AES key, and the sealed record in SPI flash decrypts once each 4-byte word is byte-swapped.</span>
+          </a>
+        </li>
+        <li class="wu-row" data-cat="misc">
+          <a class="wu-row-link" href="../writeups/dormant-signer.html">
+            <span class="wu-row-title"><span class="wu-row-name">Dormant Signer</span><span class="wu-row-sub">ECDSA nonce reuse unmasks an escrow</span></span>
+            <span class="wu-cat wu-cat-misc">misc</span>
+            <span class="wu-row-blurb">Two authorizers' co-signatures share an r value, which leaks the signer's private key. Re-signing the liveness digest rebuilds the escrow mask, and XORing it off the masked secret in a replayed chain's storage gives the flag.</span>
           </a>
         </li>
   </ul>

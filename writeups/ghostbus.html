@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GhostBus · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The secure element hands the same 16-byte nonce to every read on the UART capture. Hashed with a salt from the firmware it gives the AES key, and the sealed record in SPI flash decrypts once each 4-byte word is byte-swapped." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>ghostbus</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>GhostBus <span class="page-sub">UART nonce and a word-swapped AES record</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{gh0st_bu5_uart_n0nc3_r3v3al_9c3f12}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> Hardware / firmware crypto · <code>ghost_bus.zip</code> (sha256 <code>8ffeac83…</code>)</p>
+<h2 id="artifact"><a class="wu-anchor" href="#artifact" aria-hidden="true">#</a>Artifact</h2>
+<ul>
+<li><code>capture.csv</code> / <code>capture.vcd</code> - UART bus probe between the hub MCU and the secure element</li>
+<li><code>flash_dump.bin</code> (1 MiB) - external SPI NOR (holds a recovery copy of the firmware + a sealed record)</li>
+<li><code>firmware.elf</code> - MCU firmware</li>
+<li><code>diagram.png</code>, below</li>
+</ul>
+<p><img src="../images/writeups/ghostbus-diagram.png" alt="Bus diagram: maintenance tool to hub over UART2, hub to secure element over UART1, the AA 55 frame format, and the SPI NOR memory map with the sealed region at 0x6A000" width="780" height="440" loading="lazy"></p>
+<h2 id="method"><a class="wu-anchor" href="#method" aria-hidden="true">#</a>Method</h2>
+<ol>
+<li><p><strong>UART decode.</strong> Frames are <code>AA 55 &lt;len&gt; &lt;cmd&gt; &lt;payload&gt; CRC16/Modbus</code>.
+The MCU&#39;s &quot;hidden read&quot; request is <code>len=0, cmd=0x10</code>; the secure element&#39;s
+reply is <code>len=0x10, cmd=0x10</code> carrying a fixed 16-byte <strong>nonce</strong> (it returns
+the same nonce every read - not a fresh random):</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">nonce = 9e3b7a44c1d05f82a6e1b4907cd3f5a2</code></pre>
+      
+    </figure></li>
+<li><p><strong>Key derivation</strong> (firmware, capstone): <code>key = SHA256(salt24 || nonce)[:16]</code>,
+with <code>salt24</code> from rodata <code>0x08000ca0</code>
+(<code>04325a9c117f3da0c0ffee5aa55a00ff1234567890abcdef</code>):</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">key = 664ecd32a0a21d02a90afb1efb6919b1</code></pre>
+      
+    </figure></li>
+<li><p><strong>Open the sealed region.</strong> External flash holds the sealed v2 record (48 B)
+at <strong>offset 0x6A000</strong> (the v1 record at 0x68000 is &quot;rotated out&quot; decoy). Main
+reads it, <strong>byte-swaps each 4-byte word</strong>, then AES-128-<strong>CBC</strong>-decrypts with
+<code>IV = nonce</code>, strips PKCS#7 and validates <code>hiCTF{…}</code>.</p>
+</li>
+</ol>
+<h2 id="repro"><a class="wu-anchor" href="#repro" aria-hidden="true">#</a>Repro</h2>
+<figure class="wu-code" data-lines="16">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment">#!/usr/bin/env python3</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">import</span> hashlib</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc"><span class="hljs-keyword">from</span> cryptography.hazmat.primitives.ciphers <span class="hljs-keyword">import</span> Cipher, algorithms, modes</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">nonce = <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&quot;9e3b7a44c1d05f82a6e1b4907cd3f5a2&quot;</span>)          <span class="hljs-comment"># capture.csv (ch1, len=0x10)</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">salt  = <span class="hljs-built_in">bytes</span>.fromhex(<span class="hljs-string">&quot;04325a9c117f3da0c0ffee5aa55a00ff1234567890abcdef&quot;</span>)  <span class="hljs-comment"># fw rodata 0x08000ca0</span></span></span>
+<span class="wu-line" data-line="7"><span class="wu-ln">7</span><span class="wu-lc">key   = hashlib.sha256(salt + nonce).digest()[:<span class="hljs-number">16</span>]                 <span class="hljs-comment"># 664ecd32a0a21d02a90afb1efb6919b1</span></span></span>
+<span class="wu-line" data-line="8"><span class="wu-ln">8</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="9"><span class="wu-ln">9</span><span class="wu-lc">flash = <span class="hljs-built_in">open</span>(<span class="hljs-string">&quot;flash_dump.bin&quot;</span>, <span class="hljs-string">&quot;rb&quot;</span>).read()</span></span>
+<span class="wu-line" data-line="10"><span class="wu-ln">10</span><span class="wu-lc">rec   = flash[<span class="hljs-number">0x6A000</span>:<span class="hljs-number">0x6A000</span> + <span class="hljs-number">48</span>]</span></span>
+<span class="wu-line" data-line="11"><span class="wu-ln">11</span><span class="wu-lc">sw    = <span class="hljs-built_in">bytearray</span>()</span></span>
+<span class="wu-line" data-line="12"><span class="wu-ln">12</span><span class="wu-lc"><span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">0</span>, <span class="hljs-number">48</span>, <span class="hljs-number">4</span>):                 <span class="hljs-comment"># byte-swap each 32-bit word (little&lt;-&gt;big)</span></span></span>
+<span class="wu-line" data-line="13"><span class="wu-ln">13</span><span class="wu-lc">    sw += rec[i:i+<span class="hljs-number">4</span>][::-<span class="hljs-number">1</span>]</span></span>
+<span class="wu-line" data-line="14"><span class="wu-ln">14</span><span class="wu-lc"></span></span>
+<span class="wu-line" data-line="15"><span class="wu-ln">15</span><span class="wu-lc">pt = Cipher(algorithms.AES(key), modes.CBC(nonce)).decryptor().update(<span class="hljs-built_in">bytes</span>(sw))</span></span>
+<span class="wu-line" data-line="16"><span class="wu-ln">16</span><span class="wu-lc"><span class="hljs-built_in">print</span>(pt[:-pt[-<span class="hljs-number">1</span>]].decode())             <span class="hljs-comment"># strip PKCS#7</span></span></span></code></pre>
+      
+    </figure><p>Output:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">hiCTF{gh0st_bu5_uart_n0nc3_r3v3al_9c3f12}</code></pre>
+      
+    </figure><h2 id="verification"><a class="wu-anchor" href="#verification" aria-hidden="true">#</a>Verification</h2>
+<p>The decryption ends in <strong>7 bytes of clean PKCS#7 padding</strong> (<code>0x07 × 7</code>) and a
+well-formed <code>hiCTF{…}</code> token - the padding is the structural <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button> that the
+key/IV/word-swap are correct (<code>IV = nonce</code> confirmed by the fact that only the
+first CBC block was garbage otherwise).</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#artifact">Artifact</a></li><li><a href="#method">Method</a></li><li><a href="#repro">Repro</a></li><li><a href="#verification">Verification</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="pruned-ledger.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Pruned Ledger</span></a>
+    <a class="wu-pager-link wu-pager-next" href="dormant-signer.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Dormant Signer</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dormant Signer · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="Two authorizers' co-signatures share an r value, which leaks the signer's private key. Re-signing the liveness digest rebuilds the escrow mask, and XORing it off the masked secret in a replayed chain's storage gives the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>dormant-signer</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Dormant Signer <span class="page-sub">ECDSA nonce reuse unmasks an escrow</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-misc">misc</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{layout_undead_borrowed_betrays}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> Blockchain (Vyper / EVM) · launched as <code>dormant-signer.zip</code>
+(sha256 <code>9397090f…</code>)</p>
+<h2 id="artifact"><a class="wu-anchor" href="#artifact" aria-hidden="true">#</a>Artifact</h2>
+<ul>
+<li><code>chain/</code> - <code>genesis.json</code>, <code>transactions.jsonl</code> (the whole custody-desk history), <code>replay.sh</code>, <code>HEAD</code></li>
+<li><code>contracts/</code> - <code>Authorizer.vy</code>, <code>VoucherDesk.vy</code>, <code>Notary.vy</code></li>
+</ul>
+<p><code>Authorizer.vy</code> pays withdrawals against a co-signature from an off-chain
+&quot;automated signer&quot;. When the desk winds an authorizer down it <strong>files a recovery
+escrow</strong> and self-destructs:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">filed = escrow ^ escrow_mask(liveness signature) ^ running_digest</code></pre>
+      
+    </figure><p>where</p>
+<ul>
+<li><code>running_digest = keccak256(concat(prev, keccak256(abi_encode(authorizer, request_id, amount, recipient))))</code>
+folded over every settled request - recomputable by replaying the chain;</li>
+<li><code>escrow_mask(v,r,s) = keccak256(ESCROW_DOMAIN ++ r ++ s ++ v)</code> over the signer&#39;s
+<strong>liveness</strong> signature - <code>ecrecover(LIVENESS_DIGEST, v, r, s)</code>, i.e. only the
+signer can produce it.</li>
+</ul>
+<h2 id="method"><a class="wu-anchor" href="#method" aria-hidden="true">#</a>Method</h2>
+<ol>
+<li><p><strong>Recover the signer private key - ECDSA nonce reuse.</strong> The <code>authorize</code>
+co-signatures on the two authorizers leak the same <code>r</code> for two different
+messages (the RFC6979 nonce collided across deployments):</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">k = (z1 - z2) * (s1 - s2)^-1 mod n
+d = (s1 * k - z1) * r^-1      mod n</code></pre>
+      
+    </figure><p><code>recover.py</code> → recovered signer keys, e.g. authorizer A
+<code>c0ecef7be0815db43cf992c33dce2b92739576089c31e30ce0c30ac2e2919e52</code>.</p>
+</li>
+<li><p><strong>Recompute the liveness signature</strong> deterministically (RFC6979, low-s,
+<code>v ∈ {27,28}</code>, raw <code>LIVENESS_DIGEST</code>, no message prefix) and derive
+<code>mask = keccak(ESCROW_DOMAIN || r || s || v)</code>.</p>
+</li>
+<li><p><strong>Replay the chain</strong> into a local anvil, read <code>storage[14] = masked_secret</code>
+on the sealed authorizer <code>0x5ebb…</code>, and strip the mask:</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">escrow = masked_secret ^ mask        (running_digest already folded into the
+                                     filed blob ⇒ it cancels)</code></pre>
+      
+    </figure></li>
+</ol>
+<h2 id="repro"><a class="wu-anchor" href="#repro" aria-hidden="true">#</a>Repro</h2>
+<figure class="wu-code" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-built_in">cd</span> chain &amp;&amp; DETACH=1 bash replay.sh      <span class="hljs-comment"># local anvil + replay of transactions.jsonl</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">python3 ds_open.py                       <span class="hljs-comment"># recovers key, reads storage[14], unmasks</span></span></span></code></pre>
+      
+    </figure><p><code>ds_open.py</code> prints the escrow plaintext:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">hiCTF{layout_undead_borrowed_betrays}</code></pre>
+      
+    </figure><h2 id="verification"><a class="wu-anchor" href="#verification" aria-hidden="true">#</a>Verification</h2>
+<ul>
+<li>Key recovery is confirmed by <strong><code>ecrecover</code> over every <code>authorize</code>
+co-signature on the destroyed authorizer returning the recovered address</strong>
+(100% match - see <code>final.py</code>).</li>
+<li>The unmasked escrow is ASCII and a well-formed <code>hiCTF{…}</code> token.</li>
+</ul>
+<h2 id="tooling-notes"><a class="wu-anchor" href="#tooling-notes" aria-hidden="true">#</a>Tooling notes</h2>
+<ul>
+<li>Authorizer filed <code>masked_secret</code> at storage slot 14; <code>running_digest</code> and
+<code>settled</code> follow it - read them with <code>eth_getStorageAt</code>.</li>
+<li>Deterministic nonces (RFC6979) meant the &quot;unrecoverable&quot; key was actually
+leaked by a single <code>r</code> collision between the two authorizers.</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#artifact">Artifact</a></li><li><a href="#method">Method</a></li><li><a href="#repro">Repro</a></li><li><a href="#verification">Verification</a></li><li><a href="#tooling-notes">Tooling notes</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="ghostbus.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">GhostBus</span></a>
+    <a class="wu-pager-link wu-pager-next wu-pager-index" href="../events/hicybercon-ctf-2026.html"><span class="wu-pager-dir">Competition</span><span class="wu-pager-name">HICyberCon CTF 2026</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

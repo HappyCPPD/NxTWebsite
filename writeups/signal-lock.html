@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Signal Lock · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="A stripped Erlang BEAM module checks an 8-byte token through a multiply, rotate and add chain modulo 2^64. Disassembling it with beam_disasm and running the chain backwards gives g4m30v3r, and the module itself returns the flag." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>signal-lock</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>Signal Lock <span class="page-sub">Inverting a BEAM token check</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-rev">rev</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{b34m_byt3c0d3_n3v3r_l13s_s3ss10n_unl0ck3d}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> Reverse engineering (Erlang/BEAM) · <code>signal-lock.zip</code> →
+<code>signal_lock.beam</code> (sha256 <code>93651d91…</code>)</p>
+<h2 id="artifact"><a class="wu-anchor" href="#artifact" aria-hidden="true">#</a>Artifact</h2>
+<p>A stripped, compiled <strong>BEAM module</strong> <code>signal_lock</code> with a single entry point
+<code>verify/1</code>. Per the brief it validates a client&#39;s session-integrity token; a
+correct token returns <code>{ok, &lt;&lt;&quot;hiCTF{...}&quot;&gt;&gt;}</code>.</p>
+<h2 id="method"><a class="wu-anchor" href="#method" aria-hidden="true">#</a>Method</h2>
+<p><code>abstract_code</code> is absent, so disassemble the BEAM and read the SSA:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">erlang</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-erlang">%% erl -pa . -eval 'io:format(&quot;~p~n&quot;,[beam_disasm:file(&quot;signal_lock.beam&quot;)]),halt().'</code></pre>
+      
+    </figure><p><code>verify/1</code> does, in order:</p>
+<ol>
+<li><code>is_binary(Token)</code> and <code>byte_size(Token) == 8</code> (exactly 8 bytes);</li>
+<li><code>bs_match</code> an <strong>unsigned 64-bit big-endian</strong> integer out of the token;</li>
+<li><code>transform(Int) == 12675316763487955908</code> (<code>0xAFE7C5708F40EBC4</code>);</li>
+<li>on match, <code>unlock(Int)</code> returns <code>{ok, &lt;&lt;Flag/binary&gt;&gt;}</code>.</li>
+</ol>
+<p><code>transform/1</code> (from the disasm) spreads and mixes the 64-bit value with
+multiply/rotate/add constants modulo <code>2^64</code>:</p>
+<figure class="wu-code wu-code-output" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-text">x = (x * 0x9E3779B97F4A7C15) band 0xFFFFFFFFFFFFFFFF   ; golden-ratio spread
+x = rotl(x, 29)                                          ; 64-bit rotate left
+x = (x + 0x0123456789ABCDEF) band 0xFFFFFFFFFFFFFFFF</code></pre>
+      
+    </figure><p>Working this chain backwards pins the one 8-byte token that satisfies the
+comparison:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">token = &quot;g4m30v3r&quot;</code></pre>
+      
+    </figure><p>(confirmed by executing the module - see Verification; the module itself is the
+authority on whether the token is accepted.)</p>
+<h2 id="repro"><a class="wu-anchor" href="#repro" aria-hidden="true">#</a>Repro</h2>
+<figure class="wu-code" data-lines="3">
+      <figcaption>
+        
+        <span class="wu-code-lang">bash</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-bash"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-comment"># Erlang/OTP 26+ required (older runtimes reject the module&#x27;s opcodes)</span></span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc">erl -pa . \</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">  -<span class="hljs-built_in">eval</span> <span class="hljs-string">&#x27;io:format(&quot;~p~n&quot;,[signal_lock:verify(&lt;&lt;&quot;g4m30v3r&quot;&gt;&gt;)]), halt().&#x27;</span></span></span></code></pre>
+      
+    </figure><p>Output:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">{ok,&lt;&lt;&quot;hiCTF{b34m_byt3c0d3_n3v3r_l13s_s3ss10n_unl0ck3d}&quot;&gt;&gt;}</code></pre>
+      
+    </figure><h2 id="verification"><a class="wu-anchor" href="#verification" aria-hidden="true">#</a>Verification</h2>
+<p>The strongest possible <button type="button" class="wu-gloss" data-def="In an exploit, anything that answers a single yes/no question about hidden state, one query at a time.">oracle</button>: <strong>the challenge&#39;s own unmodified module</strong> returns
+the flag for the candidate token - the token is accepted by
+<code>signal_lock:verify/1</code>, not merely &quot;plausible&quot;. No brute force was used; the
+token was derived from the arithmetic in <code>transform/1</code>.</p>
+<h2 id="tooling-notes"><a class="wu-anchor" href="#tooling-notes" aria-hidden="true">#</a>Tooling notes</h2>
+<ul>
+<li>This is a <strong>compiled</strong> <code>.beam</code> (no debug info); use <code>beam_disasm:file/1</code>, not
+<code>beam_lib:chunks(...,[abstract_code])</code>.</li>
+<li>The module is gzip-compressed BEAM (<code>gzip compressed data, original size 1624</code>).</li>
+</ul>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#artifact">Artifact</a></li><li><a href="#method">Method</a></li><li><a href="#repro">Repro</a></li><li><a href="#verification">Verification</a></li><li><a href="#tooling-notes">Tooling notes</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="wardens-maze.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Warden's Maze</span></a>
+    <a class="wu-pager-link wu-pager-next" href="rocinate.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Rocinate</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>

