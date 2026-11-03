@@ -447,14 +447,18 @@
       ]
     },
     {
-      "id": "metactf-2026-10",
-      "event": "October 2026 MetaCTF Flash CTF",
+      "id": "skillbit-flash-ctf-2026-10",
+      "event": "October 2026 SkillBit Flash CTF",
       "team": "NxT, NxD",
       "attribution": "solo",
       "placements": {
         "nxt": "22nd",
         "nxd": "200+"
       },
+      "cert": "images/events/skillbit-flash-ctf-2026-10.png",
+      "certW": 1228,
+      "certH": 948,
+      "certAlt": "October 2026 SkillBit Flash CTF certificate of participation for Ashton Ang, 2 hours, presented October 29, 2026",
       "result": {
         "placement": "22nd",
         "field": "of 326",
@@ -1594,7 +1598,7 @@
       "linkedin": "https://www.linkedin.com/in/ashton-ang-wu-zun-846999353/",
       "events": [
         "hicybercon-ctf-2026",
-        "metactf-2026-10",
+        "skillbit-flash-ctf-2026-10",
         "solarctf-2026",
         "cryovault-ctf-2026",
         "byteme-ctf-26",
@@ -1655,7 +1659,7 @@
       "bio": "New member of the team.",
       "events": [
         "hicybercon-ctf-2026",
-        "metactf-2026-10",
+        "skillbit-flash-ctf-2026-10",
         "hitcon-ctf-2026"
       ]
     },

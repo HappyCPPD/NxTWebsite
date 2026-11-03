@@ -25,6 +25,11 @@ MIRRORS1   SM64/GAP/PAR
 K=9C4F1E7A3B50D682
 ```
 
+The two text lines in the spectrogram, before cleanup:
+
+![A red spectrogram crop with two blocks of faint dotted tone rows forming text](../images/writeups/hall-of-mirrors-spectrogram.jpg "420x650")
+
+
 * `MIRRORS1` = the frame magic; `SM64` = SplitMix64; `GAP/PAR` = step / parity.
 * **The key is `9C4F1E7A3B50D682`** - note the 15th hex digit is **`8`**, not `B`.
   (It is easy to misread as `…D6B2`, and that one glyph stops anything from extracting.

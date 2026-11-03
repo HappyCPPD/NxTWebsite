@@ -1,6 +1,6 @@
 # doyounow
 
-**Event:** October 2026 MetaCTF Flash CTF
+**Event:** October 2026 SkillBit Flash CTF
 **Category:** pwn
 **Flag:** `SkillBit{simplememoryheresimplememorytheregivesoverflow}`
 

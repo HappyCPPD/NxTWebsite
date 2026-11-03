@@ -1,6 +1,6 @@
 # PasswordlessChecks
 
-**Event:** October 2026 MetaCTF Flash CTF
+**Event:** October 2026 SkillBit Flash CTF
 **Category:** forensics
 **Flag:** `MetaCTF{Nbu8W32GsvbSNSNS}`
 

@@ -22,6 +22,11 @@ and carry rasterised text in the **alpha channel** at the bottom-right (~x3759-3
 hiCTF{mu1t!14y3r3d_            ->  "multilayered_"
 ```
 
+The alpha channel of the hidden rows, cropped and enlarged:
+
+![White text on black reading hiCTF{mu1t!14y3r3d_](../images/writeups/echoes-hidden-rows.png "900x180")
+
+
 ### Layer 2 - appended ZIP after IEND
 `IEND` ends at offset 5518394; the remaining **3,359,095 bytes are a password-protected
 (ZipCrypto) ZIP** containing `carrier.jpg`. Cracked with a wordlist:

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>GIFTed · October 2026 MetaCTF Flash CTF writeup · NXT_CTFS</title>
+<title>GIFTed · October 2026 SkillBit Flash CTF writeup · NXT_CTFS</title>
 <meta name="description" content="The tiny 82x82 GIF has 25 frames. Laying them out as a 5x5 grid builds a 410x410 QR code, which decodes to the flag." />
 <link rel="icon" href="../images/brand/logo-v2.png" type="image/png" />
 <link rel="stylesheet" href="../css/fonts.css?v=80d02232" />
@@ -49,7 +49,7 @@
 
 <div class="wu-progress" aria-hidden="true"><div class="wu-progress-bar" id="wuProgress"></div></div>
   <main class="page-main container" id="top">
-  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/metactf-2026-10.html">metactf-2026-10</a> <span aria-hidden="true">/</span> <span>gifted</span></nav>
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="../index.html#top">nxt_ctfs</a> <span aria-hidden="true">/</span> <a href="../writeups.html">writeups</a> <span aria-hidden="true">/</span> <a href="../events/skillbit-flash-ctf-2026-10.html">skillbit-flash-ctf-2026-10</a> <span aria-hidden="true">/</span> <span>gifted</span></nav>
 
   <header class="page-head">
     
@@ -79,11 +79,15 @@
 gift.gif: GIF image data, version 89a, 82 x 82</code></pre>
       
     </figure><p>Its 82x82 size is tiny for a &quot;gift&quot; - the interesting part is the frame count.</p>
+<p>The gift itself, playing through its 25 frames:</p>
+<p><img src="../images/writeups/gifted-attachment.gif" alt="The animated 82x82 gift.gif" width="82" height="82" loading="lazy"></p>
 <h2 id="2-the-trick-25-frames-are-a-5x5-tile-grid"><a class="wu-anchor" href="#2-the-trick-25-frames-are-a-5x5-tile-grid" aria-hidden="true">#</a>2. The trick - 25 frames are a 5x5 tile grid</h2>
 <p>The GIF is animated, 25 frames. 25 = 5x5. Each 82x82 frame is one tile of a larger
 410x410 image (5*82 = 410). Paste every frame at <code>(row, col) = (i//5, i%5)</code> in frame
 order and the tiles line up: the three finder patterns of a QR code land exactly in the
 corners. That reassembled image is a QR code.</p>
+<p>Reassembled, the frames give this:</p>
+<p><img src="../images/writeups/gifted-qr.png" alt="The 25 frames tiled 5 by 5 into a QR code" width="410" height="410" loading="lazy"></p>
 <h2 id="3-solve"><a class="wu-anchor" href="#3-solve" aria-hidden="true">#</a>3. Solve</h2>
 <figure class="wu-code" data-lines="14">
       <figcaption>

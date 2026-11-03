@@ -1,6 +1,6 @@
 # Treat Dispenser
 
-**Event:** October 2026 MetaCTF Flash CTF
+**Event:** October 2026 SkillBit Flash CTF
 **Category:** rev
 **Flag:** `SkillBit{fu11_s1z3_tr34t_unl0ck3d}`
 

@@ -11,6 +11,11 @@
 ## Hint
 > "A mysterious image from the shores of Zanzibar … a whisper from the Spice Island."
 
+
+The challenge image:
+
+![The challenge photo, zanzibar_whisper.jpg](../images/writeups/zanzibar-whisper-attachment.jpg "1024x683")
+
 ## Solve
 The JPEG carries a steghide payload with **no passphrase**:
 

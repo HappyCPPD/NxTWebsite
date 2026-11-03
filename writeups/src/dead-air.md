@@ -41,6 +41,13 @@ Station KESTREL. Flag format `hiCTF{}`.
    -> `S1L3NC3_W4S_TH3_M3SS4G3_6R3V`
    = "SILENCE WAS THE MESSAGE" (+ a trailing fragment `6R3V`).
 
+
+The two images from the logbook archive:
+
+![The logbook page: 28 numbered cells, each holding a coded glyph](../images/writeups/dead-air-logbook.jpg "1370x620")
+
+![The operator code pad mapping each glyph to a letter, digit or underscore](../images/writeups/dead-air-codepad.jpg "1370x780")
+
 ## Flag
 `hiCTF{s1l3nc3_w4s_th3_m3ss4g3_6r3v}` (ACCEPTED - the decode lowercased; the uppercase form was rejected)
 

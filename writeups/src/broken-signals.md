@@ -33,6 +33,9 @@ SIGNAL  INTERCEPTED
 hiCTF{h34d3r_r3p41r_m4st3r}
 ```
 
+![The repaired PNG, reading SIGNAL INTERCEPTED with the flag underneath](../images/writeups/broken-signals-fixed.png "400x300")
+
+
 ## Flag
 ```
 hiCTF{h34d3r_r3p41r_m4st3r}

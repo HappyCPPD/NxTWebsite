@@ -13,6 +13,11 @@
 
 Africa's highest peak = Kilimanjaro, **5895 m**. That number is the steghide passphrase.
 
+
+The challenge image:
+
+![The challenge photo, roof_of_africa.jpg](../images/writeups/roof-of-africa-attachment.jpg "1200x792")
+
 ## Solve
 ```bash
 steghide extract -sf roof_of_africa.jpg -p 5895 -xf roof.txt

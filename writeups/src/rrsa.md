@@ -1,6 +1,6 @@
 # RRSA
 
-**Event:** October 2026 MetaCTF Flash CTF
+**Event:** October 2026 SkillBit Flash CTF
 **Category:** crypto
 **Flag:** `SkillBit{aLLLways_th3_w4yy}`
 

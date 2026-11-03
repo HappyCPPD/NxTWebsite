@@ -85,7 +85,9 @@ and carry rasterised text in the <strong>alpha channel</strong> at the bottom-ri
       </figcaption>
       <pre id="code-1"><code class="language-text">hiCTF{mu1t!14y3r3d_            -&gt;  &quot;multilayered_&quot;</code></pre>
       
-    </figure><h3 id="layer-2-appended-zip-after-iend"><a class="wu-anchor" href="#layer-2-appended-zip-after-iend" aria-hidden="true">#</a>Layer 2 - appended ZIP after IEND</h3>
+    </figure><p>The alpha channel of the hidden rows, cropped and enlarged:</p>
+<p><img src="../images/writeups/echoes-hidden-rows.png" alt="White text on black reading hiCTF{mu1t!14y3r3d_" width="900" height="180" loading="lazy"></p>
+<h3 id="layer-2-appended-zip-after-iend"><a class="wu-anchor" href="#layer-2-appended-zip-after-iend" aria-hidden="true">#</a>Layer 2 - appended ZIP after IEND</h3>
 <p><code>IEND</code> ends at offset 5518394; the remaining <strong>3,359,095 bytes are a password-protected
 (ZipCrypto) ZIP</strong> containing <code>carrier.jpg</code>. Cracked with a wordlist:</p>
 <figure class="wu-code wu-code-output" data-lines="1">

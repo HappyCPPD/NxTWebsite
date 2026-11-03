@@ -1,6 +1,6 @@
 # HateVibes
 
-**Event:** October 2026 MetaCTF Flash CTF
+**Event:** October 2026 SkillBit Flash CTF
 **Category:** forensics
 **Flag:** `MetaCTF{East_or_West_h0m3_1S_b3st}`
 

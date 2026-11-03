@@ -11,6 +11,11 @@
 ## Hint
 > "…Inspect the provided documents closely - what appears empty might hold the key to unravelling the final secret."
 
+
+The image that ships next to the document:
+
+![The challenge photo, chall.jpg](../images/writeups/whispers-in-the-margin-attachment.jpg "1200x800")
+
 ## Solve - two layers, where the "joke" is actually the key
 
 1. **DOCX whitespace stego.** The last paragraphs of the .docx contain nothing but

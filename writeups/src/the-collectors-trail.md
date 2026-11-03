@@ -81,6 +81,9 @@ cabinet_pw = HKDF-SHA256(IKM=master, salt=catalogue_digest, info="zip", L=16).he
 
 `7z x -p77dad76b506abec33742bc43b14710e4 sealed_cabinet.zip` → `readme.txt`, `stego.png`.
 
+![stego.png from the cabinet: thin concentric circles on a dark background](../images/writeups/the-collectors-trail-stego.jpg "1200x675")
+
+
 ## Step 5 - stego.png (HMAC-indexed LSB)
 
 ```
