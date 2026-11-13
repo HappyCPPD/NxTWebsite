@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verify Certificate - NXT_CTFS</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="images/brand/logo-v2.png" type="image/png">
+<link rel="stylesheet" href="css/fonts.css">
+<style>
+  :root {
+    --void: #08070a; --panel: #100e14; --wire: #272231; --wire-strong: #3a3348;
+    --ink: #f2f0f4; --ink-2: #9d98a6; --ink-3: #847e92;
+    --sig: #e6293f; --sig-hot: #ff4257; --phos: #3ddc84;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--void); color: var(--ink); font-family: var(--sans);
+         display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+  .card { width: 100%; max-width: 560px; background: var(--panel); border: 1px solid var(--wire-strong); border-radius: 6px; overflow: hidden; }
+  .bar { font-family: var(--mono); font-size: 13px; color: var(--ink-3); padding: 10px 16px; border-bottom: 1px solid var(--wire); display: flex; gap: 10px; align-items: center; }
+  .bar img { width: 22px; height: 22px; }
+  .bar a { color: inherit; text-decoration: none; }
+  .body { padding: 28px 24px 24px; }
+  h1 { margin: 0 0 6px; font-size: 24px; }
+  p.sub { margin: 0 0 22px; color: var(--ink-2); font-size: 15px; line-height: 1.5; }
+  form { display: flex; gap: 8px; flex-wrap: wrap; }
+  input { flex: 1 1 260px; min-width: 0; background: var(--void); color: var(--ink); border: 1px solid var(--wire-strong);
+          border-radius: 4px; padding: 11px 12px; font: 15px var(--mono); }
+  input:focus { outline: 2px solid var(--sig); outline-offset: 1px; }
+  button { background: var(--sig); color: #fff; border: 0; border-radius: 4px; padding: 11px 18px; font: 600 15px var(--mono); cursor: pointer; }
+  button:hover { background: var(--sig-hot); }
+  .result { margin-top: 22px; border-radius: 4px; padding: 16px; font-size: 15px; line-height: 1.55; display: none; }
+  .result.ok { display: block; border: 1px solid rgba(61,220,132,.35); background: rgba(61,220,132,.07); }
+  .result.bad { display: block; border: 1px solid rgba(230,41,63,.4); background: rgba(230,41,63,.08); }
+  .status { font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: .08em; margin-bottom: 10px; }
+  .ok .status { color: var(--phos); } .bad .status { color: var(--sig-hot); }
+  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; }
+  dt { font-family: var(--mono); font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .1em; padding-top: 3px; }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  dd.name { font-weight: 700; font-size: 17px; }
+  dd.id { font-family: var(--mono); color: var(--phos); }
+  .note { margin-top: 18px; font-size: 13px; color: var(--ink-3); line-height: 1.5; }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="bar"><img src="images/brand/logo-v2.png" alt=""><a href="index.html">nxt@ctf</a>:~$ ./certify --verify</div>
+  <div class="body">
+    <h1>Verify a certificate</h1>
+    <p class="sub">Enter the certificate ID printed on an NXT_CTFS certificate, or scan its QR code.</p>
+    <form id="f" autocomplete="off">
+      <input id="id" placeholder="NXT{ictf26_XXXXXXXXXX}" spellcheck="false" aria-label="Certificate ID">
+      <button type="submit">Verify</button>
+    </form>
+    <div id="out" class="result" role="status" aria-live="polite"></div>
+    <p class="note">Records on this page are encrypted. A holder's details are only shown to someone who already has that certificate's ID.</p>
+  </div>
+</main>
+<script>
+const RECORDS = [{"k": "fc386a08a378c5ff7418ba4a5135d527a9dcd816897d18ed73c5a3c7ca761a4c", "iv": "HN/lkOX8U41k8fyE", "ct": "GEE0KwavksZkzYsnyJ0U+lGEiSTEdzLLZE54a7hmnv9OXEgNUv9g2+tCpI/r9Ox+jPhfRqmG5u9tiVAmxzKSxMkW2woyZqsrNJWCdH6rw9UzRIdS8G6gvcLxVbRuO5PCDKrcK3JmIe6uPNyd3kBJpSAQElSheDc4lblFXbcNkgLhLFWRF5YVK6WwhRg5Rd4MtTrF"}, {"k": "a252975b8290d75f724c061d04bea45cf05cc5bc5289762711246e906eb26f21", "iv": "lTbwusti663tsayK", "ct": "u4BBedMHq7kWaFXgx3vWioYwV9/I1JqbAsuomPk08d9z/dDwVY+q168Q9uTQ4N/LqITCpj8/xfZdx2miUHpLVtr3b89tBWEmIJtInI5hm7df5gnHnqiKuGGv5NW58cRP2KMapUmIhR5iS2nxPKt+msBknrR9Yc8Hmpgf+wsYRK+bDPfD3rD4jwB61qYcgvVKZ+YGYkijDx+ovA=="}, {"k": "8a30df663758a6a1a23d73900a43101978cac2f72456dbb57fa15335d2e83442", "iv": "GKDUV2Q5sKFFwzH1", "ct": "Ua5l8hgGyFQJWS1CUdONjM1n1rb0xffammPu4XtStxf2XJHDib0fN7mnq61QbOGlWxBViLB+/ih9t7BYirxrZ5lQp5O7pnkYG1AeXqni2i5rz9WA1YU4ynAhuksPTKV+hNlCGZiX/mQ3GrhZREdp1qpcCMmVtVqUZLEq5f3/V9HDssSr94Ob8iZ77YbQVkoiEfqJdMArRN1OeZ85n4FDdvH39k0="}, {"k": "09e4028f8b443663a0d47d2001f083ce57813300bedf0c8df41f2373bbda0994", "iv": "f/Ae6dqQA6oFKV1K", "ct": "gJtF893lDaJu/utOIKk+/Rjot/fcMkwShKONGIU//2+vXOi3NdlFc3iWQ5UcxYYKB34H9z9k9m0y1LwVcHZ4WZmHeomhurBXADbqmDHuKHdVNahfs3HZ1vW3/rwpTEz2CQcdjoJhPUf0LoGdgZNlgT46nAwRhQFIoEa7hqOEePw14eHBTsuwszYXe8/hOCF90o0WsYiaOoBV7JsV4w9h/omD"}];
+const enc = new TextEncoder();
+const sha = async s => new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(s)));
+const hex = b => [...b].map(x => x.toString(16).padStart(2, "0")).join("");
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const out = document.getElementById("out"), input = document.getElementById("id");
+
+function normalise(raw) {
+  const m = String(raw).match(/([a-z]+\d+)_([A-Za-z2-7]{10})/);
+  return m ? `${m[1].toLowerCase()}_${m[2].toUpperCase()}` : null;
+}
+
+async function verify(raw) {
+  const code = normalise(raw);
+  if (!code) return show(false, "That doesn't look like a certificate ID. It should look like NXT{ictf26_XXXXXXXXXX}.");
+  const k = hex(await sha("nxt-lookup|" + code));
+  const rec = RECORDS.find(r => r.k === k);
+  if (!rec) return show(false, `No certificate with ID <code>NXT{${esc(code)}}</code> was issued by NXT_CTFS.`);
+  try {
+    const key = await crypto.subtle.importKey("raw", await sha("nxt-key|" + code), "AES-GCM", false, ["decrypt"]);
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(rec.iv) }, key, unb64(rec.ct));
+    const d = JSON.parse(new TextDecoder().decode(pt));
+    show(true, `<dl>
+      <dt>Name</dt><dd class="name">${esc(d.name)}</dd>
+      <dt>Award</dt><dd>Certificate of Participation</dd>
+      <dt>Event</dt><dd>${esc(d.event)}</dd>
+      <dt>Issued</dt><dd>${esc(d.date)}</dd>
+      <dt>ID</dt><dd class="id">${esc(d.id)}</dd></dl>`);
+  } catch { show(false, "This record could not be read. Contact NXT_CTFS."); }
+}
+
+function show(ok, html) {
+  out.className = "result " + (ok ? "ok" : "bad");
+  out.innerHTML = `<div class="status">${ok ? "✓ VALID CERTIFICATE" : "✗ NOT VERIFIED"}</div>${html}`;
+}
+
+document.getElementById("f").addEventListener("submit", e => { e.preventDefault(); verify(input.value); });
+function fromHash() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h) { input.value = normalise(h) ? `NXT{${normalise(h)}}` : h; verify(h); }
+}
+window.addEventListener("hashchange", fromHash);
+fromHash();
+</script>
+</body>
+</html>
